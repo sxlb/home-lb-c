@@ -1,0 +1,30 @@
+# 依赖
+node_modules
+
+# 构建产物
+.next
+
+# 版本控制
+.git
+
+# 环境变量（含密钥）
+.env
+.env.local
+.env.deploy
+
+# 日志
+*.log
+
+# 数据库文件
+prisma/*.db
+prisma/*.db-journal
+
+# 运行时数据目录
+data
+
+# 测试 / 文档 / 部署脚本（构建无需带入镜像，减小构建上下文）
+tests
+scripts
+README.md
+deploy.sh
+deploy.ps1

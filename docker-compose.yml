@@ -1,0 +1,36 @@
+services:
+  home-lb:
+    build: .
+    image: home-lb:latest
+    container_name: home-lb
+    restart: unless-stopped
+    # PID 1 代理：让 node 进程优雅处理 SIGTERM（停止/升级时先收尾再退出）
+    init: true
+    # 停止前给应用留出收尾时间（迁移/日志落盘）
+    stop_grace_period: 15s
+    ports:
+      - "3000:3000"
+    environment:
+      # SQLite 数据库路径（映射到宿主机 ./data 目录）
+      - DATABASE_URL=file:/app/data/prod.db
+      # NextAuth 密钥：必须设置，建议 `openssl rand -base64 32` 生成
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:?NEXTAUTH_SECRET 未设置，请在 .env.deploy 中提供}
+      # 站点完整访问地址（反向代理或自定义域名时必须设置）
+      - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
+    volumes:
+      # 数据卷：SQLite 数据库持久化到宿主机（备份此目录即可）
+      - ./data:/app/data
+    # 限制日志体积，防止长期运行占满磁盘
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    # 健康检查：使用 node 内置 fetch，避免 slim 镜像无 wget/curl
+    # 探测 /api/ping（公开无鉴权，且会校验数据库连接）；勿用需登录的接口（如 /api/profile），否则容器将判定 unhealthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/ping').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s

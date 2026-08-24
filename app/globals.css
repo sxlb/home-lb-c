@@ -1,0 +1,740 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 本地完整字体 2 种（中英双语）：得意黑 + 猫啃什锦黑 */
+@font-face {
+  font-family: "SmileySans";
+  src: url("/fonts/smiley-sans.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "MaokenSans";
+  src: url("/fonts/maoken-sans.otf") format("opentype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 3.9%;
+    --primary: 0 0% 9%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 0 0% 96.1%;
+    --secondary-foreground: 0 0% 9%;
+    --muted: 0 0% 96.1%;
+    --muted-foreground: 0 0% 45.1%;
+    --accent: 0 0% 96.1%;
+    --accent-foreground: 0 0% 9%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 89.8%;
+    --input: 0 0% 89.8%;
+    --ring: 0 0% 3.9%;
+    --radius: 0.5rem;
+    /* 高级配置：主题强调色 + 玻璃卡片质感（默认值，由 ThemeProvider 按后台配置覆盖） */
+    --accent-color: #7dd3fc;
+    --card-alpha: 0.35;
+    --glass-blur: 16px;
+  }
+
+  /* 暗色主题：由 ThemeProvider 根据主题模式切换 .dark 类 */
+  .dark {
+    --background: 0 0% 7%;
+    --foreground: 0 0% 95%;
+    --card: 0 0% 10%;
+    --card-foreground: 0 0% 95%;
+    --primary: 0 0% 95%;
+    --primary-foreground: 0 0% 9%;
+    --secondary: 0 0% 16%;
+    --secondary-foreground: 0 0% 95%;
+    --muted: 0 0% 16%;
+    --muted-foreground: 0 0% 65%;
+    --accent: 0 0% 16%;
+    --accent-foreground: 0 0% 95%;
+    --destructive: 0 62% 50%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 20%;
+    --input: 0 0% 20%;
+    --ring: 0 0% 70%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+    /* 全局基础字号 16px (1rem)，确保浏览器缩放基准一致 */
+    font-size: 1rem;
+  }
+  /* 主题切换过渡：仅作用于颜色属性，避免闪烁 */
+  html.theme-transition *,
+  html.theme-transition *::before,
+  html.theme-transition *::after {
+    transition:
+      background-color 0.3s ease,
+      color 0.3s ease,
+      border-color 0.3s ease;
+  }
+
+  /* 音乐播放器展开时给页面底部预留滚动空间，避免遮挡页脚内容 */
+  body.music-player-open {
+    padding-bottom: 6rem;
+  }
+  @media (max-width: 767px) {
+    /* 移动端播放器高度更高（含歌单列表） */
+    body.music-player-open {
+      padding-bottom: 16rem;
+    }
+  }
+}
+
+/* ===== 自定义滚动条（优化版：更精致的圆角和透明度）===== */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  border-radius: 10px;
+  background-color: rgba(255, 255, 255, 0.35);
+  transition: background-color 0.2s ease;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.5);
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ========== 通用阴影系统 ========== */
+.shadow-card-xs {
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+.shadow-card-sm {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12), 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+.shadow-card {
+  box-shadow:
+    0 4px 12px rgba(0, 0, 0, 0.15),
+    0 2px 6px rgba(0, 0, 0, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+.shadow-card-md {
+  box-shadow:
+    0 6px 16px rgba(0, 0, 0, 0.18),
+    0 3px 10px rgba(0, 0, 0, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+.shadow-card-lg {
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.2),
+    0 4px 12px rgba(0, 0, 0, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+@layer components {
+  /* ============================================
+     .card-glass — 基础玻璃卡片层
+     - 通过 CSS 变量支持差异化定制（圆角、遮罩深浅、内边距）
+     - 共享同一套微交互动效体系
+     ============================================ */
+
+  :root {
+    --card-alpha: 0.35;
+    --card-radius: 8px;
+    --card-padding: 0;
+    --card-shadow-base:
+      0 4px 12px rgba(0, 0, 0, 0.15),
+      0 2px 6px rgba(0, 0, 0, 0.1),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    --card-shadow-hover:
+      0 8px 24px rgba(0, 0, 0, 0.2),
+      0 4px 12px rgba(0, 0, 0, 0.12),
+      inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  }
+
+  .card-glass {
+    border-radius: var(--card-radius);
+    background-color: rgba(0, 0, 0, var(--card-alpha));
+    backdrop-filter: blur(var(--glass-blur, 16px)) saturate(140%);
+    -webkit-backdrop-filter: blur(var(--glass-blur, 16px)) saturate(140%);
+    transform: translateY(0) scale(1);
+    transition:
+      background-color 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+      backdrop-filter 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+      transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1),
+      box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: var(--card-shadow-base);
+  }
+  .card-glass:hover {
+    transform: translateY(-2px) scale(1.005);
+    box-shadow: var(--card-shadow-hover);
+  }
+  .card-glass:active {
+    transform: translateY(0) scale(0.99);
+    box-shadow:
+      0 2px 8px rgba(0, 0, 0, 0.15),
+      0 1px 4px rgba(0, 0, 0, 0.1),
+      inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  }
+
+  /* ---------- 语义化变体 ---------- */
+
+  /* 简介卡片：大圆角 + 稍深遮罩，突出文字可读性 */
+  .card-info {
+    --card-radius: 10px;
+    --card-alpha: 0.4;
+  }
+
+  /* 功能卡片（时钟 / 一言）：默认样式即可 */
+  .card-func {}
+
+  /* 链接列表容器：无额外装饰，仅继承 base */
+  .card-list {}
+
+  /* SiteLinks 内部按钮：小圆角 + 固定内边距 */
+  .card-btn {
+    @apply card-glass;
+    --card-radius: 10px;
+    --card-alpha: 0.25;
+    padding: 0.75rem;
+  }
+  .card-btn:hover {
+    transform: translateY(-1px) scale(1.02);
+    --card-alpha: 0.35;
+  }
+}
+
+@layer utilities {
+  /* ===== 时钟卡片容器查询 ===== */
+  /* 显式定义 container-type：Tailwind 的 @container 类在本项目未生效（computed 为 normal），
+     时钟时间字号依赖 cqw 单位按卡片宽度自适应，必须让容器查询真正开启 */
+  .clock-card-container {
+    container-type: inline-size;
+  }
+
+  /* ===== 昵称艺术字体（共 18 种，全部中英双语） ===== */
+  .font-art-ma-shan {
+    font-family: var(--font-ma-shan), "STKaiti", "KaiTi", serif;
+  }
+  .font-art-zcool {
+    font-family: var(--font-zcool), "STKaiti", "KaiTi", sans-serif;
+  }
+  .font-art-long-cang {
+    font-family: var(--font-long-cang), "STKaiti", "KaiTi", cursive;
+  }
+  .font-art-zcool-xiaowei {
+    font-family: var(--font-zcool-xw), "STKaiti", "KaiTi", serif;
+  }
+  .font-art-zcool-qingke {
+    font-family: var(--font-zcool-qk), "STKaiti", "KaiTi", sans-serif;
+  }
+  .font-art-liu-jian-mao-cao {
+    font-family: var(--font-liu-jian), "STKaiti", "KaiTi", cursive;
+  }
+  .font-art-zhi-mang-xing {
+    font-family: var(--font-zhi-mang), "STKaiti", "KaiTi", cursive;
+  }
+  .font-art-noto-serif-sc {
+    font-family: var(--font-noto-serif-sc), "STSong", "SimSun", serif;
+  }
+  .font-art-smiley-sans {
+    font-family: "SmileySans", var(--font-noto-sc), sans-serif;
+  }
+  .font-art-maoken-sans {
+    font-family: "MaokenSans", var(--font-noto-sc), sans-serif;
+  }
+  .font-art-yozai {
+    font-family: "Yozai Medium", var(--font-noto-sc), sans-serif;
+  }
+  .font-art-lxgw-wen-kai {
+    font-family: "LXGW WenKai Screen", var(--font-noto-sc), serif;
+  }
+  .font-art-alimama-daka {
+    font-family: "Alimama DongFangDaKai", var(--font-noto-sc), serif;
+  }
+  .font-art-dingtalk-jinbuti {
+    font-family: "DingTalk JinBuTi", var(--font-noto-sc), sans-serif;
+  }
+  .font-art-hongleixingshu {
+    font-family: "hongleixingshu", var(--font-noto-sc), cursive;
+  }
+  .font-art-xiaolai {
+    font-family: "Xiaolai SC", var(--font-noto-sc), cursive;
+  }
+  .font-art-slidefu {
+    font-family: "Slidefu", var(--font-noto-sc), serif;
+  }
+  .font-art-slideqiuhong {
+    font-family: "Slideqiuhong", var(--font-noto-sc), cursive;
+  }
+  /* LED 风格数字时钟字体 */
+  .font-clock {
+    font-family: var(--font-tech-mono), "Courier New", monospace;
+  }
+  /* 昵称标题容器 — 响应式最大宽度，防止字号增大后溢出 */
+  .logo-title {
+    max-width: 170px;
+  }
+  @media (min-width: 640px) {
+    .logo-title { max-width: 300px; }
+  }
+  @media (min-width: 768px) {
+    .logo-title { max-width: 440px; }
+  }
+  @media (min-width: 1024px) {
+    .logo-title { max-width: 480px; }
+  }
+  @media (min-width: 1280px) {
+    .logo-title { max-width: 520px; }
+  }
+  /* 单行省略号 */
+  .text-truncate {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* ===== 强调色发光文字（优化版：双层柔和光晕）===== */
+  .text-glow-accent {
+    text-shadow:
+      0 0 8px color-mix(in srgb, var(--accent-color, #7dd3fc) 50%, transparent),
+      0 0 20px color-mix(in srgb, var(--accent-color, #7dd3fc) 25%, transparent),
+      0 0 40px color-mix(in srgb, var(--accent-color, #7dd3fc) 10%, transparent);
+  }
+
+  /* ===== 强调色渐变边框（用于重要卡片顶部）===== */
+  .border-accent-gradient {
+    border-top: 2px solid transparent;
+    border-image: linear-gradient(
+      90deg,
+      transparent,
+      var(--accent-color, #7dd3fc),
+      transparent
+    ) 1;
+  }
+
+  /* ===== 柔和高亮背景（用于标签/徽章）===== */
+  .bg-accent-soft {
+    background-color: color-mix(in srgb, var(--accent-color, #7dd3fc) 12%, transparent);
+    color: var(--accent-color, #7dd3fc);
+  }
+
+  /* ===== 社交链接容器（优化版：更精致的玻璃效果）===== */
+  .social-links-bar {
+    margin-top: 1.25rem;
+    display: flex;
+    align-items: center;
+    max-width: 480px;
+    width: 100%;
+    /* 允许容器收缩：防止内部图标固有宽度撑开外层 flex 产生横向溢出 */
+    min-width: 0;
+    min-height: 44px;
+    padding: 0 1rem;
+    background-color: transparent;
+    border-radius: 10px;
+    animation: fade 0.5s ease both;
+    transition:
+      background-color 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+      backdrop-filter 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+      box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  @media (min-width: 768px) {
+    .social-links-bar:hover {
+      /* 与玻璃卡片统一：引用 --card-alpha（后台「玻璃卡片不透明度」滑杆联动） */
+      background-color: rgba(0, 0, 0, var(--card-alpha, 0.3));
+      backdrop-filter: blur(10px) saturate(130%);
+      -webkit-backdrop-filter: blur(10px) saturate(130%);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+  }
+  .social-icon {
+    display: inherit;
+    margin: 0 0.625rem;
+    transition:
+      transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1),
+      filter 0.25s ease;
+    filter: brightness(1) drop-shadow(0 1px 2px rgba(0, 0, 0, 0.2));
+  }
+  .social-icon:hover {
+    transform: scale(1.15);
+    filter: brightness(1.15) drop-shadow(0 2px 6px rgba(0, 0, 0, 0.25));
+  }
+  .social-icon:active {
+    transform: scale(1);
+  }
+  /* 窄屏（≤480px）缩小社交图标间距：5 个图标固有宽度（372px）超过可用宽度时会被撑开产生横向溢出 */
+  @media (max-width: 480px) {
+    .social-links-bar {
+      padding: 0 0.75rem;
+    }
+    .social-icon {
+      margin: 0 0.375rem;
+    }
+  }
+  .social-tip {
+    color: rgba(245, 245, 245, 0.9);
+    display: none;
+    margin-left: 0.75rem;
+    font-size: 0.8125rem;
+    letter-spacing: 0.02em;
+    animation: fade 0.4s ease both;
+  }
+  @media (min-width: 768px) {
+    .social-links-bar:hover .social-tip {
+      display: block;
+    }
+  }
+
+  /* 社交链接响应式 ≤840px：居中 */
+  @media (max-width: 840px) {
+    .social-links-bar {
+      justify-content: center;
+    }
+    .social-links-bar .social-link-row {
+      justify-content: center;
+    }
+  }
+  .social-link-row {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+  }
+}
+
+/* ===== 进入动画（优化版：更自然的缓动曲线）===== */
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.animate-fade {
+  animation: fade 0.5s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+/* 进入动画（含 translateY(8px)，用于左右栏入场，优化曲线） */
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-fade-in-up {
+  animation: fade-in-up 0.5s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+/* 欢迎通知滑入动画（全端统一：优化曲线和起始位置） */
+@keyframes notice-center {
+  from {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.animate-notice-center {
+  animation: notice-center 0.45s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+/* 页脚扫光效果（优化版：更柔和的节奏） */
+.shine-text {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.4) 0%,
+    rgba(255, 255, 255, 0.9) 45%,
+    rgba(255, 255, 255, 1) 50%,
+    rgba(255, 255, 255, 0.9) 55%,
+    rgba(255, 255, 255, 0.4) 100%
+  );
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  animation: shine-move 4s ease-in-out infinite;
+}
+@keyframes shine-move {
+  0% {
+    background-position: 200% center;
+  }
+  100% {
+    background-position: -200% center;
+  }
+}
+
+/* 音乐播放器滑条（进度/音量） */
+.music-range {
+  -webkit-appearance: none;
+  appearance: none;
+  border-radius: 9999px;
+  outline: none;
+}
+.music-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border: none;
+  border-radius: 9999px;
+  background: #fff;
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+}
+.music-range::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border: none;
+  border-radius: 9999px;
+  background: #fff;
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+}
+.music-range:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ===== 后台滑杆（玻璃参数 / 背景遮罩）=====
+   精致细轨道 + 主色球形滑块，白色描边隔离轨道背景，统一后台质感（仅作用于 .admin-range） */
+.admin-range {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  outline: none;
+  cursor: pointer;
+}
+.admin-range::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 9999px;
+  background: hsl(var(--muted));
+}
+.admin-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 15px;
+  height: 15px;
+  margin-top: -5.5px;
+  border: 2px solid hsl(var(--background));
+  border-radius: 9999px;
+  background: hsl(var(--primary));
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.28);
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+.admin-range::-webkit-slider-thumb:hover,
+.admin-range::-webkit-slider-thumb:active {
+  transform: scale(1.12);
+}
+.admin-range::-moz-range-track {
+  height: 4px;
+  border-radius: 9999px;
+  background: hsl(var(--muted));
+}
+.admin-range::-moz-range-thumb {
+  width: 13px;
+  height: 13px;
+  border: 2px solid hsl(var(--background));
+  border-radius: 9999px;
+  background: hsl(var(--primary));
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.28);
+  cursor: pointer;
+}
+
+/* ===== 后台下拉（.admin-select）=====
+   隐藏浏览器原生箭头，右侧绘制统一 chevron，跨浏览器外观一致 */
+.admin-select {
+  -webkit-appearance: none;
+  appearance: none;
+  padding-right: 2.5rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 16px 16px;
+}
+
+/* 播放列表细滚动条 */
+.music-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+.music-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+.music-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.music-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+}
+.music-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+/* ===== 全屏加载动画（LoadingScreen） ===== */
+#loader-wrapper {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: #1a1a2e;
+  transition:
+    transform 0.3s 1s ease-out,
+    visibility 0.3s 1s ease-out;
+}
+#loader-wrapper .loader {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+}
+#loader-wrapper .loader-circle {
+  width: 150px;
+  height: 150px;
+  border-radius: 50%;
+  border: 3px solid transparent;
+  border-top-color: #fff;
+  animation: loader-spin 1.8s linear infinite;
+  position: relative;
+}
+#loader-wrapper .loader-circle::before {
+  content: "";
+  position: absolute;
+  inset: 5px;
+  border-radius: 50%;
+  border: 3px solid transparent;
+  border-top-color: #a4a4a4;
+  animation: loader-spin-reverse 0.6s linear infinite;
+}
+#loader-wrapper .loader-circle::after {
+  content: "";
+  position: absolute;
+  inset: 15px;
+  border-radius: 50%;
+  border: 3px solid transparent;
+  border-top-color: #d3d3d3;
+  animation: loader-spin 1s linear infinite;
+}
+#loader-wrapper .loader-text {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  color: #fff;
+  z-index: 2;
+  margin-top: 40px;
+}
+#loader-wrapper .loader-name {
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+#loader-wrapper .loader-tip {
+  margin-top: 6px;
+  font-size: 18px;
+  opacity: 0.6;
+}
+#loader-wrapper .loader-section {
+  position: fixed;
+  top: 0;
+  width: 51%;
+  height: 100%;
+  background: #1a1a2e;
+  z-index: 1;
+}
+#loader-wrapper .loader-section-left {
+  left: 0;
+}
+#loader-wrapper .loader-section-right {
+  right: 0;
+}
+#loader-wrapper.loader-loaded .loader-circle,
+#loader-wrapper.loader-loaded .loader-text {
+  opacity: 0;
+  transition: opacity 0.3s ease-out;
+}
+#loader-wrapper.loader-loaded .loader-section-left {
+  transform: translateX(-100%);
+  transition: transform 0.5s 0.3s cubic-bezier(0.645, 0.045, 0.355, 1);
+}
+#loader-wrapper.loader-loaded .loader-section-right {
+  transform: translateX(100%);
+  transition: transform 0.5s 0.3s cubic-bezier(0.645, 0.045, 0.355, 1);
+}
+#loader-wrapper.loader-loaded {
+  visibility: hidden;
+  transform: translateY(-100%);
+}
+
+@keyframes loader-spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+@keyframes loader-spin-reverse {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(-360deg);
+  }
+}
+
+/* ===== 登录页深色玻璃主题 ===== */
+.input-glass {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+  border-color: rgba(255, 255, 255, 0.15) !important;
+  color: #fff !important;
+}
+.input-glass::placeholder {
+  color: rgba(255, 255, 255, 0.4) !important;
+}
+.input-glass:focus-visible {
+  --tw-ring-color: rgba(168, 85, 247, 0.6);
+}
+
+/* 品牌渐变按钮 */
+.btn-brand {
+  background-image: linear-gradient(to right, #a855f7, #ec4899) !important;
+  color: #fff !important;
+  box-shadow: 0 8px 20px -8px rgba(168, 85, 247, 0.5) !important;
+}
+.btn-brand:hover:not(:disabled) {
+  background-image: linear-gradient(to right, #9333ea, #db2777) !important;
+  box-shadow: 0 12px 28px -8px rgba(168, 85, 247, 0.65) !important;
+}
+.btn-brand:disabled {
+  opacity: 0.6;
+}
+
+/* ===== 昵称艺术字体就绪过渡 ===== */
+.logo-font-fade {
+  opacity: 0.3;
+  transition: opacity 0.4s ease;
+}
+.logo-font-fade.logo-font-ready {
+  opacity: 1;
+}

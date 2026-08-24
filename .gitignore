@@ -1,0 +1,24 @@
+# 依赖
+node_modules
+
+# 构建产物
+.next
+tsconfig.tsbuildinfo
+
+# 环境变量（含密钥，切勿提交）
+.env
+.env.local
+.env.deploy
+
+# 日志
+*.log
+build-log.txt
+
+# 数据库文件（本地开发与运行时数据）
+*.db
+*.db-journal
+prisma/dev.db
+prisma/dev.db-journal
+
+# 运行时数据目录（Docker 卷映射）
+data

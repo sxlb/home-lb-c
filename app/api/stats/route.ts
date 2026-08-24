@@ -1,0 +1,79 @@
+import { NextResponse, NextRequest } from "next/server";
+import { prisma } from "@/lib/db";
+import { internalError, isRateLimited, getClientIp } from "@/lib/server";
+
+export const dynamic = "force-dynamic";
+
+// UV 去重 Cookie：服务端签发，客户端无法伪造"新访客"
+const UV_COOKIE = "home-lb-uv";
+const UV_COOKIE_MAX_AGE = 365 * 24 * 60 * 60; // 一年
+
+/**
+ * 当前日期（东八区 YYYY-MM-DD）。
+ * 注意：Docker 容器时区默认为 UTC，直接取本地时间会导致东八区凌晨 0-8 点统计错天，
+ * 因此显式按 UTC+8 计算（中国大陆无夏令时，固定偏移安全）。
+ */
+function todayStr(): string {
+  const now = new Date(Date.now() + 8 * 60 * 60 * 1000);
+  const y = now.getUTCFullYear();
+  const m = String(now.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(now.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+/**
+ * 访问统计 API
+ * - POST：记录一次访问。PV 每次 +1；UV 通过服务端 Cookie 判定是否新访客（+1），
+ *   不再信任客户端上报的 isNewVisitor，防止脚本无限刷 UV
+ * - GET：返回今日 PV/UV 与累计 PV/UV
+ */
+export async function GET() {
+  try {
+    const today = todayStr();
+    const todayRow = await prisma.visitStat.findUnique({ where: { date: today } });
+    const all = await prisma.visitStat.aggregate({
+      _sum: { pv: true, uv: true },
+    });
+    return NextResponse.json({
+      todayPv: todayRow?.pv ?? 0,
+      todayUv: todayRow?.uv ?? 0,
+      totalPv: all._sum.pv ?? 0,
+      totalUv: all._sum.uv ?? 0,
+    });
+  } catch (e) {
+    return internalError("[GET /api/stats] 查询失败", e);
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    // 防刷：按 IP 限流（默认每分钟最多 60 次上报，正常浏览远达不到）
+    const ip = getClientIp(request) || "unknown";
+    if (isRateLimited(`stats:${ip}`)) {
+      return NextResponse.json({ ok: false, error: "请求过于频繁" }, { status: 429 });
+    }
+
+    const today = todayStr();
+    // 首次访问（无 Cookie）计为新访客，同时签发 UV Cookie
+    const isNew = !request.cookies.get(UV_COOKIE);
+
+    await prisma.visitStat.upsert({
+      where: { date: today },
+      update: { pv: { increment: 1 }, ...(isNew ? { uv: { increment: 1 } } : {}) },
+      create: { date: today, pv: 1, uv: isNew ? 1 : 0 },
+    });
+
+    const res = NextResponse.json({ ok: true });
+    if (isNew) {
+      res.cookies.set(UV_COOKIE, "1", {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        maxAge: UV_COOKIE_MAX_AGE,
+      });
+    }
+    return res;
+  } catch (e) {
+    return internalError("[POST /api/stats] 记录失败", e);
+  }
+}

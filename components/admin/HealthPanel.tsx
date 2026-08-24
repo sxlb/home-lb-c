@@ -1,0 +1,209 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { RefreshCw, CheckCircle2, XCircle, MinusCircle, Loader2, Activity, Zap, AlertTriangle } from "lucide-react";
+
+interface ServiceStatus {
+  id: string;
+  name: string;
+  desc: string;
+  url: string;
+  status: "ok" | "fail" | "skip";
+  latency: number;
+  error?: string;
+}
+
+interface HealthData {
+  checkedAt: number;
+  cached: boolean;
+  services: ServiceStatus[];
+}
+
+function formatTime(ts: number): string {
+  return new Date(ts).toLocaleTimeString("zh-CN", { hour12: false });
+}
+
+/** 状态徽章：正常绿 / 异常红 / 跳过灰 */
+function StatusBadge({ status }: { status: ServiceStatus["status"] }) {
+  if (status === "ok") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+        <CheckCircle2 className="h-3.5 w-3.5" />
+        正常
+      </span>
+    );
+  }
+  if (status === "fail") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-red-500/15 px-2.5 py-0.5 text-xs font-semibold text-red-600 dark:text-red-400">
+        <XCircle className="h-3.5 w-3.5" />
+        异常
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-0.5 text-xs font-semibold text-muted-foreground">
+      <MinusCircle className="h-3.5 w-3.5" />
+      未启用
+    </span>
+  );
+}
+
+/** 延迟显示：根据延迟值显示不同颜色 */
+function LatencyBadge({ latency, status }: { latency: number; status: ServiceStatus["status"] }) {
+  if (status !== "ok") {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground/70">
+        <Zap className="h-3 w-3" />
+        -- ms
+      </span>
+    );
+  }
+  let colorClass = "text-emerald-600 dark:text-emerald-400";
+  if (latency > 500) colorClass = "text-amber-600 dark:text-amber-400";
+  if (latency > 1500) colorClass = "text-red-600 dark:text-red-400";
+  return (
+    <span className={`inline-flex items-center gap-1 text-xs font-medium tabular-nums ${colorClass}`}>
+      <Zap className="h-3 w-3" />
+      {latency} ms
+    </span>
+  );
+}
+
+/**
+ * 外部上游服务健康面板：
+ * - 展示各上游服务（天气/壁纸/一言/翻译/示例音频等）的实时可用状态与延迟
+ * - 结果由 /api/health 探测（30 秒缓存），可手动强制刷新
+ */
+export default function HealthPanel() {
+  const [data, setData] = useState<HealthData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const load = useCallback(async (force: boolean) => {
+    if (force) setRefreshing(true);
+    else setLoading(true);
+    try {
+      const res = await fetch(`/api/health${force ? "?force=1" : ""}`, { cache: "no-store" });
+      if (res.ok) setData(await res.json());
+    } catch {
+      /* 失败保持原数据 */
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load(false);
+  }, [load]);
+
+  if (loading && !data) {
+    return (
+      <div className="flex items-center justify-center py-20 text-muted-foreground">
+        检测中...
+      </div>
+    );
+  }
+
+  const services = data?.services ?? [];
+  const okCount = services.filter((s) => s.status === "ok").length;
+  const failCount = services.filter((s) => s.status === "fail").length;
+  const skipCount = services.filter((s) => s.status === "skip").length;
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-start justify-between gap-3">
+          <div className="space-y-1">
+            <CardTitle className="text-lg">外部服务状态</CardTitle>
+            <CardDescription>实时探测天气 / 壁纸 / 一言 / 翻译等上游服务可用性</CardDescription>
+          </div>
+          <Button size="sm" variant="outline" onClick={() => load(true)} disabled={refreshing} className="gap-1.5 shrink-0">
+            {refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            刷新
+          </Button>
+        </div>
+        {data && (
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+            <span className="text-muted-foreground">
+              上次检测：{formatTime(data.checkedAt)}
+              {data.cached ? "（30秒缓存）" : ""}
+            </span>
+            <span className="text-border">·</span>
+            <div className="flex items-center gap-1.5">
+              <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
+              <span className="text-emerald-600 dark:text-emerald-400 font-medium">正常 {okCount}</span>
+            </div>
+            <span className="text-border">·</span>
+            <div className="flex items-center gap-1.5">
+              <span className={`inline-block h-2 w-2 rounded-full ${failCount > 0 ? "bg-red-500 animate-pulse" : "bg-red-300"}`} />
+              <span className={failCount > 0 ? "text-red-600 dark:text-red-400 font-medium" : "text-muted-foreground"}>异常 {failCount}</span>
+            </div>
+            <span className="text-border">·</span>
+            <div className="flex items-center gap-1.5">
+              <span className="inline-block h-2 w-2 rounded-full bg-muted-foreground/40" />
+              <span className="text-muted-foreground">未启用 {skipCount}</span>
+            </div>
+          </div>
+        )}
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-2">
+          {services.map((s) => {
+            const borderColor =
+              s.status === "ok"
+                ? "border-l-emerald-500/50 hover:border-l-emerald-500"
+                : s.status === "fail"
+                ? "border-l-red-500/50 hover:border-l-red-500"
+                : "border-l-muted-foreground/30 hover:border-l-muted-foreground/50";
+            return (
+              <div
+                key={s.id}
+                className={`group relative flex flex-wrap items-center gap-x-3 gap-y-2 overflow-hidden rounded-lg border border-l-4 bg-card px-4 py-3 transition-all hover:shadow-sm ${borderColor}`}
+              >
+                {/* 状态指示器 - 左侧 */}
+                <div className="flex items-center gap-2.5">
+                  <StatusBadge status={s.status} />
+                </div>
+
+                {/* 服务信息 */}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    {/* title 兜底：hover 条仅在桌面展开，移动端可长按名称查看完整 URL */}
+                    <span className="truncate text-sm font-medium" title={s.url}>{s.name}</span>
+                    <LatencyBadge latency={s.latency} status={s.status} />
+                  </div>
+                  <p className="truncate text-xs text-muted-foreground">{s.desc}</p>
+                </div>
+
+                {/* 错误信息 */}
+                {s.status === "fail" && s.error && (
+                  <div className="flex w-full items-start gap-1.5 text-xs text-red-500 dark:text-red-400 sm:w-auto">
+                    <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+                    <span className="truncate">{s.error}</span>
+                  </div>
+                )}
+
+                {/* URL 提示 - hover 显示 */}
+                <div className="absolute bottom-0 right-0 left-0 max-h-0 overflow-hidden bg-muted/50 px-4 text-[10px] text-muted-foreground transition-all duration-200 group-hover:max-h-6 group-hover:py-1">
+                  {s.url}
+                </div>
+              </div>
+            );
+          })}
+          {services.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-10 text-center">
+              <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-muted">
+                <Activity className="h-5 w-5 text-muted-foreground" />
+              </div>
+              <p className="text-sm text-muted-foreground">暂无探测结果</p>
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
