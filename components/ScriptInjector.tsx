@@ -2,6 +2,27 @@
 
 import { useEffect } from "react";
 
+const EVENT_ATTR_RE = /^on/i;
+const UNSAFE_URL_RE = /^\s*(javascript|vbscript|data):/i;
+const URL_ATTRS = ["href", "src", "action", "formaction", "xlink:href"];
+
+/** 仅放行安全属性：拦截 on* 事件属性，以及 javascript:/vbscript:/data: 协议 URL */
+function isSafeAttribute(name: string, value: string): boolean {
+  if (EVENT_ATTR_RE.test(name)) return false;
+  const lower = name.toLowerCase();
+  if (URL_ATTRS.includes(lower)) return !UNSAFE_URL_RE.test(value);
+  return true;
+}
+
+/** 将源元素的安全属性拷贝到目标元素 */
+function copySafeAttributes(source: Element, target: Element): void {
+  for (const attr of Array.from(source.attributes)) {
+    if (isSafeAttribute(attr.name, attr.value)) {
+      target.setAttribute(attr.name, attr.value);
+    }
+  }
+}
+
 /**
  * 后台配置的脚本/标签注入器：
  * - analyticsScript：统计代码（百度统计 / Umami / 51LA 等）
@@ -50,9 +71,10 @@ function injectSnippet(code: string): Element[] {
     const el = child as Element;
     if (el.tagName.toLowerCase() === "script") {
       const script = createScript(el.textContent || "");
-      // 保留外部脚本的 src 属性（<script src="...">）
-      if (el.getAttribute("src")) {
-        script.src = el.getAttribute("src") || "";
+      // 保留外部脚本的 src 属性（<script src="...">），仅限安全协议
+      const src = el.getAttribute("src");
+      if (src && isSafeAttribute("src", src)) {
+        script.src = src;
         script.textContent = "";
       }
       nodes.push(script);
@@ -63,9 +85,7 @@ function injectSnippet(code: string): Element[] {
     } else {
       // meta / link / 其他自闭合标签
       const node = document.createElement(el.tagName);
-      for (const attr of Array.from(el.attributes)) {
-        node.setAttribute(attr.name, attr.value);
-      }
+      copySafeAttributes(el, node);
       nodes.push(node);
     }
   }
