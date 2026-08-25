@@ -331,8 +331,13 @@ export async function GET(request: NextRequest) {
   const weatherCity = profile?.weatherCity || "";
   const txKey = profile?.txWeatherKey || "";
   const txSk = profile?.txWeatherSk || "";
-  // 缓存键：配置了固定城市则全局共享；未配置（按访客 IP 自动定位）则按 IP 区分，避免跨访客串缓存
-  const cacheKey = `${provider}:${amapKey}:${amapSecretKey}:${weatherCity}:${txKey}:${txSk}:${weatherCity ? "" : visitorIp}`;
+  // 缓存键：配置了固定城市则全局共享；未配置（按访客 IP 自动定位）则按 IP 区分，避免跨访客串缓存。
+  // 密钥等不含明文入键，整体取 SHA-256 摘要，避免密钥泄漏进缓存键/日志
+  const cacheKey = createHash("sha256")
+    .update(
+      `${provider}|${amapKey}|${amapSecretKey}|${weatherCity}|${txKey}|${txSk}|${weatherCity ? "" : visitorIp}`
+    )
+    .digest("hex");
 
   // 命中有效缓存：直接返回（响应 <100ms，且不再打外部接口）
   const cached = getWeatherCache(cacheKey);
