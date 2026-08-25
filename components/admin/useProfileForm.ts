@@ -48,7 +48,10 @@ export function useProfileForm() {
         setCachedProfile(profile);
         toast.success("保存成功");
         setDirty(false);
-      } else toast.error("保存失败");
+      } else {
+        const data = await res.json().catch(() => null);
+        toast.error(data?.error || "保存失败");
+      }
     } catch {
       toast.error("网络错误");
     } finally {

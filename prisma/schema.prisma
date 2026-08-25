@@ -118,6 +118,10 @@ model OperationLog {
   detail    String   @default("")
   ip        String   @default("")
   createdAt DateTime @default(now())
+
+  // 后台按时间倒序查日志、按模块+时间筛选是典型查询路径，日志量增长后需要索引
+  @@index([createdAt])
+  @@index([module, createdAt])
 }
 
 model VisitStat {

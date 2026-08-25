@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { NextRequest } from "next/server";
 import { resetRateLimiter } from "@/lib/server";
 
@@ -36,6 +36,10 @@ describe("stats API", () => {
     vi.clearAllMocks();
     // 清空 IP 限流状态，避免用例间互相影响
     resetRateLimiter();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   describe("GET", () => {
@@ -79,6 +83,29 @@ describe("stats API", () => {
 
       consoleSpy.mockRestore();
     });
+
+    it("东八区日期边界：UTC 前一日 16:00（北京 00:00）归入当日", async () => {
+      // Docker 容器默认 UTC，todayStr 显式按 UTC+8 计算，此处固定边界时间验证
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2026-08-25T16:00:00.000Z")); // 北京 2026-08-26 00:00
+      mocks.findUnique.mockResolvedValue(null);
+      mocks.aggregate.mockResolvedValue({ _sum: { pv: null, uv: null } });
+
+      const res = await GET();
+      await res.json();
+      expect(mocks.findUnique).toHaveBeenCalledWith({ where: { date: "2026-08-26" } });
+    });
+
+    it("东八区日期边界：UTC 当日 15:59（北京 23:59）仍归当日", async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2026-08-25T15:59:00.000Z")); // 北京 2026-08-25 23:59
+      mocks.findUnique.mockResolvedValue(null);
+      mocks.aggregate.mockResolvedValue({ _sum: { pv: null, uv: null } });
+
+      const res = await GET();
+      await res.json();
+      expect(mocks.findUnique).toHaveBeenCalledWith({ where: { date: "2026-08-25" } });
+    });
   });
 
   describe("POST", () => {
@@ -98,10 +125,13 @@ describe("stats API", () => {
         pv: 1,
         uv: 1,
       });
-      // 服务端签发 httpOnly Cookie 用于后续 UV 去重
+      // 服务端签发 httpOnly Cookie 用于后续 UV 去重，完整属性断言
       const cookie = res.cookies.get("home-lb-uv");
       expect(cookie?.value).toBe("1");
       expect(cookie?.httpOnly).toBe(true);
+      expect(cookie?.sameSite).toBe("lax");
+      expect(cookie?.path).toBe("/");
+      expect(cookie?.maxAge).toBe(365 * 24 * 60 * 60);
     });
 
     it("老访客（携带 UV Cookie）：仅 pv +1，不再更新 uv", async () => {

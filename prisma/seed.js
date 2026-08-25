@@ -1,14 +1,17 @@
-// 注意：此文件是 Docker 容器启动时直接运行的 CommonJS 脚本（对应 eslint 豁免项），
-// 逻辑与 seed.ts 保持一致；若修改默认数据请同步更新 seed.ts
+// 注意：此文件是 Docker 容器启动时直接运行的 CommonJS 脚本（对应 eslint 豁免项）。
 const { PrismaClient } = require("@prisma/client");
 const bcrypt = require("bcryptjs");
+const crypto = require("node:crypto");
 
 const prisma = new PrismaClient();
 
 // 默认账号（首次启动写入数据库，登录后请在后台修改）
-// 密码长度需 ≥ 8，与 /api/account 的 zod 校验一致
+// 密码优先取环境变量 SEED_ADMIN_PASSWORD（需 ≥ 8 位，与 /api/account 的 zod 校验一致）；
+// 未设置时自动生成随机密码，仅在本次 seed 日志中打印一次，不落盘明文
 const DEFAULT_USERNAME = "admin";
-const DEFAULT_PASSWORD = "admin123";
+const envPassword = (process.env.SEED_ADMIN_PASSWORD || "").trim();
+const DEFAULT_PASSWORD =
+  envPassword.length >= 8 ? envPassword : crypto.randomBytes(9).toString("base64");
 
 // 默认社交链接（来自 home 项目的默认配置）
 const DEFAULT_SOCIAL_LINKS = [
@@ -55,16 +58,21 @@ async function main() {
   }
 
   // ---- User 默认账号 ----
-  const userCount = await prisma.user.count();
-  if (userCount === 0) {
+  // 以"用户 admin 是否存在"判断（而非表是否为空）：admin 被删除后重跑 seed 可重建
+  const existingUser = await prisma.user.findUnique({ where: { username: DEFAULT_USERNAME } });
+  if (!existingUser) {
     const hashed = await bcrypt.hash(DEFAULT_PASSWORD, 10);
     await prisma.user.create({
       data: { username: DEFAULT_USERNAME, password: hashed },
     });
-    console.log(`Seed 完成：已创建默认账号 "${DEFAULT_USERNAME}/${DEFAULT_PASSWORD}"`);
+    console.log(
+      `Seed 完成：已创建默认账号 "${DEFAULT_USERNAME}"（密码${
+        envPassword ? "取自 SEED_ADMIN_PASSWORD 环境变量" : "为随机生成，见本次启动日志"
+      }）`
+    );
     console.warn("[seed] 请尽快登录后台修改默认账号密码");
   } else {
-    console.log(`Seed 跳过：User 已存在 ${userCount} 条记录`);
+    console.log(`Seed 跳过：用户 ${DEFAULT_USERNAME} 已存在`);
   }
 
   // ---- SocialLink 默认数据 ----

@@ -21,10 +21,10 @@ interface Props {
 }
 
 export default function IconfontPicker({ value, onChange }: Props) {
-  const [url, setUrl] = useState("");
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const [loaded, setLoaded] = useState(false);
+  // 配置读取状态：区分"未配置图标库"与"读取失败"，避免网络错误误报为未配置
+  const [loadState, setLoadState] = useState<"loading" | "ok" | "not-configured" | "error">("loading");
   const symbols = useIconfontSymbols();
 
   // 读取后台 iconfont 配置并加载脚本
@@ -33,15 +33,16 @@ export default function IconfontPicker({ value, onChange }: Props) {
     fetch("/api/profile")
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
-        if (cancelled || !data?.iconfontUrl) return;
-        setUrl(data.iconfontUrl);
+        if (cancelled) return;
+        if (!data?.iconfontUrl) {
+          setLoadState("not-configured");
+          return;
+        }
         loadIconfont(data.iconfontUrl);
+        setLoadState("ok");
       })
       .catch(() => {
-        /* 读取失败静默，仅显示未配置提示 */
-      })
-      .finally(() => {
-        if (!cancelled) setLoaded(true);
+        if (!cancelled) setLoadState("error");
       });
     return () => {
       cancelled = true;
@@ -55,8 +56,15 @@ export default function IconfontPicker({ value, onChange }: Props) {
     return list.slice(0, 150);
   }, [symbols, search]);
 
-  // 未配置图标库：给出引导，不渲染选择器
-  if (loaded && !url) {
+  // 未配置图标库：给出引导，不渲染选择器；读取失败单独提示，避免误报
+  if (loadState === "error") {
+    return (
+      <p className="text-xs text-destructive">
+        读取图标库配置失败，请刷新后重试
+      </p>
+    );
+  }
+  if (loadState === "not-configured") {
     return (
       <p className="text-xs text-muted-foreground">
         未配置图标库：请在「站点信息 → 图标库地址」填入 iconfont 链接后使用

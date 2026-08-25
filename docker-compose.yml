@@ -17,6 +17,8 @@ services:
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:?NEXTAUTH_SECRET 未设置，请在 .env.deploy 中提供}
       # 站点完整访问地址（反向代理或自定义域名时必须设置）
       - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
+      # 默认管理员密码（可选）：首次 seed 时使用，留空则自动生成随机密码并打印到容器日志
+      - SEED_ADMIN_PASSWORD=${SEED_ADMIN_PASSWORD:-}
     volumes:
       # 数据卷：SQLite 数据库持久化到宿主机（备份此目录即可）
       - ./data:/app/data

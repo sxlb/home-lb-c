@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,27 +17,56 @@ export default function AccountPanel() {
     currentPassword: "",
     newPassword: "",
   });
+  // 登出定时器引用：组件卸载时清理，避免切换面板后仍被强制登出
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // 预填当前用户名
   useEffect(() => {
-    if (session?.user?.name) {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
+
+  // 预填当前用户名：仅在用户尚未输入时填充，避免 session 刷新覆盖正在编辑的内容
+  useEffect(() => {
+    if (session?.user?.name && !form.username) {
       setForm((prev) => ({ ...prev, username: session.user!.name! }));
     }
-  }, [session]);
+  }, [session, form.username]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+    const username = form.username.trim();
+    const usernameChanged = username !== (session?.user?.name ?? "");
+    const hasNewPassword = !!form.newPassword;
+
+    // 无任何变更：直接提示并返回，避免触发后端"无变更"响应后的强制登出
+    if (!usernameChanged && !hasNewPassword) {
+      toast.info("无变更，无需保存");
+      return;
+    }
+    // 用户名变更时至少 2 个字符（与后端 min(2) 一致，提前拦截给出明确提示）
+    if (usernameChanged && username.length < 2) {
+      toast.error("用户名至少 2 个字符");
+      return;
+    }
+
     setSaving(true);
     try {
+      // 仅发送实际变更的字段：newPassword 留空时不发送，
+      // 否则空串 "" 会被后端 z.string().min(8) 校验拦截，导致"只改用户名"失败
+      const body: Record<string, string> = { currentPassword: form.currentPassword };
+      if (usernameChanged) body.username = username;
+      if (hasNewPassword) body.newPassword = form.newPassword;
+
       const res = await fetch("/api/account", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
       if (res.ok) {
         toast.success("账号信息已更新，请重新登录");
-        setTimeout(() => signOut({ callbackUrl: "/admin/login" }), 1500);
+        timerRef.current = setTimeout(() => signOut({ callbackUrl: "/admin/login" }), 1500);
       } else {
         toast.error(data.error || "保存失败");
       }

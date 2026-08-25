@@ -53,7 +53,14 @@ export function loadIconfont(url: string): void {
   if (finalUrl.startsWith("//")) {
     finalUrl = "https:" + finalUrl;
   }
-  if (loadedScriptUrl === finalUrl || document.querySelector(`script[data-iconfont="1"]`)) return;
+  // 已加载同地址：幂等返回；地址已变更：移除旧脚本后重新加载（后台修改 iconfontUrl 后无需刷新页面）
+  const existing = document.querySelector<HTMLScriptElement>(`script[data-iconfont="1"]`);
+  if (existing) {
+    if (existing.getAttribute("src") === finalUrl) return;
+    existing.remove();
+    loadedScriptUrl = "";
+  }
+  if (loadedScriptUrl === finalUrl) return;
   loadedScriptUrl = finalUrl;
 
   const script = document.createElement("script");

@@ -231,7 +231,12 @@ export default function Background({
         } else {
           bgUrl = await resolveUrl();
         }
-        if (cancelled || !bgUrl) return;
+        if (cancelled || !bgUrl) {
+          // 无可用壁纸（如 custom 类型未配置地址）：结束尝试并广播就绪，
+          // 否则全屏加载动画只能等 5s 兜底超时
+          if (!cancelled) announceReady();
+          return;
+        }
         // 预加载确保淡入，同时提取主色
         applyImage(bgUrl);
       } catch (e) {

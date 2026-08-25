@@ -65,23 +65,18 @@ interface AvatarFallbacks {
   avatarStyle: React.CSSProperties | undefined;
 }
 
-// 随机头像结果缓存（60s TTL）：外部头像源慢/抖动的去重缓存，避免每次 SSR 都打外部接口拖慢首屏
-let avatarCache: { url: string; expireAt: number } | null = null;
-const AVATAR_CACHE_TTL = 60 * 1000;
-
+// 随机头像：外部头像源慢/抖动，用服务端 fetch 缓存（60s TTL）承担去重，
+// 无需额外模块级缓存（避免双缓存并存）
 async function fetchRandomAvatar(): Promise<string> {
-  if (avatarCache && avatarCache.expireAt > Date.now()) return avatarCache.url;
   try {
     const res = await fetch("https://v2.xxapi.cn/api/head?return=json", {
       next: { revalidate: 60 },
-      // 外部头像源失败/超时不阻塞首页 SSR：1.5s 超时快速失败回退（配合上方缓存，源慢只影响首次）
+      // 外部头像源失败/超时不阻塞首页 SSR：1.5s 超时快速失败回退（源慢只影响首次）
       signal: AbortSignal.timeout(1500),
     });
     if (!res.ok) return "";
     const json = await res.json();
-    const url = typeof json?.data === "string" && json.data ? json.data : "";
-    if (url) avatarCache = { url, expireAt: Date.now() + AVATAR_CACHE_TTL };
-    return url;
+    return typeof json?.data === "string" && json.data ? json.data : "";
   } catch {
     return "";
   }

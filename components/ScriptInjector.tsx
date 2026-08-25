@@ -5,11 +5,14 @@ import { useEffect } from "react";
 const EVENT_ATTR_RE = /^on/i;
 const UNSAFE_URL_RE = /^\s*(javascript|vbscript|data):/i;
 const URL_ATTRS = ["href", "src", "action", "formaction", "xlink:href"];
+// 直接禁止的属性：srcdoc 内容本身即 HTML、可内嵌脚本，协议白名单无法兜底，一律拦截
+const BLOCKED_ATTRS = ["srcdoc"];
 
-/** 仅放行安全属性：拦截 on* 事件属性，以及 javascript:/vbscript:/data: 协议 URL */
+/** 仅放行安全属性：拦截 on* 事件属性、srcdoc，以及 javascript:/vbscript:/data: 协议 URL */
 function isSafeAttribute(name: string, value: string): boolean {
-  if (EVENT_ATTR_RE.test(name)) return false;
   const lower = name.toLowerCase();
+  if (EVENT_ATTR_RE.test(lower)) return false;
+  if (BLOCKED_ATTRS.includes(lower)) return false;
   if (URL_ATTRS.includes(lower)) return !UNSAFE_URL_RE.test(value);
   return true;
 }
@@ -41,6 +44,11 @@ export default function ScriptInjector({ scripts }: { scripts: string[] }) {
     for (const code of scripts) {
       const injected = injectSnippet(code);
       nodes.push(...injected);
+    }
+
+    // 挂载到 <head>（此前只收集未挂载，统计/自定义脚本从未真正注入页面）
+    for (const node of nodes) {
+      document.head.appendChild(node);
     }
 
     return () => {

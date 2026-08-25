@@ -17,12 +17,17 @@ if [ ! -f "$ENV_FILE" ]; then
   cp .env.deploy.example "$ENV_FILE"
 fi
 
-if grep -q 'NEXTAUTH_SECRET=__GENERATE_RANDOM_KEY__' "$ENV_FILE"; then
-  SECRET=$(openssl rand -hex 32)
+# 同时识别新旧占位符（change-me 为早期版本示例值，__GENERATE_RANDOM_KEY__ 为当前哨兵值），
+# 并容忍带引号写法（NEXTAUTH_SECRET="__GENERATE_RANDOM_KEY__"）；二者均为公开已知弱密钥，必须替换
+if grep -Eq 'NEXTAUTH_SECRET=["'\'']?(change-me|__GENERATE_RANDOM_KEY__)' "$ENV_FILE"; then
+  # openssl 缺失时回退 /dev/urandom（Alpine 等最小化系统可能无 openssl）
+  SECRET=$(openssl rand -hex 32 2>/dev/null || head -c 64 /dev/urandom | tr -dc 'a-f0-9' | head -c 64)
   tmpfile=$(mktemp)
   sed "s|^NEXTAUTH_SECRET=.*|NEXTAUTH_SECRET=${SECRET}|" "$ENV_FILE" > "$tmpfile"
   mv "$tmpfile" "$ENV_FILE"
   echo "==> 已自动生成随机 NEXTAUTH_SECRET"
+else
+  echo "==> NEXTAUTH_SECRET 已存在，跳过生成"
 fi
 
 # ---------- 2. 构建并启动 ----------

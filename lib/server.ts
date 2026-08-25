@@ -176,7 +176,9 @@ export function diffLinks(
     if (!afterMap.has(b.name)) removed.push(b);
   });
 
-  // 重命名识别：被删条目与新增条目除 name 外字段全等 → 视为一次重命名，而非删+增
+  // 重命名识别：被删条目与新增条目除 name 外字段全等 → 视为一次重命名，而非删+增。
+  // 启发式限制（已知 tradeoff）：真正的"删除 A + 新增 B（除 name 外字段全等）"也会被
+  // 归为重命名（见 tests/diff-links.test.ts）；需要精确语义时应改用 id 优先匹配。
   for (const r of [...removed]) {
     const idx = added.findIndex((a) => a.name !== r.name && linksEqualExceptName(a, r));
     if (idx >= 0) {
@@ -287,6 +289,9 @@ export function isRateLimited(key: string, max = DEFAULT_MAX, windowMs = DEFAULT
     for (const [k, b] of buckets) {
       if (now - b.windowStart >= DEFAULT_WINDOW_MS) buckets.delete(k);
     }
+    // 清理后仍满：拒绝新 key（视为限流），防止攻击者用长窗口 key
+    // 或持续换新 key 塞满 Map 造成内存 DoS
+    if (buckets.size >= MAX_BUCKETS) return true;
   }
 
   const bucket = buckets.get(key);

@@ -32,9 +32,11 @@ export default function WeatherPanel() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
     async function load() {
       try {
         const res = await fetch("/api/profile");
+        if (cancelled) return;
         if (res.ok) {
           const data = await res.json();
           // 兼容历史配置：wttr / uapis 已下线，落到默认腾讯天气
@@ -49,16 +51,19 @@ export default function WeatherPanel() {
           toast.error("加载配置失败");
         }
       } catch {
-        toast.error("网络错误");
+        if (!cancelled) toast.error("网络错误");
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     }
     load();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   async function save() {
-    // 前端简单校验：高德需 Key，腾讯 Key 版需腾讯位置服务 Key，腾讯免费版需城市
+    // 前端校验：高德需 Key，腾讯 Key 版需腾讯位置服务 Key，腾讯免费版需城市
     if (provider === "amap" && !amapKey.trim()) {
       toast.error("请填写高德 API Key");
       return;
@@ -70,6 +75,14 @@ export default function WeatherPanel() {
     if (provider === "tencent" && !weatherCity.trim()) {
       toast.error("请填写城市名称");
       return;
+    }
+    // 签名密钥为条件必填（控制台开启数字签名时）：系统无法感知是否开启，
+    // 此处做提示性校验，避免"开启签名却漏填密钥导致接口签名失败"的静默故障
+    if (provider === "amap" && amapKey.trim() && !amapSecretKey.trim()) {
+      toast.warning("若高德 Key 已开启数字签名，请填写对应私钥（未开启可忽略）");
+    }
+    if (provider === "tencent-key" && txWeatherKey.trim() && !txWeatherSk.trim()) {
+      toast.warning("若腾讯位置服务 Key 已开启数字签名，请填写对应密钥 SK（未开启可忽略）");
     }
 
     setSaving(true);

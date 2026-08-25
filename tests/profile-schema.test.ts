@@ -55,6 +55,30 @@ describe("profileSchema", () => {
       const result = profileSchema.safeParse({ avatar: "http://example.com/a.png" });
       expect(result.success).toBe(true);
     });
+
+    it("新增字段 amapSecretKey / txWeatherSk / iconfontUrl 接受合法值", () => {
+      const result = profileSchema.safeParse({
+        amapSecretKey: "secret-key-123",
+        txWeatherSk: "sk-456",
+        iconfontUrl: "https://at.alicdn.com/t/c/font_123.js",
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.amapSecretKey).toBe("secret-key-123");
+        expect(result.data.txWeatherSk).toBe("sk-456");
+        expect(result.data.iconfontUrl).toBe("https://at.alicdn.com/t/c/font_123.js");
+      }
+    });
+
+    it("省略新增字段时使用默认值（空串）", () => {
+      const result = profileSchema.safeParse({});
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.amapSecretKey).toBe("");
+        expect(result.data.txWeatherSk).toBe("");
+        expect(result.data.iconfontUrl).toBe("");
+      }
+    });
   });
 
   describe("非法输入", () => {

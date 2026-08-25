@@ -165,6 +165,10 @@ async function fetchPublicJson(url: URL, allowPrivate = false): Promise<unknown>
     if (res.status >= 300 && res.status < 400) {
       const location = res.headers.get("location");
       if (!location) throw new UnsafeUrlError("重定向响应缺少 Location 头");
+      // 丢弃重定向响应体（不消费会占用连接，undici 无法复用，长跑后连接池泄漏）
+      await res.body?.cancel().catch(() => {
+        /* 取消失败不影响跳转 */
+      });
       // 重定向目标同样做 SSRF 校验（相对地址基于当前 URL 解析）
       current = await assertPublicHttpUrl(new URL(location, current).toString(), { allowPrivate });
       continue;

@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { toast } from "sonner";
 import { LoadingPlaceholder } from "./LinksPanel";
 import { useProfileForm } from "./useProfileForm";
 import {
@@ -109,7 +110,22 @@ export default function ThemePanel() {
         <CardDescription>配置背景壁纸、主题模式与整体视觉氛围</CardDescription>
       </CardHeader>
       <CardContent>
-        <form ref={formRef} onSubmit={(e) => { e.preventDefault(); save(); }} className="space-y-3 pb-16">
+        <form
+          ref={formRef}
+          onSubmit={(e) => {
+            e.preventDefault();
+            // 颜色字段格式校验：非空须为合法 hex（与后端 zod 一致），避免保存非法值
+            const badColor = [profile.accentColor, profile.avatarBorderColor].find(
+              (c) => c.trim() !== "" && !/^#[0-9a-fA-F]{3,8}$/.test(c.trim())
+            );
+            if (badColor !== undefined) {
+              toast.error(`颜色值不合法：${badColor}（应为 #RRGGBB 格式）`);
+              return;
+            }
+            save();
+          }}
+          className="space-y-3 pb-16"
+        >
           {/* ========== 壁纸与主题 ========== */}
           <SectionBlock
             open

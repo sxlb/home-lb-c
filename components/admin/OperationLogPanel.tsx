@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
@@ -61,17 +61,29 @@ export default function OperationLogPanel() {
   const [logs, setLogs] = useState<OperationLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  // 请求序号：连点刷新时丢弃过期响应，防止旧响应覆盖新数据
+  const seqRef = useRef(0);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   async function load() {
+    const seq = ++seqRef.current;
     setLoading(true);
     try {
       const res = await fetch("/api/operation-logs?limit=100");
+      if (!mountedRef.current || seq !== seqRef.current) return;
       if (res.ok) setLogs(await res.json());
       else toast.error("加载日志失败");
     } catch {
-      toast.error("网络错误");
+      if (mountedRef.current && seq === seqRef.current) toast.error("网络错误");
     } finally {
-      setLoading(false);
+      if (mountedRef.current && seq === seqRef.current) setLoading(false);
     }
   }
 

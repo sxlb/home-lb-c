@@ -384,7 +384,11 @@ export const socialLinkSchema = z.object({
     .string()
     .trim()
     .min(1, "图标不能为空")
-    .max(64, "图标最长 64 字符"),
+    .max(64, "图标最长 64 字符")
+    .refine(
+      (v) => /^[a-zA-Z0-9:_-]+$/.test(v),
+      "图标名仅支持字母、数字、下划线、连字符（lucide: 前缀）"
+    ),
   url: z
     .string()
     .max(2048, "链接过长")
@@ -426,7 +430,11 @@ export const siteLinkSchema = z.object({
     .string()
     .trim()
     .min(1, "图标不能为空")
-    .max(64, "图标最长 64 字符"),
+    .max(64, "图标最长 64 字符")
+    .refine(
+      (v) => /^[a-zA-Z0-9:_-]+$/.test(v),
+      "图标名仅支持字母、数字、下划线、连字符（lucide: 前缀）"
+    ),
   url: z
     .string()
     .max(2048, "链接过长")

@@ -57,4 +57,13 @@ describe("parseJsonBody（安全解析 JSON 请求体）", () => {
     });
     expect(await parseJsonBody(req)).toBeNull();
   });
+
+  it("Content-Type 非 JSON 且 body 非合法 JSON 时返回 null（parseJsonBody 不依赖 content-type）", async () => {
+    const req = new NextRequest("http://localhost/api/test", {
+      method: "POST",
+      headers: { "Content-Type": "text/plain" },
+      body: "plain text",
+    });
+    expect(await parseJsonBody(req)).toBeNull();
+  });
 });

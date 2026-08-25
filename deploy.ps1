@@ -16,15 +16,25 @@ if (-not (Test-Path $envFile)) {
     Copy-Item ".env.deploy.example" $envFile
 }
 
-$secretLine = Select-String -Path $envFile -Pattern 'NEXTAUTH_SECRET=__GENERATE_RANDOM_KEY__' -Quiet
+# 同时识别新旧占位符（change-me 为早期版本示例值，__GENERATE_RANDOM_KEY__ 为当前哨兵值），
+# 并容忍带引号写法；二者均为公开已知弱密钥，必须替换
+$secretLine = Select-String -Path $envFile -Pattern 'NEXTAUTH_SECRET=["'']?(change-me|__GENERATE_RANDOM_KEY__)' -Quiet
 if ($secretLine) {
     $bytes = New-Object byte[] 32
-    [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+    $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    try {
+        $rng.GetBytes($bytes)
+    } finally {
+        $rng.Dispose()
+    }
     $secret = ($bytes | ForEach-Object { $_.ToString('x2') }) -join ''
     $content = Get-Content $envFile -Raw
     $content = $content -replace 'NEXTAUTH_SECRET=.*', "NEXTAUTH_SECRET=$secret"
-    Set-Content -Path $envFile -Value $content -NoNewline -Encoding UTF8
+    # 以无 BOM 的 UTF-8 写回（PS 5.1 的 Set-Content -Encoding UTF8 会带 BOM，污染 .env 首行）
+    [System.IO.File]::WriteAllText((Join-Path $PSScriptRoot $envFile), $content, (New-Object System.Text.UTF8Encoding($false)))
     Write-Host "==> 已自动生成随机 NEXTAUTH_SECRET" -ForegroundColor Green
+} else {
+    Write-Host "==> NEXTAUTH_SECRET 已存在，跳过生成" -ForegroundColor Gray
 }
 
 # ---------- 2. 构建并启动 ----------

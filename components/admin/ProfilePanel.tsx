@@ -62,6 +62,13 @@ interface Profile {
   bgOverlay: number;
   avatarShape: string;
   avatarBorderColor: string;
+  // 天气配置（与 /api/weather-setting 共用同一份 Profile 记录，保存时原样回传）
+  weatherProvider: string;
+  amapKey: string;
+  amapSecretKey: string;
+  txWeatherKey: string;
+  txWeatherSk: string;
+  weatherCity: string;
 }
 
 const INITIAL: Profile = {
@@ -115,6 +122,13 @@ const INITIAL: Profile = {
   bgOverlay: 0,
   avatarShape: "circle",
   avatarBorderColor: "",
+  // 天气配置（与 profileShared INITIAL_PROFILE 保持一致）
+  weatherProvider: "tencent",
+  amapKey: "",
+  amapSecretKey: "",
+  txWeatherKey: "",
+  txWeatherSk: "",
+  weatherCity: "",
 };
 
 const TIME_FORMATS = [

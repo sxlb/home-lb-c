@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 import { RefreshCw, CheckCircle2, XCircle, MinusCircle, Loader2, Activity, Zap, AlertTriangle } from "lucide-react";
 
 interface ServiceStatus {
@@ -81,18 +82,33 @@ export default function HealthPanel() {
   const [data, setData] = useState<HealthData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  // 请求序号：连点刷新时丢弃过期响应；卸载后不再 setState
+  const seqRef = useRef(0);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const load = useCallback(async (force: boolean) => {
+    const seq = ++seqRef.current;
     if (force) setRefreshing(true);
     else setLoading(true);
     try {
       const res = await fetch(`/api/health${force ? "?force=1" : ""}`, { cache: "no-store" });
+      if (!mountedRef.current || seq !== seqRef.current) return;
       if (res.ok) setData(await res.json());
+      else toast.error("检测失败，请稍后重试");
     } catch {
-      /* 失败保持原数据 */
+      if (mountedRef.current && seq === seqRef.current) toast.error("网络错误，检测失败");
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (mountedRef.current && seq === seqRef.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   }, []);
 

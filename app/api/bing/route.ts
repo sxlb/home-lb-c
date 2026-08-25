@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 // 代理必应每日壁纸，避免跨域与国内访问问题
-export const revalidate = 3600; // 1 小时
+// 注意：路由为 force-dynamic，此处不再导出 revalidate（会被忽略）；
+// 缓存由下方 fetch 的 next.revalidate: 3600 承担
 
 interface BingResponse {
   images?: Array<{

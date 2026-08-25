@@ -11,6 +11,8 @@ import { LoadingPlaceholder } from "./LinksPanel";
 
 interface FriendLinkItem {
   id?: number;
+  /** 前端本地唯一标识（新增行使用，服务端不会持久化），用于列表 key 保持稳定 */
+  clientId?: number;
   name: string;
   url: string;
   icon: string;
@@ -34,7 +36,9 @@ export default function FriendLinksPanel() {
   const { items: links, loading, saving, addItem, removeItem, updateItem, save } = useLinkList(
     "/api/friend-links",
     emptyItem,
-    "友情链接保存成功"
+    "友情链接保存成功",
+    // 友情链接仅允许 http(s)（后端 friendLinkSchema），icon 可空
+    { urlPattern: /^https?:\/\// }
   );
 
   if (loading) {
@@ -66,12 +70,12 @@ export default function FriendLinksPanel() {
         )}
         {links.map((link, index) => (
           <div
-            key={index}
+            key={link.id ?? link.clientId ?? index}
             className="group relative rounded-xl border bg-card transition-all hover:border-primary/30 hover:shadow-sm"
           >
-            {/* 拖拽手柄 + 序号 */}
-            <div className="absolute left-0 top-0 flex h-full w-10 flex-col items-center justify-center gap-1 border-r border-border/50 bg-muted/30 text-muted-foreground/60 transition-colors group-hover:text-muted-foreground">
-              <GripVertical className="h-4 w-4 cursor-grab" />
+            {/* 拖拽手柄 + 序号（无拖拽实现，title 说明按排序值排列） */}
+            <div title="按「排序」数值排列" className="absolute left-0 top-0 flex h-full w-10 flex-col items-center justify-center gap-1 border-r border-border/50 bg-muted/30 text-muted-foreground/60 transition-colors group-hover:text-muted-foreground">
+              <GripVertical className="h-4 w-4" />
               <span className="text-[10px] font-semibold tabular-nums">{String(index + 1).padStart(2, "0")}</span>
             </div>
 
@@ -106,8 +110,10 @@ export default function FriendLinksPanel() {
                     id={`friend-sort-${index}`}
                     name={`friend-sort-${index}`}
                     type="number"
+                    min={0}
+                    step={1}
                     value={link.sort}
-                    onChange={(e) => updateItem(index, "sort", Number(e.target.value))}
+                    onChange={(e) => updateItem(index, "sort", e.target.value === "" ? 0 : Number(e.target.value))}
                     className="h-8 text-sm"
                   />
                 </div>

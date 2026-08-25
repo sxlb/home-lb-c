@@ -1,0 +1,64 @@
+name: Build & Release
+
+# 每次 push 到 master 自动构建并发布一个版本（也支持手动触发）。
+# 版本号格式：home-YYYY-MM-DD-HHmm（如 home-2026-08-26-0035），便于按时间识别。
+on:
+  push:
+    branches: [master]
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Prepare database & build
+        env:
+          DATABASE_URL: file:./prisma/ci.db
+        run: |
+          # 首页为 ISR，构建期会查询 Profile，需要先迁移出一个可用空库
+          npx prisma migrate deploy
+          npm run build
+
+      - name: Compute version
+        id: version
+        run: echo "VERSION=home-$(date +'%Y-%m-%d-%H%M')" >> "$GITHUB_OUTPUT"
+
+      - name: Package standalone artifact
+        run: |
+          set -euo pipefail
+          mkdir -p dist/home-lb
+          cp -r .next/standalone/. dist/home-lb/
+          cp -r .next/static dist/home-lb/.next/static
+          cp -r public dist/home-lb/public
+          cp -r prisma dist/home-lb/prisma
+          cp package.json package-lock.json dist/home-lb/
+          cp Dockerfile docker-compose.yml deploy.sh deploy.ps1 .env.deploy.example dist/home-lb/
+          tar -C dist -czf "home-lb-${{ steps.version.outputs.VERSION }}.tar.gz" home-lb
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.VERSION }}
+          name: ${{ steps.version.outputs.VERSION }}
+          body: |
+            ## home-lb 自动打包发布
+
+            - 版本：${{ steps.version.outputs.VERSION }}
+            - 内容：Next.js standalone 产物 + Prisma + 部署脚本（Dockerfile / compose / 部署脚本 / env 模板）
+            - 部署：解压后按 `README`/`deploy.sh` 说明执行；容器内启动时会自动 `migrate deploy` 并 seed
+          files: home-lb-${{ steps.version.outputs.VERSION }}.tar.gz

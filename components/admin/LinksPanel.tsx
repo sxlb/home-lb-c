@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,6 +21,8 @@ export function LoadingPlaceholder() {
 
 interface LinkItem {
   id?: number;
+  /** 前端本地唯一标识（新增行使用，服务端不会持久化），用于列表 key 保持稳定 */
+  clientId?: number;
   name: string;
   icon: string;
   url: string;
@@ -78,7 +80,9 @@ export default function LinksPanel({
   const { items: links, loading, saving, addItem, removeItem, updateItem, save } = useLinkList(
     apiPath,
     emptyItem,
-    successMessage
+    successMessage,
+    // 社交/网站链接的 icon 必填（后端 zod min(1)）
+    { requireIcon: true }
   );
 
   if (loading) {
@@ -110,12 +114,12 @@ export default function LinksPanel({
         )}
         {links.map((link, index) => (
           <div
-            key={index}
+            key={link.id ?? link.clientId ?? index}
             className="group relative rounded-xl border bg-card transition-all hover:border-primary/30 hover:shadow-sm"
           >
-            {/* 拖拽手柄 + 序号 */}
-            <div className="absolute left-0 top-0 flex h-full w-10 flex-col items-center justify-center gap-1 border-r border-border/50 bg-muted/30 text-muted-foreground/60 transition-colors group-hover:text-muted-foreground">
-              <GripVertical className="h-4 w-4 cursor-grab" />
+            {/* 拖拽手柄 + 序号（无拖拽实现，title 说明按排序值排列） */}
+            <div title="按「排序」数值排列" className="absolute left-0 top-0 flex h-full w-10 flex-col items-center justify-center gap-1 border-r border-border/50 bg-muted/30 text-muted-foreground/60 transition-colors group-hover:text-muted-foreground">
+              <GripVertical className="h-4 w-4" />
               <span className="text-[10px] font-semibold tabular-nums">{String(index + 1).padStart(2, "0")}</span>
             </div>
 
@@ -192,8 +196,10 @@ export default function LinksPanel({
                     id={`link-sort-${index}`}
                     name={`link-sort-${index}`}
                     type="number"
+                    min={0}
+                    step={1}
                     value={link.sort}
-                    onChange={(e) => updateItem(index, "sort", Number(e.target.value))}
+                    onChange={(e) => updateItem(index, "sort", e.target.value === "" ? 0 : Number(e.target.value))}
                     className="h-8 text-sm"
                   />
                 </div>
@@ -241,6 +247,12 @@ function IconPickerTabs({
   };
 
   const [activeTab, setActiveTab] = useState<"lucide" | "iconfont">(getInitialTab);
+
+  // value 变化（手动输入或外部修改）时同步激活 tab，避免 UI 状态与值错位
+  useEffect(() => {
+    setActiveTab(getInitialTab());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
 
   return (
     <div className="space-y-2">

@@ -2,6 +2,10 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup } from "@testing-library/react";
 import { afterEach, vi } from "vitest";
 
+// 登录相关模块（lib/auth）在 import 时读取 NEXTAUTH_SECRET 组装 authOptions，
+// 统一设置测试密钥，避免"断言恒真"或"secret 缺失"类问题
+process.env.NEXTAUTH_SECRET = "test-secret-0123456789abcdef";
+
 // 每个测试结束后清理 DOM 与 mock：
 // restoreAllMocks 恢复 vi.spyOn 的 spy；unstubAllGlobals 撤销 stubGlobal 的全局替换（如 fetch）
 afterEach(() => {

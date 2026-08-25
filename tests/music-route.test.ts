@@ -24,9 +24,17 @@ describe("音乐接口 SSRF 防护", () => {
   // 这里用 any 规避重载推断，实际 mock 值由各用例覆盖
   let lookupSpy: any;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+    // 默认 fetch 返回空数组（公网用例覆盖）；每次调用都新建 Response，避免复用同一流
+    fetchMock.mockReset();
+    fetchMock.mockImplementation(() => Promise.resolve(new Response("[]", { status: 200 })));
     vi.stubGlobal("fetch", fetchMock);
+    // 重置 prisma mock 的 once 队列（clearAllMocks 不清队列），防止跨用例串扰
+    const { prisma } = await import("@/lib/db");
+    (prisma.profile.findFirst as ReturnType<typeof vi.fn>)
+      .mockReset()
+      .mockResolvedValue(null);
     // 默认解析为公网 IP；需要私网/解析失败场景的用例单独覆盖
     // （setup.ts 的 restoreAllMocks 会在每个用例后还原 spy）
     lookupSpy = vi
@@ -174,17 +182,27 @@ describe("音乐接口 SSRF 防护", () => {
     (prisma.profile.findFirst as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       songApi: "http://127.0.0.1:3000",
     });
-    fetchMock.mockResolvedValue(
-      new Response(JSON.stringify({ songs: [] }), { status: 200 })
-    );
+    // 每次调用返回新 Response：NCM 歌单为空回退 meting，meting 返回空数组
+    fetchMock.mockImplementation((url: string) => {
+      const u = new URL(url);
+      if (u.pathname.includes("/playlist/track/all")) {
+        return Promise.resolve(new Response(JSON.stringify({ songs: [] }), { status: 200 }));
+      }
+      return Promise.resolve(new Response(JSON.stringify([]), { status: 200 }));
+    });
 
     const res = await GET(
       makeRequest("?api=http://127.0.0.1:3000&server=netease&type=playlist&id=1")
     );
+    const body = await res.json();
 
     expect(res.status).toBe(200);
-    // 私网被放行后进入了数据源逻辑（而非直接被 SSRF 拒绝返回示例）
+    expect(body).toEqual([]);
+    // 私网被放行后真正发起了对白名单 API 的代理请求（而非直接 SSRF 拒绝）
     expect(fetchMock).toHaveBeenCalled();
+    const firstUrl = new URL(fetchMock.mock.calls[0][0] as string);
+    expect(firstUrl.origin).toBe("http://127.0.0.1:3000");
+    expect(firstUrl.pathname).toContain("/playlist/track/all");
   });
 
   it("songApi 与后台配置不一致时私网仍被拒绝", async () => {

@@ -56,6 +56,15 @@ export interface ProfileShape {
   bgOverlay: number;
   avatarShape: string;
   avatarBorderColor: string;
+  // 天气配置（与 /api/weather-setting 读写同一份 Profile 记录）。
+  // 显式声明到接口中：面板保存时会回传完整 profile 对象，若不声明，
+  // 仅靠运行时 spread 隐式透传，一旦有人加 .pick()/.strict() 会静默清空天气配置。
+  weatherProvider: string;
+  amapKey: string;
+  amapSecretKey: string;
+  txWeatherKey: string;
+  txWeatherSk: string;
+  weatherCity: string;
 }
 
 export const INITIAL_PROFILE: ProfileShape = {
@@ -115,6 +124,13 @@ export const INITIAL_PROFILE: ProfileShape = {
   bgOverlay: 0,
   avatarShape: "circle",
   avatarBorderColor: "",
+  // 天气配置（与 lib/validation.ts profileSchema 默认值保持一致）
+  weatherProvider: "tencent",
+  amapKey: "",
+  amapSecretKey: "",
+  txWeatherKey: "",
+  txWeatherSk: "",
+  weatherCity: "",
 };
 
 // —— 表单统一样式 ——
