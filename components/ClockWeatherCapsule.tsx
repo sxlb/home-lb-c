@@ -116,7 +116,7 @@ export default function ClockWeatherCapsule({
     : `${windpower || ""}级`;
 
   return (
-       <div className="flex h-full w-full flex-col justify-end" suppressHydrationWarning>
+       <div className="flex h-full w-full flex-col justify-end">
          {/* 时钟+天气合并为一个紧凑组 */}
          <div className="flex flex-col items-center gap-1.5">
            {/* 日期行 — 移动端 11px，桌面端（md+）13px 提升可读性 */}
