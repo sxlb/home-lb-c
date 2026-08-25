@@ -488,7 +488,9 @@ async function fetchVisitorLocation(): Promise<string> {
       clearTimeout(timer);
     }
   } catch {
-    console.warn("[Effects] 访客位置获取失败，无法自动定位天气");
+    if (process.env.NODE_ENV !== "production") {
+      console.warn("[Effects] 访客位置获取失败，无法自动定位天气");
+    }
     return "";
   }
 }

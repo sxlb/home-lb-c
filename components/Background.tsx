@@ -183,7 +183,9 @@ export default function Background({
         // 必应源不再降级；其余源失败时降级为必应壁纸
         if (coverType !== "bing" && !fallbackUsed) {
           fallbackUsed = true;
-          console.warn(`壁纸源 ${bgUrl} 加载失败，降级为必应壁纸`);
+          if (process.env.NODE_ENV !== "production") {
+            console.warn(`壁纸源 ${bgUrl} 加载失败，降级为必应壁纸`);
+          }
           try {
             const bingUrl = await resolveBing();
             if (cancelled || !bingUrl) {
@@ -203,7 +205,9 @@ export default function Background({
               announceReady();
             };
             bingImg.onerror = () => {
-              console.warn("必应壁纸加载失败:", bingUrl);
+              if (process.env.NODE_ENV !== "production") {
+                console.warn("必应壁纸加载失败:", bingUrl);
+              }
               announceReady();
             };
             bingImg.src = bingUrl;
