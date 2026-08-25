@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions, validateAuthEnv } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { profileSchema } from "@/lib/validation";
 import type { z, ZodTypeAny } from "zod";
 
 /**
@@ -176,82 +177,42 @@ export function diffLinks(
   return { summary, detail };
 }
 
+// 从 profileSchema 派生字段清单，避免手工维护与 schema 漂移
+const PROFILE_FIELDS = Object.keys(profileSchema.shape);
+// 敏感字段：日志中仅记录"已配置/未配置"，不记录真实值
+const SENSITIVE_PROFILE_FIELDS = new Set(["amapSecretKey", "txWeatherSk"]);
+
+/** 返回实际发生变化（旧值≠新值）的 Profile 字段名列表 */
+export function getChangedProfileFields(
+  before: Record<string, unknown>,
+  after: Record<string, unknown>
+): string[] {
+  return PROFILE_FIELDS.filter((f) => (before[f] ?? "") !== (after[f] ?? ""));
+}
+
 /**
- * 对比 Profile 变更字段（跳过 created/updated 时间戳），返回摘要与明细。
- * 注意：仅记录字段名与新旧值，不涉及敏感信息。
- * 字段列表须与 prisma/schema.prisma 的 Profile 模型保持同步。
+ * 对比 Profile 变更字段，返回摘要与明细。
+ * 说明：字段清单由 profileSchema 派生；敏感密钥仅记录"已配置/未配置"，
+ * 不把真实值写入日志（防泄露）。
  */
 export function diffProfile(
   before: Record<string, unknown>,
   after: Record<string, unknown>
 ): { summary: string; detail: string } {
-  const fields = [
-    "avatar",
-    "siteIcon",
-    "nickname",
-    "bio",
-    "github",
-    "email",
-    "bgApi",
-    "weatherProvider",
-    "amapKey",
-    "amapSecretKey",
-    "weatherCity",
-    "txWeatherKey",
-    "txWeatherSk",
-    "coverType",
-    "autoBGSwitchInterval",
-    "wallpaperRefresh",
-    "theme",
-    "songApi",
-    "songServer",
-    "songId",
-    "siteUrl",
-    "siteIcp",
-    "siteMps",
-    "siteStart",
-    "siteLinksTitle",
-    "siteLinksIcon",
-    "logoArtFont",
-    "loadingScreen",
-    "clickEffect",
-    "consoleEgg",
-    "showStats",
-    "dynamicTitle",
-    "topProgressBar",
-    "logoFont",
-    "useRandomAvatar",
-    "welcomeEnabled",
-    "welcomeIndex",
-    "welcomeMessages",
-    // 高级配置
-    "siteTitle",
-    "siteDescription",
-    "siteKeywords",
-    "accentColor",
-    "glassOpacity",
-    "glassBlur",
-    "analyticsScript",
-    "headScript",
-    "timeFormat",
-    "showSeconds",
-    "dateFormat",
-    "hitokotoType",
-    "bgOverlay",
-    "avatarShape",
-    "avatarBorderColor",
-  ];
-  const changed = fields.filter((f) => (before[f] ?? "") !== (after[f] ?? ""));
+  const changed = getChangedProfileFields(before, after);
+  if (changed.length === 0) return { summary: "无变化", detail: "{}" };
 
-  const summary = changed.length ? `修改字段：${changed.join("、")}` : "无变化";
   const detail = JSON.stringify(
     changed.reduce<Record<string, unknown>>((acc, f) => {
-      acc[f] = { from: before[f] ?? "", to: after[f] ?? "" };
+      if (SENSITIVE_PROFILE_FIELDS.has(f)) {
+        acc[f] = { from: before[f] ? "已配置" : "未配置", to: after[f] ? "已配置" : "未配置" };
+      } else {
+        acc[f] = { from: before[f] ?? "", to: after[f] ?? "" };
+      }
       return acc;
     }, {})
   );
-
-  return { summary, detail };
+  return { summary: `修改字段：${changed.join("、")}`, detail };
 }
 
 /* ==================== 轻量内存限流 ==================== */
