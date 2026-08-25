@@ -120,9 +120,24 @@ export function getClientIp(req: NextRequest): string {
   return req.headers.get("x-real-ip") || "";
 }
 
+/** diffLinks 中参与"除 name 外字段比较"的键清单 */
+const LINK_KEYS = ["icon", "url", "tip", "description", "sort"] as const;
+type LinkKey = (typeof LINK_KEYS)[number];
+
+/** 取指定键的值（keyof 收窄，避免 JS 字符串动态访问） */
+function linkValue(l: LinkItem, k: LinkKey) {
+  return l[k];
+}
+
+/** 两份链接在除 name 之外的字段上是否完全相同（用于识别"仅改名"） */
+function linksEqualExceptName(a: LinkItem, b: LinkItem): boolean {
+  return LINK_KEYS.every((k) => linkValue(a, k) === linkValue(b, k));
+}
+
 /**
- * 对比新旧链接列表（按 name 作为唯一键），生成增/删/改摘要。
- * 返回：summary（一句话摘要）与 detail（含新增/删除/修改明细的 JSON 字符串）
+ * 对比新旧链接列表（按 name 作为唯一键），生成增/删/改/重命名摘要。
+ * 仅改名（除 name 外字段全等）归为「重命名」，而不误判为「删除+新增」。
+ * 返回：summary（一句话摘要）与 detail（含新增/删除/重命名/修改明细的 JSON 字符串）
  */
 export function diffLinks(
   before: LinkItem[],
@@ -134,25 +149,35 @@ export function diffLinks(
   const added: LinkItem[] = [];
   const removed: LinkItem[] = [];
   const modified: { before: LinkItem; after: LinkItem }[] = [];
+  const renamed: { before: LinkItem; after: LinkItem }[] = [];
 
   after.forEach((a) => {
-    if (!beforeMap.has(a.name)) {
-      added.push(a);
-    }
+    if (!beforeMap.has(a.name)) added.push(a);
+  });
+  before.forEach((b) => {
+    if (!afterMap.has(b.name)) removed.push(b);
   });
 
+  // 重命名识别：被删条目与新增条目除 name 外字段全等 → 视为一次重命名，而非删+增
+  for (const r of [...removed]) {
+    const idx = added.findIndex((a) => a.name !== r.name && linksEqualExceptName(a, r));
+    if (idx >= 0) {
+      renamed.push({ before: r, after: added[idx] });
+      removed.splice(removed.indexOf(r), 1);
+      added.splice(idx, 1);
+    }
+  }
+
+  // 修改识别：name 未变，仅比较其它字段
   before.forEach((b) => {
-    if (!afterMap.has(b.name)) {
-      removed.push(b);
-    } else {
-      const a = afterMap.get(b.name)!;
-      const keys: (keyof LinkItem)[] = ["icon", "url", "tip", "description", "sort"];
-      const changed = keys.some((k) => a[k] !== b[k]);
-      if (changed) modified.push({ before: b, after: a });
+    const a = afterMap.get(b.name);
+    if (a && b.name === a.name && !linksEqualExceptName(a, b)) {
+      modified.push({ before: b, after: a });
     }
   });
 
   const parts: string[] = [];
+  if (renamed.length) parts.push(`重命名 ${renamed.length} 条`);
   if (added.length) parts.push(`新增 ${added.length} 条`);
   if (removed.length) parts.push(`删除 ${removed.length} 条`);
   if (modified.length) parts.push(`修改 ${modified.length} 条`);
@@ -161,16 +186,18 @@ export function diffLinks(
   const detail = JSON.stringify({
     added: added.map((a) => ({ name: a.name, icon: a.icon, url: a.url })),
     removed: removed.map((r) => ({ name: r.name })),
+    renamed: renamed.map((r) => ({
+      from: r.before.name,
+      to: r.after.name,
+    })),
     modified: modified.map((m) => ({
       name: m.before.name,
-      changed: ["icon", "url", "tip", "description", "sort"].reduce<Record<string, unknown>>(
-        (acc, key) => {
-          const k = key as keyof LinkItem;
-          if (m.before[k] !== m.after[k]) acc[k] = { from: m.before[k], to: m.after[k] };
-          return acc;
-        },
-        {}
-      ),
+      changed: LINK_KEYS.reduce<Record<string, unknown>>((acc, key) => {
+        if (linkValue(m.before, key) !== linkValue(m.after, key)) {
+          acc[key] = { from: linkValue(m.before, key), to: linkValue(m.after, key) };
+        }
+        return acc;
+      }, {}),
     })),
   });
 
