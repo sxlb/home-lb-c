@@ -35,7 +35,7 @@ export async function PUT(request: NextRequest) {
       return error("未授权", 401);
     }
 
-    const { locked, remainingMs } = checkRateLimit("account-update");
+    const { locked, remainingMs } = checkRateLimit();
     if (locked) {
       return error(`操作过于频繁，请 ${Math.ceil(remainingMs / 60000)} 分钟后再试`, 429);
     }
@@ -61,7 +61,7 @@ export async function PUT(request: NextRequest) {
 
     const valid = await bcrypt.compare(currentPassword, user.password);
     if (!valid) {
-      recordFailedAttempt("account-update");
+      recordFailedAttempt();
       return error("当前密码不正确", 403);
     }
 
