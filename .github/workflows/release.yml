@@ -16,6 +16,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # 完整历史 + tags：供版本对比与 Release Notes 的 CHANGELOG 链接使用
+          fetch-depth: 0
 
       - name: Setup Node.js 22
         uses: actions/setup-node@v4
@@ -38,6 +41,12 @@ jobs:
         id: version
         run: echo "VERSION=home-$(date +'%Y-%m-%d-%H%M')" >> "$GITHUB_OUTPUT"
 
+      - name: Generate release notes
+        run: python3 .github/scripts/release-notes.py
+        env:
+          VERSION: ${{ steps.version.outputs.VERSION }}
+          REPO: sxlb/home-lb-c
+
       - name: Package standalone artifact
         run: |
           set -euo pipefail
@@ -54,11 +63,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.VERSION }}
-          name: ${{ steps.version.outputs.VERSION }}
-          body: |
-            ## home-lb 自动打包发布
-
-            - 版本：${{ steps.version.outputs.VERSION }}
-            - 内容：Next.js standalone 产物 + Prisma + 部署脚本（Dockerfile / compose / 部署脚本 / env 模板）
-            - 部署：解压后按 `README`/`deploy.sh` 说明执行；容器内启动时会自动 `migrate deploy` 并 seed
+          name: home-lb ${{ steps.version.outputs.VERSION }}
+          body_path: RELEASE_NOTES.md
           files: home-lb-${{ steps.version.outputs.VERSION }}.tar.gz

@@ -12,6 +12,9 @@ tsconfig.tsbuildinfo
 
 # 日志
 *.log
+
+# CI 生成的临时发布说明
+RELEASE_NOTES.md
 build-log.txt
 
 # 数据库文件（本地开发与运行时数据）
