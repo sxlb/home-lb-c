@@ -17,7 +17,7 @@ if [ ! -f "$ENV_FILE" ]; then
   cp .env.deploy.example "$ENV_FILE"
 fi
 
-if grep -q 'NEXTAUTH_SECRET=change-me' "$ENV_FILE"; then
+if grep -q 'NEXTAUTH_SECRET=__GENERATE_RANDOM_KEY__' "$ENV_FILE"; then
   SECRET=$(openssl rand -hex 32)
   tmpfile=$(mktemp)
   sed "s|^NEXTAUTH_SECRET=.*|NEXTAUTH_SECRET=${SECRET}|" "$ENV_FILE" > "$tmpfile"

@@ -16,7 +16,7 @@ if (-not (Test-Path $envFile)) {
     Copy-Item ".env.deploy.example" $envFile
 }
 
-$secretLine = Select-String -Path $envFile -Pattern 'NEXTAUTH_SECRET=change-me' -Quiet
+$secretLine = Select-String -Path $envFile -Pattern 'NEXTAUTH_SECRET=__GENERATE_RANDOM_KEY__' -Quiet
 if ($secretLine) {
     $bytes = New-Object byte[] 32
     [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
