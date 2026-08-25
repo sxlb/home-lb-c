@@ -100,10 +100,41 @@ function extFromContentType(contentType: string): string {
     "image/webp": ".webp",
     "image/gif": ".gif",
     "image/avif": ".avif",
-    "image/svg+xml": ".svg",
     "image/bmp": ".bmp",
   };
+  // 不映射 image/svg+xml：SVG 可内嵌脚本，存在存储型 XSS 风险，一律拒绝
   return map[mime] || "";
+}
+
+/** 按文件头（Magic Number）识别图片类型；非受支持的光栅图返回 null */
+function extFromMagicNumber(buffer: Buffer): string | null {
+  if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
+    return ".jpg";
+  }
+  if (
+    buffer.length >= 8 &&
+    buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+  ) {
+    return ".png";
+  }
+  if (
+    buffer.length >= 12 &&
+    buffer.subarray(0, 4).equals(Buffer.from("RIFF")) &&
+    buffer.subarray(8, 12).equals(Buffer.from("WEBP"))
+  ) {
+    return ".webp";
+  }
+  if (buffer.length >= 6 && buffer.subarray(0, 4).equals(Buffer.from("GIF8"))) return ".gif";
+  if (
+    buffer.length >= 12 &&
+    buffer.subarray(4, 8).equals(Buffer.from("ftyp")) &&
+    (buffer.subarray(8, 12).equals(Buffer.from("avif")) ||
+      buffer.subarray(8, 12).equals(Buffer.from("avis")))
+  ) {
+    return ".avif";
+  }
+  if (buffer.length >= 2 && buffer[0] === 0x42 && buffer[1] === 0x4d) return ".bmp";
+  return null;
 }
 
 /** 扩展名 → Content-Type（供本地文件响应使用） */
@@ -139,6 +170,10 @@ async function downloadImage(sourceUrl: string): Promise<{ buffer: Buffer; ext: 
     const buffer = Buffer.from(await res.arrayBuffer());
     if (buffer.byteLength === 0) throw new Error("图片内容为空");
     if (buffer.byteLength > MAX_FILE_SIZE) throw new Error("图片超过 20MB 限制");
+    // 以实际文件头为准校验，防止内容与声明类型不符（如伪装成 jpg 的 SVG）
+    if (extFromMagicNumber(buffer) !== ext) {
+      throw new Error(`文件头与声明类型不符，已拒绝：${ext}`);
+    }
     return { buffer, ext };
   } finally {
     clearTimeout(timer);
