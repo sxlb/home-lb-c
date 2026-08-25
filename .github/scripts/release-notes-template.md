@@ -21,7 +21,7 @@
 1. **解压产物包**
 
    ```bash
-   tar -xzf home-lb-{{VERSION}}.tar.gz
+   tar -xzf home-lb-{{TAG}}.tar.gz
    cd home-lb
    ```
 
@@ -41,7 +41,7 @@
 4. **验证**
 
    ```bash
-   curl http://localhost:3000/api/health
+   curl http://localhost:3000/api/ping
    # 期望 {"ok":true}
    ```
 

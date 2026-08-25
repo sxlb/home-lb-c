@@ -96,7 +96,7 @@ docker compose --env-file .env.deploy up -d --build
 
 每次 push 到 `master` 分支，GitHub Actions 自动执行：安装依赖 → 数据库迁移 → 生产构建 → 打包 standalone 产物 → 创建 GitHub Release。
 
-- **版本号**：`home-YYYY-MM-DD-HHmm`（如 `home-2026-08-26-0100`），按时间可识别
+- **版本号**：`home-年-月-日-时间`（如 `home-2026-8-26-01:19:01`），按中国时区（Asia/Shanghai）生成，便于按时间识别
 - **产物**：Next.js standalone 目录 + Prisma（schema/migrations/seed）+ Dockerfile / compose / 部署脚本 / env 模板，打包为 tar.gz 上传至 Release
 - **Release Notes**：自动生成（版本、日期、变更列表、上一版本 CHANGELOG 对比链接）
 

@@ -14,6 +14,8 @@ import subprocess
 
 ROOT = pathlib.Path(os.environ.get("GITHUB_WORKSPACE", "."))
 VERSION = os.environ["VERSION"]
+# Git tag 不允许冒号，CHANGELOG 对比链接使用无冒号的 TAG（由 workflow 传入）
+TAG = os.environ.get("TAG", VERSION)
 REPO = os.environ.get("REPO", "sxlb/home-lb-c")
 DATE = datetime.date.today().strftime("%Y-%m-%d")
 
@@ -30,7 +32,7 @@ def main() -> None:
     prev = tags[0] if tags else ""
 
     # 变更列表（去掉 commit hash，保留提交信息；无历史时兜底）
-    log_range = f"{prev}..HEAD" if prev and prev != VERSION else "HEAD"
+    log_range = f"{prev}..HEAD" if prev and prev != TAG else "HEAD"
     log = git("log", "--oneline", "--no-merges", "-20", log_range)
     if log:
         changes = "\n".join(
@@ -39,15 +41,16 @@ def main() -> None:
     else:
         changes = "- 首次发布"
 
-    # CHANGELOG 对比链接
-    if prev and prev != VERSION:
-        link = f"https://github.com/{REPO}/compare/{prev}...{VERSION}"
+    # CHANGELOG 对比链接（使用无冒号的 TAG，与 git tag 保持一致）
+    if prev and prev != TAG:
+        link = f"https://github.com/{REPO}/compare/{prev}...{TAG}"
     else:
-        link = f"https://github.com/{REPO}/commits/{VERSION}"
+        link = f"https://github.com/{REPO}/commits/{TAG}"
 
     template = (ROOT / ".github/scripts/release-notes-template.md").read_text(encoding="utf-8")
     notes = (
         template.replace("{{VERSION}}", VERSION)
+        .replace("{{TAG}}", TAG)
         .replace("{{DATE}}", DATE)
         .replace("{{CHANGES}}", changes)
         .replace("{{COMPARE_LINK}}", link)

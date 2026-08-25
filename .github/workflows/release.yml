@@ -1,7 +1,8 @@
 name: Build & Release
 
 # 每次 push 到 master 自动构建并发布一个版本（也支持手动触发）。
-# 版本号格式：home-YYYY-MM-DD-HHmm（如 home-2026-08-26-0035），便于按时间识别。
+# 版本号格式：home-年-月-日-时间（如 home-2026-8-26-01:19:01），按中国时区（Asia/Shanghai）生成。
+# 注意：Git tag 与文件名不允许冒号，故 tag 与产物文件名使用 - 替代冒号（如 home-2026-8-26-01-19-01）。
 on:
   push:
     branches: [master]
@@ -39,12 +40,20 @@ jobs:
 
       - name: Compute version
         id: version
-        run: echo "VERSION=home-$(date +'%Y-%m-%d-%H%M')" >> "$GITHUB_OUTPUT"
+        run: |
+          # 中国时区（Asia/Shanghai）生成版本号：home-年-月-日-时间（如 home-2026-8-26-01:19:01）
+          export TZ='Asia/Shanghai'
+          VERSION="home-$(date +'%Y-%-m-%-d-%H:%M:%S')"
+          # Git tag 与文件名不允许冒号，用 - 替代（Windows 下载兼容）
+          TAG="${VERSION//:/-}"
+          echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "TAG=$TAG" >> "$GITHUB_OUTPUT"
 
       - name: Generate release notes
         run: python3 .github/scripts/release-notes.py
         env:
           VERSION: ${{ steps.version.outputs.VERSION }}
+          TAG: ${{ steps.version.outputs.TAG }}
           REPO: sxlb/home-lb-c
 
       - name: Package standalone artifact
@@ -57,12 +66,12 @@ jobs:
           cp -r prisma dist/home-lb/prisma
           cp package.json package-lock.json dist/home-lb/
           cp Dockerfile docker-compose.yml deploy.sh deploy.ps1 .env.deploy.example dist/home-lb/
-          tar -C dist -czf "home-lb-${{ steps.version.outputs.VERSION }}.tar.gz" home-lb
+          tar -C dist -czf "home-lb-${{ steps.version.outputs.TAG }}.tar.gz" home-lb
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
-          tag_name: ${{ steps.version.outputs.VERSION }}
+          tag_name: ${{ steps.version.outputs.TAG }}
           name: home-lb ${{ steps.version.outputs.VERSION }}
           body_path: RELEASE_NOTES.md
-          files: home-lb-${{ steps.version.outputs.VERSION }}.tar.gz
+          files: home-lb-${{ steps.version.outputs.TAG }}.tar.gz
