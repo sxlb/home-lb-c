@@ -20,9 +20,10 @@ interface BingResponse {
 
 /**
  * 解析壁纸源的真实图片直链（服务端执行，供缓存服务下载）。
- * bing / landscape / anime；custom 由 bgApi 直连返回，不进入缓存。
+ * bing / landscape / anime；custom 由 bgApi 直连返回，不进入缓存，此处返回 null。
  */
-async function resolveSourceUrl(coverType: string): Promise<string> {
+async function resolveSourceUrl(coverType: string): Promise<string | null> {
+  if (coverType === "custom") return null; // 自定义源由 bgApi 直连，不缓存/下载
   if (coverType === "landscape") return MWM_VIEWS_URL;
   if (coverType === "anime") return MWM_ACG_URL;
   // 默认：必应每日壁纸
@@ -56,6 +57,10 @@ export async function GET(request: NextRequest) {
 
   try {
     const sourceUrl = await resolveSourceUrl(coverType);
+    if (!sourceUrl) {
+      // coverType=custom 但未提供 bgApi：无可用的自定义直链
+      return NextResponse.json({ url: "", cached: false });
+    }
 
     const cached = await getRandomCachedWallpaper();
     if (cached) {
