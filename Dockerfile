@@ -54,5 +54,5 @@ ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 ENV DATABASE_URL="file:/app/data/prod.db"
 
-# 启动脚本：先应用 migrations（幂等，可安全重复执行），再 seed 默认数据，最后启动应用
-CMD npx prisma migrate deploy && node prisma/seed.js && node server.js
+# 启动脚本：先应用 migrations（幂等，硬性前置），再 seed 默认数据（best-effort，失败不阻断启动），最后启动应用
+CMD npx prisma migrate deploy && { node prisma/seed.js || true; } && node server.js
