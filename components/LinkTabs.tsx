@@ -127,6 +127,24 @@ export default function LinkTabs({
     }
   };
 
+  // 键盘翻页：左右方向键 / PageUp-PageDown / Home-End（对齐轮播滚轮交互）
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (pages.length <= 1) return;
+    if (e.key === "ArrowRight" || e.key === "PageDown") {
+      e.preventDefault();
+      setPage((p) => Math.min(p + 1, pages.length - 1));
+    } else if (e.key === "ArrowLeft" || e.key === "PageUp") {
+      e.preventDefault();
+      setPage((p) => Math.max(p - 1, 0));
+    } else if (e.key === "Home") {
+      e.preventDefault();
+      setPage(0);
+    } else if (e.key === "End") {
+      e.preventDefault();
+      setPage(pages.length - 1);
+    }
+  };
+
   // 组合标题：网站与友情的可配置标题合并为区域大标题（显眼），仅一类数据时只显示对应的标题
   const hasSite = siteLinks.length > 0;
   const hasFriend = friendLinks.length > 0;
@@ -183,7 +201,14 @@ export default function LinkTabs({
       </div>
 
       {/* 卡片轮播：每页固定 6 格（3 列 × 2 行），不足补占位以保持网格高度恒定 */}
-      <div onWheel={handleWheel} className="select-none">
+      <div
+        onWheel={handleWheel}
+        onKeyDown={handleKeyDown}
+        role="region"
+        aria-label={`${titleText}，可用左右方向键翻页`}
+        tabIndex={0}
+        className="select-none outline-none focus-visible:ring-2 focus-visible:ring-white/30"
+      >
         <div key={currentPage} className="animate-fade-in grid grid-cols-3 gap-3.5">
           {Array.from({ length: PAGE_SIZE }, (_, i) => {
             const link = pages[currentPage][i];
