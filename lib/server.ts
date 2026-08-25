@@ -113,11 +113,29 @@ export async function writeOperationLog(input: LogInput) {
   }
 }
 
-/** 从请求头提取客户端 IP（代理场景取 x-forwarded-for 第一个值） */
+const IPV4_RE = /^\d{1,3}(\.\d{1,3}){3}$/;
+const IPV6_RE = /^[0-9a-fA-F:]+$/;
+
+/** 校验 IP：IPv4 校验各段值域，IPv6 做宽松字符+长度校验 */
+export function isValidIp(ip: string): boolean {
+  if (!ip || ip.length > 45) return false;
+  if (IPV4_RE.test(ip)) return ip.split(".").every((n) => Number(n) <= 255);
+  return IPV6_RE.test(ip);
+}
+
+/** 从请求头提取客户端 IP（仅接受合法格式，丢弃伪造/非法值） */
 export function getClientIp(req: NextRequest): string {
   const xff = req.headers.get("x-forwarded-for");
-  if (xff) return xff.split(",")[0].trim();
-  return req.headers.get("x-real-ip") || "";
+  if (xff) {
+    const first = xff.split(",")[0].trim();
+    if (isValidIp(first)) return first;
+  }
+  const real = req.headers.get("x-real-ip");
+  if (real) {
+    const realTrim = real.trim();
+    if (isValidIp(realTrim)) return realTrim;
+  }
+  return "";
 }
 
 /** diffLinks 中参与"除 name 外字段比较"的键清单 */
