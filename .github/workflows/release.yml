@@ -15,13 +15,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           # 完整历史 + tags：供版本对比与 Release Notes 的 CHANGELOG 链接使用
           fetch-depth: 0
 
       - name: Setup Node.js 22
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -60,7 +60,7 @@ jobs:
           tar -C dist -czf "home-lb-${{ steps.version.outputs.VERSION }}.tar.gz" home-lb
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.version.outputs.VERSION }}
           name: home-lb ${{ steps.version.outputs.VERSION }}
