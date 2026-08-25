@@ -111,7 +111,7 @@ export default function LinkTabs({
       window.dispatchEvent(event);
       return;
     }
-    window.open(link.url, "_blank");
+    window.open(link.url, "_blank", "noopener,noreferrer");
   };
 
   const pages = chunk(active, PAGE_SIZE);
