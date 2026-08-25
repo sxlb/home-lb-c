@@ -1,7 +1,7 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { profileSchema } from "@/lib/validation";
-import { writeOperationLog, getClientIp, diffProfile, internalError, error, requireSession, parseJsonBody, formatZodError } from "@/lib/server";
+import { writeOperationLog, getClientIp, diffProfile, getChangedProfileFields, internalError, error, requireSession, parseJsonBody, formatZodError } from "@/lib/server";
 
 export const dynamic = "force-dynamic";
 
@@ -99,6 +99,15 @@ export async function PUT(request: NextRequest) {
 
     // 单例模型：使用 upsert 防止并发创建多条记录
     const existing = await prisma.profile.findFirst({ orderBy: { id: "asc" } });
+
+    const before = (existing as Record<string, unknown>) || {};
+    const after = parsed.data as unknown as Record<string, unknown>;
+
+    // 没有任何字段变化时跳过写库，避免每次保存都刷新 updatedAt/写日志
+    if (existing && getChangedProfileFields(before, after).length === 0) {
+      return NextResponse.json(existing);
+    }
+
     const data = {
       avatar,
       siteIcon,
@@ -163,10 +172,7 @@ export async function PUT(request: NextRequest) {
 
     // 记录操作日志（失败不影响主操作）
     const username = session.user?.name || "unknown";
-    const { summary, detail } = diffProfile(
-      (existing as Record<string, unknown>) || {},
-      parsed.data as unknown as Record<string, unknown>
-    );
+    const { summary, detail } = diffProfile(before, after);
     await writeOperationLog({
       module: "profile",
       action: existing ? "update" : "create",
