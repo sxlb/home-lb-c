@@ -29,6 +29,7 @@ const LOGO_FONT_CLASS: Record<string, string> = {
   xiaolai: "font-art-xiaolai",
   slidefu: "font-art-slidefu",
   slideqiuhong: "font-art-slideqiuhong",
+  "nowar-rounded": "font-art-nowar",
 };
 
 export interface SiteLinkRow {

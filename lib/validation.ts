@@ -182,7 +182,7 @@ export const profileSchema = z.object({
   dynamicTitle: z.boolean().optional().default(true),
   // 顶部音乐进度条
   topProgressBar: z.boolean().optional().default(true),
-  // 昵称标题艺术字体选择（共 18 种，全部中英双语）
+  // 昵称标题艺术字体选择（共 19 种，全部中英双语）
   logoFont: z
     .enum(
       [
@@ -204,6 +204,7 @@ export const profileSchema = z.object({
         "xiaolai",
         "slidefu",
         "slideqiuhong",
+        "nowar-rounded",
       ],
       { errorMap: () => ({ message: "艺术字体参数不合法" }) }
     )

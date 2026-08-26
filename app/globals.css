@@ -278,6 +278,10 @@
   .font-art-slideqiuhong {
     font-family: "Slideqiuhong", var(--font-noto-sc), cursive;
   }
+  /* 有爱圆体（中） + Baloo 2（英）组合：西文走 Baloo，中文走有爱圆体 */
+  .font-art-nowar {
+    font-family: var(--font-baloo), var(--font-nowar), var(--font-noto-sc), sans-serif;
+  }
   /* LED 风格数字时钟字体 */
   .font-clock {
     font-family: var(--font-tech-mono), "Courier New", monospace;

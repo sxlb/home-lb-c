@@ -167,7 +167,7 @@ describe("profileSchema", () => {
   });
 
   describe("艺术字体 logoFont", () => {
-    it("18 种双语字体值全部合法", () => {
+    it("19 种双语字体值全部合法", () => {
       const fonts = [
         "ma-shan-zheng",
         "zcool-kuail",
@@ -187,6 +187,7 @@ describe("profileSchema", () => {
         "xiaolai",
         "slidefu",
         "slideqiuhong",
+        "nowar-rounded",
       ];
       for (const f of fonts) {
         const result = profileSchema.safeParse({ logoFont: f });

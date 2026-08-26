@@ -161,7 +161,7 @@ const DATE_FORMAT_PRESETS = [
   { value: "YYYY/M/D dddd", label: "2026/8/22 周六" },
 ];
 
-// 昵称艺术字体候选（共 18 种，全部中英双语；与 layout.tsx 引入的字体一一对应）
+// 昵称艺术字体候选（共 19 种，全部中英双语；与 layout.tsx 引入的字体一一对应）
 const LOGO_FONTS = [
   { value: "ma-shan-zheng", label: "马善政毛笔楷书（中英）" },
   { value: "zcool-kuail", label: "站酷快乐体（中英）" },
@@ -181,6 +181,7 @@ const LOGO_FONTS = [
   { value: "xiaolai", label: "小赖手写体（中英）" },
   { value: "slidefu", label: "演示春风楷（中英）" },
   { value: "slideqiuhong", label: "演示秋鸿（中英）" },
+  { value: "nowar-rounded", label: "有爱圆体（中英）" },
 ];
 
 // 原生 select 的统一样式
