@@ -3,6 +3,7 @@
 FROM node:22-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json* ./
+COPY prisma/schema.prisma ./prisma/schema.prisma
 # 优先 npm ci（可复现构建）；lock 缺失时回退 npm install
 RUN npm ci || npm install
 
@@ -17,7 +18,10 @@ RUN npx prisma generate
 # 再复制其余源码（不会破坏上方的 generate 缓存层）
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN npm run build
+# 字体构建容错：优先正常构建（保留 next/font/google 真实自托管字体）；
+# 若 fonts.gstatic.com 在国内被墙导致下载失败，则用 NEXT_FONT_GOOGLE_MOCKED_RESPONSES=1
+# 兜底重跑一次（离线 mock 字体），保证镜像构建永不因 Google Fonts 阻断。
+RUN npm run build || { export NEXT_FONT_GOOGLE_MOCKED_RESPONSES=1 && npm run build; }
 
 # ===== 阶段 3: 运行时 =====
 FROM node:22-alpine AS runner
@@ -28,6 +32,10 @@ ENV NEXT_TELEMETRY_DISABLED=1
 
 # 创建非 root 用户（home:app）
 RUN addgroup -g 1001 -S app && adduser -S home -u 1001 -G app
+
+# 安装 openssl：让 Prisma Client/CLI 在运行时能正确探测 OpenSSL 版本，
+# 消除 "Prisma failed to detect the libssl/openssl version" 启动告警（Alpine 最小镜像默认缺失）
+RUN apk add --no-cache openssl
 
 # 复制 standalone 产物与静态资源（public 目录归属 home:app）
 COPY --from=builder --chown=home:app /app/public ./public
@@ -42,6 +50,7 @@ COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
 
 # 显式复制 bcryptjs：seed.js 在 Next standalone 之外运行，需确保依赖可用
 COPY --from=builder /app/node_modules/bcryptjs ./node_modules/bcryptjs
+COPY --from=builder /app/node_modules/.bin ./node_modules/.bin
 
 # 创建数据目录并设置权限（SQLite 数据库文件将存放于此）
 RUN mkdir -p /app/data && chown home:app /app/data
