@@ -8,18 +8,18 @@ import ArtFontsLoader from "@/components/ArtFontsLoader";
 // 全站字体：中文思源黑体 + 西文 Inter 兜底
 const notoSc = localFont({ src: [{ path: "../public/fonts/google-local/font-noto-sc.woff2", weight: "400", style: "normal" }], variable: "--font-noto-sc", display: "swap" });
 const inter = localFont({ src: [{ path: "../public/fonts/google-local/font-inter.woff2", weight: "400", style: "normal" }], variable: "--font-inter", display: "swap" });
-const techMono = localFont({ src: [{ path: "../public/fonts/google-local/font-tech-mono.woff2", weight: "400", style: "normal" }], variable: "--font-tech-mono", display: "swap" });
+const techMono = localFont({ src: [{ path: "../public/fonts/google-local/font-tech-mono.woff2", weight: "400", style: "normal" }], variable: "--font-tech-mono", display: "swap", preload: false });
 
 // ===== 昵称艺术字体（后台 logoFont 下拉选择，共 19 种，全部中英双语） =====
 // 一、Google 中文字体（含英文）8 种
-const maShanZheng = localFont({ src: [{ path: "../public/fonts/google-local/font-ma-shan.woff2", weight: "400", style: "normal" }], variable: "--font-ma-shan", display: "swap" });
-const zcoolKuaiLe = localFont({ src: [{ path: "../public/fonts/google-local/font-zcool.woff2", weight: "400", style: "normal" }], variable: "--font-zcool", display: "swap" });
-const longCang = localFont({ src: [{ path: "../public/fonts/google-local/font-long-cang.woff2", weight: "400", style: "normal" }], variable: "--font-long-cang", display: "swap" });
-const zcoolXiaoWei = localFont({ src: [{ path: "../public/fonts/google-local/font-zcool-xw.woff2", weight: "400", style: "normal" }], variable: "--font-zcool-xw", display: "swap" });
-const zcoolQingKe = localFont({ src: [{ path: "../public/fonts/google-local/font-zcool-qk.woff2", weight: "400", style: "normal" }], variable: "--font-zcool-qk", display: "swap" });
-const liuJianMaoCao = localFont({ src: [{ path: "../public/fonts/google-local/font-liu-jian.woff2", weight: "400", style: "normal" }], variable: "--font-liu-jian", display: "swap" });
-const zhiMangXing = localFont({ src: [{ path: "../public/fonts/google-local/font-zhi-mang.woff2", weight: "400", style: "normal" }], variable: "--font-zhi-mang", display: "swap" });
-const notoSerifSc = localFont({ src: [{ path: "../public/fonts/google-local/font-noto-serif-sc.woff2", weight: "400", style: "normal" }], variable: "--font-noto-serif-sc", display: "swap" });
+const maShanZheng = localFont({ src: [{ path: "../public/fonts/google-local/font-ma-shan.woff2", weight: "400", style: "normal" }], variable: "--font-ma-shan", display: "swap", preload: false });
+const zcoolKuaiLe = localFont({ src: [{ path: "../public/fonts/google-local/font-zcool.woff2", weight: "400", style: "normal" }], variable: "--font-zcool", display: "swap", preload: false });
+const longCang = localFont({ src: [{ path: "../public/fonts/google-local/font-long-cang.woff2", weight: "400", style: "normal" }], variable: "--font-long-cang", display: "swap", preload: false });
+const zcoolXiaoWei = localFont({ src: [{ path: "../public/fonts/google-local/font-zcool-xw.woff2", weight: "400", style: "normal" }], variable: "--font-zcool-xw", display: "swap", preload: false });
+const zcoolQingKe = localFont({ src: [{ path: "../public/fonts/google-local/font-zcool-qk.woff2", weight: "400", style: "normal" }], variable: "--font-zcool-qk", display: "swap", preload: false });
+const liuJianMaoCao = localFont({ src: [{ path: "../public/fonts/google-local/font-liu-jian.woff2", weight: "400", style: "normal" }], variable: "--font-liu-jian", display: "swap", preload: false });
+const zhiMangXing = localFont({ src: [{ path: "../public/fonts/google-local/font-zhi-mang.woff2", weight: "400", style: "normal" }], variable: "--font-zhi-mang", display: "swap", preload: false });
+const notoSerifSc = localFont({ src: [{ path: "../public/fonts/google-local/font-noto-serif-sc.woff2", weight: "400", style: "normal" }], variable: "--font-noto-serif-sc", display: "swap", preload: false });
 
 // ===== 可爱 + 字数多 + 中英：有爱圆体(中文) + Baloo 2(西文) =====
 const nowarRounded = localFont({
@@ -29,8 +29,9 @@ const nowarRounded = localFont({
   ],
   variable: "--font-nowar",
   display: "swap",
+  preload: false,
 });
-const baloo2 = localFont({ src: [{ path: "../public/fonts/nowar-rounded/Baloo2-Variable.woff2", weight: "400", style: "normal" }], variable: "--font-baloo", display: "swap" });
+const baloo2 = localFont({ src: [{ path: "../public/fonts/nowar-rounded/Baloo2-Variable.woff2", weight: "400", style: "normal" }], variable: "--font-baloo", display: "swap", preload: false });
 
 export const metadata: Metadata = {
   title: "个人主页",
