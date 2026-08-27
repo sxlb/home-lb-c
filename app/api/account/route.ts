@@ -73,9 +73,13 @@ export async function PUT(request: NextRequest) {
     }
 
     // 执行更新（仅写入实际变更的字段）
-    const updateData: { username?: string; password?: string } = {};
+    const updateData: { username?: string; password?: string; mustChangePassword?: boolean } = {};
     if (username && username !== user.username) updateData.username = username;
-    if (newPassword) updateData.password = await bcrypt.hash(newPassword, 10);
+    if (newPassword) {
+      updateData.password = await bcrypt.hash(newPassword, 10);
+      // 已修改密码：清除"强制改密"标记，使后台改密提示消失
+      updateData.mustChangePassword = false;
+    }
 
     if (Object.keys(updateData).length === 0) {
       return NextResponse.json({ success: true, message: "无变更" });

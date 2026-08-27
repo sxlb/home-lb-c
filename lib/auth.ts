@@ -3,6 +3,27 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/db";
 
+// ---- 类型增强：把"是否需要强制改密"标记透传到 session / JWT ----
+declare module "next-auth" {
+  interface User {
+    mustChangePassword?: boolean;
+  }
+  interface Session {
+    user: {
+      id?: string;
+      name?: string | null;
+      email?: string | null;
+      image?: string | null;
+      mustChangePassword?: boolean;
+    };
+  }
+}
+declare module "next-auth/jwt" {
+  interface JWT {
+    mustChangePassword?: boolean;
+  }
+}
+
 // 运行时安全校验：确保环境变量已配置
 let envChecked = false;
 function validateAuthEnv() {
@@ -186,10 +207,39 @@ export const authOptions: NextAuthOptions = {
         }
 
         clearAttempts(rateKey);
-        return { id: String(user.id), name: user.username };
+        return {
+          id: String(user.id),
+          name: user.username,
+          mustChangePassword: user.mustChangePassword,
+        };
       },
     }),
   ],
+  callbacks: {
+    async jwt({ token, user, trigger }) {
+      // 首次登录：把"是否需要强制改密"标记写入 token
+      if (user) {
+        token.mustChangePassword = (user as { mustChangePassword?: boolean }).mustChangePassword ?? false;
+      }
+      // 改密成功触发 session.update() 时，从数据库读取最新标记，
+      // 保证"改密后提示条消失"无需重新登录也能立即生效。
+      if (trigger === "update" && token.name) {
+        try {
+          const fresh = await prisma.user.findUnique({ where: { username: token.name } });
+          token.mustChangePassword = fresh?.mustChangePassword ?? token.mustChangePassword ?? false;
+        } catch {
+          // DB 读取异常时保留原标记，不影响登录流程
+        }
+      }
+      return token;
+    },
+    async session({ session, token }) {
+      if (session.user) {
+        session.user.mustChangePassword = token.mustChangePassword ?? false;
+      }
+      return session;
+    },
+  },
   secret: process.env.NEXTAUTH_SECRET,
 };
 

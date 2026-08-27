@@ -310,11 +310,11 @@ export default function AdminPage() {
         {/* ===== 内容区 ===== */}
         <div className="min-w-0 flex-1">
           <div className="mx-auto max-w-4xl px-4 py-6 pb-16 md:px-8 md:py-8">
-            {/* 默认账号风险提示：登录账号仍为 admin 时提醒尽快改密 */}
-            {username === "admin" && !hideDefaultWarning && (
+            {/* 强制改密提示：mustChangePassword 为 true 时显示；改密成功后（后端置 false）自动消失 */}
+            {session?.user?.mustChangePassword && !hideDefaultWarning && (
               <div className="mb-6 flex items-start justify-between gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3.5 text-sm text-amber-700 shadow-sm backdrop-blur dark:text-amber-300">
                 <p className="leading-relaxed">
-                  当前登录账号为默认账号 <strong className="font-semibold">admin</strong>，密码存在被暴力破解的风险，请尽快前往「账号设置」修改密码。
+                  当前登录账号 <strong className="font-semibold">{username}</strong> 仍在使用默认密码，存在被暴力破解的风险，请尽快前往「账号设置」修改密码。
                 </p>
                 <button
                   type="button"
