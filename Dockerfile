@@ -52,6 +52,11 @@ COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
 COPY --from=builder /app/node_modules/bcryptjs ./node_modules/bcryptjs
 COPY --from=builder /app/node_modules/.bin ./node_modules/.bin
 
+# 修正 Prisma 引擎目录属主：容器以非 root 的 home 用户启动时，
+# migrate deploy / seed 阶段可能写入 engines 目录（缓存引擎二进制），
+# 属主为 root 时会报 "Can't write to /app/node_modules/@prisma/engines" 错误。
+RUN if [ -d /app/node_modules/@prisma ]; then chown -R home:app /app/node_modules/@prisma /app/node_modules/prisma /app/node_modules/.prisma; fi
+
 # 创建数据目录并设置权限（SQLite 数据库文件将存放于此）
 RUN mkdir -p /app/data && chown home:app /app/data
 
