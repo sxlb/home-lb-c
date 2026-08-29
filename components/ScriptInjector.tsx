@@ -28,8 +28,8 @@ function copySafeAttributes(source: Element, target: Element): void {
 
 /**
  * 后台配置的脚本/标签注入器：
- * - analyticsScript：统计代码（百度统计 / Umami / 51LA 等）
- * - headScript：自定义 head 内容（站长验证 meta、第三方 script 等）
+ * - scripts：立即注入（站长验证 meta、自定义 head 脚本等）
+ * - deferScripts：延迟注入（统计代码等非关键资源，浏览器空闲时再加载，不阻塞首屏交互）
  *
  * 支持三类输入：
  * 1. 带 <script> 标签的完整片段（统计服务复制来的代码通常自带标签）
@@ -37,18 +37,54 @@ function copySafeAttributes(source: Element, target: Element): void {
  * 3. 裸 JS 代码（无任何标签时视为脚本正文）
  * 页面挂载后注入 <head>，卸载时移除。
  */
-export default function ScriptInjector({ scripts }: { scripts: string[] }) {
+export default function ScriptInjector({
+  scripts,
+  deferScripts = [],
+}: {
+  scripts: string[];
+  /** 延迟到浏览器空闲时段注入的代码片段（如统计脚本） */
+  deferScripts?: string[];
+}) {
   useEffect(() => {
     const nodes: Element[] = [];
+    const deferred: Element[] = [];
+    let cancelled = false;
 
+    // 立即注入：headScript 等关键片段
     for (const code of scripts) {
-      const injected = injectSnippet(code);
-      nodes.push(...injected);
+      nodes.push(...injectSnippet(code));
     }
-
-    // 挂载到 <head>（此前只收集未挂载，统计/自定义脚本从未真正注入页面）
     for (const node of nodes) {
       document.head.appendChild(node);
+    }
+
+    // 延迟注入：统计代码等非关键资源（requestIdleCallback，回退 2s 定时器）
+    if (deferScripts.length > 0) {
+      const flush = () => {
+        if (cancelled) return;
+        for (const code of deferScripts) {
+          deferred.push(...injectSnippet(code));
+        }
+        for (const node of deferred) {
+          document.head.appendChild(node);
+        }
+      };
+      let cancel: () => void;
+      if (typeof window.requestIdleCallback === "function") {
+        const id = window.requestIdleCallback(flush, { timeout: 2000 });
+        cancel = () => window.cancelIdleCallback(id);
+      } else {
+        const id = window.setTimeout(flush, 2000);
+        cancel = () => window.clearTimeout(id);
+      }
+
+      return () => {
+        cancelled = true;
+        cancel();
+        for (const node of [...nodes, ...deferred]) {
+          node.parentNode?.removeChild(node);
+        }
+      };
     }
 
     return () => {
@@ -56,7 +92,7 @@ export default function ScriptInjector({ scripts }: { scripts: string[] }) {
         node.parentNode?.removeChild(node);
       }
     };
-  }, [scripts]);
+  }, [scripts, deferScripts]);
 
   return null;
 }

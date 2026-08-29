@@ -69,7 +69,7 @@ export default async function Home() {
         <main className="relative flex min-h-dvh w-full flex-col text-white md:h-dvh">
         <AuthorCheck />
         <FaviconUpdater icon={d.siteIcon} />
-        <ScriptInjector scripts={[d.analyticsScript, d.headScript]} />
+        <ScriptInjector scripts={[d.headScript]} deferScripts={[d.analyticsScript]} />
 
         {/* 全屏加载动画：首屏必需，保持预加载（ssr:true） */}
         <LoadingScreen enabled={d.loadingScreen} siteName={d.nickname} />
