@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { toast } from "sonner";
 import { LoadingPlaceholder } from "./LinksPanel";
 import { useProfileForm } from "./useProfileForm";
+import UploadButton from "./UploadButton";
 import {
   COVER_TYPES,
   SWITCH_INTERVALS,
@@ -182,12 +183,15 @@ export default function ThemePanel() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="bgApi">自定义壁纸地址</Label>
-                  <Input
-                    id="bgApi"
-                    value={profile.bgApi}
-                    onChange={(e) => set("bgApi", e.target.value)}
-                    placeholder="https://example.com/wallpaper.jpg"
-                  />
+                  <div className="flex items-center gap-2">
+                    <Input
+                      id="bgApi"
+                      value={profile.bgApi}
+                      onChange={(e) => set("bgApi", e.target.value)}
+                      placeholder="https://example.com/wallpaper.jpg"
+                    />
+                    <UploadButton onUploaded={(url) => set("bgApi", url)} label="上传" />
+                  </div>
                   <p className="text-xs text-muted-foreground">填写后优先于壁纸种类使用（图片直链）</p>
                 </div>
               </div>

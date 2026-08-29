@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { DEFAULT_WELCOME_MESSAGES } from "@/lib/validation";
 import { LoadingPlaceholder } from "./LinksPanel";
 import { loadProfile, setCachedProfile, hasCachedProfile } from "./profileShared";
+import UploadButton from "./UploadButton";
 
 interface Profile {
   avatar: string;
@@ -290,12 +291,15 @@ export default function ProfilePanel() {
                 <div className="grid gap-3 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label htmlFor="avatar">头像 URL</Label>
-                    <Input
-                      id="avatar"
-                      value={profile.avatar}
-                      onChange={(e) => set("avatar", e.target.value)}
-                      placeholder="https://example.com/avatar.png"
-                    />
+                    <div className="flex items-center gap-2">
+                      <Input
+                        id="avatar"
+                        value={profile.avatar}
+                        onChange={(e) => set("avatar", e.target.value)}
+                        placeholder="https://example.com/avatar.png"
+                      />
+                      <UploadButton onUploaded={(url) => set("avatar", url)} label="上传" />
+                    </div>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="siteIcon">网站图标 URL</Label>
@@ -317,6 +321,7 @@ export default function ProfilePanel() {
                           }}
                         />
                       )}
+                      <UploadButton onUploaded={(url) => set("siteIcon", url)} label="上传" />
                     </div>
                     <p className="text-xs text-muted-foreground">
                       浏览器标签页 / 收藏夹图标（支持 png / svg / ico）
