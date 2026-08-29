@@ -98,6 +98,7 @@ export async function PUT(request: NextRequest) {
       bgOverlay,
       avatarShape,
       avatarBorderColor,
+      siteFooterHtml,
     } = parsed.data;
 
     // 单例模型：使用 upsert 防止并发创建多条记录
@@ -171,6 +172,7 @@ export async function PUT(request: NextRequest) {
       bgOverlay,
       avatarShape,
       avatarBorderColor,
+      siteFooterHtml,
     };
     const profile = existing
       ? await prisma.profile.update({ where: { id: existing.id }, data })

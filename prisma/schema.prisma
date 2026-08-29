@@ -69,6 +69,7 @@ model Profile {
   bgOverlay              Int      @default(0) // 背景遮罩暗化强度 0-80（%）
   avatarShape            String   @default("circle") // 头像形状：circle / rounded / square
   avatarBorderColor      String   @default("") // 头像边框颜色（空则用默认白色半透明）
+  siteFooterHtml         String   @default("") // 页脚自定义 HTML（管理员可信内容，显示在版权行上方）
   createdAt              DateTime @default(now())
   updatedAt            DateTime @updatedAt
 }

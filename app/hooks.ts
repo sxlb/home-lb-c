@@ -160,6 +160,8 @@ export async function getHomeData(profile: Profile | null): Promise<{
   avatarStyle: React.CSSProperties | undefined;
   /** 自定义头像边框色（空串时前端使用默认白色半透明描边） */
   avatarBorderColor: string;
+  /** 页脚自定义 HTML（管理员可信内容） */
+  siteFooterHtml: string;
 
   // ===== 关联数据 =====
   siteLinks: SiteLinkRow[];
@@ -253,6 +255,7 @@ export async function getHomeData(profile: Profile | null): Promise<{
     avatarShapeClass,
     avatarStyle,
     avatarBorderColor: profile?.avatarBorderColor || "",
+    siteFooterHtml: profile?.siteFooterHtml || "",
 
     // 关联
     siteLinks,

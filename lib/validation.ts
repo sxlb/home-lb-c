@@ -389,6 +389,12 @@ export const profileSchema = z.object({
     .refine((v) => v === "" || /^#[0-9a-fA-F]{3,8}$/.test(v), "边框颜色须为 #RRGGBB 格式")
     .optional()
     .default(""),
+  // 页脚自定义 HTML（管理员录入，视为可信内容，与 analyticsScript 同信任级）
+  siteFooterHtml: z
+    .string()
+    .max(20000, "页脚 HTML 过长")
+    .optional()
+    .default(""),
 });
 
 export type ProfileInput = z.infer<typeof profileSchema>;
