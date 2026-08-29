@@ -5,8 +5,10 @@ import { useEffect, useRef, useState } from "react";
 interface Props {
   /** 昵称文本（用于预热对应字形的 unicode-range 分片） */
   text: string;
-  /** 当前艺术字体 CSS 工具类（如 font-art-zcool，与 globals.css 定义对应） */
+  /** 当前艺术字体 CSS 工具类（如 font-art-nowar，与 globals.css 定义对应） */
   fontClass: string;
+  /** 自定义字体 font-family（可选；提供时优先于 fontClass 生效） */
+  fontFamily?: string;
 }
 
 /** 预热超时：字体加载超过该时长后强制显示，避免弱网下昵称长时间半透明 */
@@ -25,7 +27,7 @@ const PRELOAD_TIMEOUT = 4000;
  *    "字形突变"；已缓存字体的二次访问几乎无感知。
  * 3. 超时兜底（4s）：弱网下也保证昵称完整显示。
  */
-export default function LogoFontLoader({ text, fontClass }: Props) {
+export default function LogoFontLoader({ text, fontClass, fontFamily }: Props) {
   const [ready, setReady] = useState(false);
   const probeRef = useRef<HTMLSpanElement>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -77,12 +79,17 @@ export default function LogoFontLoader({ text, fontClass }: Props) {
         ref={probeRef}
         aria-hidden
         className={`${fontClass} absolute h-px w-px overflow-hidden`}
-        style={{ visibility: "hidden" }}
+        style={{ visibility: "hidden", ...(fontFamily ? { fontFamily } : {}) }}
       >
         {text}
       </span>
       {/* 昵称本体：未就绪时低透明度，就绪后淡入 */}
-      <span className={`logo-font-fade ${ready ? "logo-font-ready" : ""}`}>{text}</span>
+      <span
+        className={`logo-font-fade ${ready ? "logo-font-ready" : ""}`}
+        style={fontFamily ? { fontFamily } : undefined}
+      >
+        {text}
+      </span>
     </>
   );
 }

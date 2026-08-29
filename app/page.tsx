@@ -9,6 +9,7 @@ import LinkTabs from "@/components/LinkTabs";
 import ThemeProvider from "@/components/ThemeProvider";
 import AuthorCheck from "@/components/AuthorCheck";
 import LogoFontLoader from "@/components/LogoFontLoader";
+import CustomFont from "@/components/CustomFont";
 import FaviconUpdater from "@/components/FaviconUpdater";
 import ScriptInjector from "@/components/ScriptInjector";
 import { IconfontScript } from "@/components/Iconfont";
@@ -89,6 +90,8 @@ export default async function Home() {
 
         <Background bgApi={d.bgApi} coverType={d.coverType} autoSwitchInterval={d.autoBGSwitchInterval} bgOverlay={d.bgOverlay} wallpaperRefresh={d.wallpaperRefresh} initialUrl={d.wallpaperUrl} />
         <SeasonalEffect type={d.effectType} enabled />
+        {/* 自定义字体（范围=全站时注入 body 字体） */}
+        <CustomFont enabled={d.customFontEnabled} family={d.customFontFamily} scope={d.customFontScope} />
 
         <section className="relative z-10 flex w-full flex-1 flex-col items-center">
           <div className="mx-auto flex w-full max-w-5xl flex-col items-center gap-5 px-5 pt-16 pb-20 md:my-auto md:items-start md:px-4 md:pt-0 md:pb-0">
@@ -109,8 +112,11 @@ export default async function Home() {
                     </AvatarFallback>
                   </Avatar>
                   <h1 className={`${d.logoFontClass} text-glow-accent leading-none tracking-tight truncate logo-title`}>
-                    <span className="text-[28px] leading-none sm:text-3xl md:text-4xl lg:text-5xl xl:text-6xl">
-                      <LogoFontLoader text={d.nickname} fontClass={d.logoFontClass} />
+                    <span
+                      className="text-[28px] leading-none sm:text-3xl md:text-4xl lg:text-5xl xl:text-6xl"
+                      style={d.logoFontFamily ? { fontFamily: d.logoFontFamily } : undefined}
+                    >
+                      <LogoFontLoader text={d.nickname} fontClass={d.logoFontClass} fontFamily={d.logoFontFamily} />
                     </span>
                   </h1>
                 </div>
