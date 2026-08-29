@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 // ===== 天气数据加载 Hook =====
 interface WeatherData {
@@ -94,19 +94,29 @@ export default function ClockWeatherCapsule({
   /** 日期格式（YYYY/YY/MM/M/DD/D/dddd） */
   dateFormat?: string;
 }) {
-  // now 初始为 null：SSR 首帧渲染占位符，客户端挂载后才显示真实时间，
-  // 避免 SSR 与客户端时间不同造成 hydration 文本不匹配
-  const [now, setNow] = useState<Date | null>(null);
+  // 时钟/日期 ref 直写：1s 间隔仅更新 DOM 文本，不触发 React re-render，
+  // 天气卡片（独立 state）不受每秒 tick 影响（避免整卡每秒重渲染）
+  const timeRef = useRef<HTMLSpanElement>(null);
+  const dateRef = useRef<HTMLDivElement>(null);
+
   const { data, error: weatherError } = useWeather();
   const { city, weather, temperature, winddirection, windpower } = data;
 
-  // 每秒更新时间
+  // 每秒更新时钟与日期（ref 直写 DOM，无 state 变更）
   useEffect(() => {
-    const refresh = () => setNow(new Date());
-    refresh();
-    const timer = setInterval(refresh, 1000);
+    const update = () => {
+      const now = new Date();
+      if (dateRef.current) {
+        dateRef.current.textContent = formatDate(now, dateFormat || "YYYY年M月D日 dddd");
+      }
+      if (timeRef.current) {
+        timeRef.current.textContent = formatTime(now, timeFormat || "24", showSeconds ?? true);
+      }
+    };
+    update();
+    const timer = setInterval(update, 1000);
     return () => clearInterval(timer);
-  }, []);
+  }, [timeFormat, showSeconds, dateFormat]);
 
   const dir = (winddirection || "").endsWith("风")
     ? winddirection!
@@ -120,23 +130,24 @@ export default function ClockWeatherCapsule({
          {/* 时钟+天气合并为一个紧凑组 */}
          <div className="flex flex-col items-center gap-1.5">
            {/* 日期行 — 移动端 11px，桌面端（md+）13px 提升可读性 */}
-           <div className="text-center text-[11px] tracking-[0.2em] text-white/50 md:text-[13px]">
-             {now ? formatDate(now, dateFormat || "YYYY年M月D日 dddd") : "--"}
+           <div ref={dateRef} className="text-center text-[11px] tracking-[0.2em] text-white/50 md:text-[13px]">
+             --
            </div>
 
            {/* 时间（容器查询自适应，字号随卡片宽度缩放；按时间制区分：
                 24 小时制文本短，用较大字号；12 小时制含 AM/PM 更长，用较小字号避免溢出） */}
            <div className="flex items-center justify-center">
              <span
+               ref={timeRef}
                className={`font-clock leading-none tracking-wider text-white/85 ${
                  timeFormat === "12"
                    ? "text-[clamp(24px,11cqw,36px)]"
                    : "text-[clamp(28px,17cqw,48px)]"
                }`}
-             >
-               {now ? formatTime(now, timeFormat || "24", showSeconds ?? true) : "--:--"}
-             </span>
-           </div>
+            >
+              --:--
+            </span>
+          </div>
 
            {/* 天气信息 */}
            <div className="flex flex-col items-center gap-1.5 text-center">
