@@ -5,10 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Plus, Trash2, Loader2, GripVertical } from "lucide-react";
+import { Plus, Trash2, Loader2, GripVertical, Globe } from "lucide-react";
 import { useLinkList } from "./useLinkList";
 import IconfontPicker from "./IconfontPicker";
 import LucideIconPicker from "./LucideIconPicker";
+import { resolveLucideIcon, isLucideIcon } from "@/components/lucideIconResolver";
 
 /** 后台面板通用加载占位（社交/网站链接面板、站点信息、天气等共用） */
 export function LoadingPlaceholder() {
@@ -222,6 +223,25 @@ export default function LinksPanel({
       </CardContent>
     </Card>
   );
+}
+
+/**
+ * 链接图标预览：lucide:xxx 走 lucide 组件；icon- 前缀走 iconfont symbol；
+ * 其余未知值兜底 Globe。供列表收起态与表单内实时预览使用。
+ */
+export function LinkIconPreview({ icon }: { icon: string }) {
+  if (isLucideIcon(icon)) {
+    const Icon = resolveLucideIcon(icon);
+    if (Icon) return <Icon className="h-5 w-5" />;
+  }
+  if (icon.startsWith("icon-")) {
+    return (
+      <svg className="h-5 w-5" aria-hidden>
+        <use href={`#${icon}`} />
+      </svg>
+    );
+  }
+  return <Globe className="h-5 w-5" />;
 }
 
 /**
