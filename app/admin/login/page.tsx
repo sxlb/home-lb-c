@@ -17,6 +17,9 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   // 表单内错误提示（区别于右上角 toast）：登录失败/限流时显示在表单顶部，更醒目
   const [formError, setFormError] = useState("");
+  // 两步验证：该账号是否开启 2FA（探测后显示验证码输入框）
+  const [requires2fa, setRequires2fa] = useState(false);
+  const [totpCode, setTotpCode] = useState("");
 
   // 已登录用户访问登录页由 middleware 服务端重定向到 /admin，
   // 此处不再做客户端自动跳转，避免与中间件判断不一致造成重定向循环。
@@ -25,6 +28,29 @@ export default function LoginPage() {
   useEffect(() => {
     document.title = "登录 · 个人主页";
   }, []);
+
+  // 用户名变化时探测是否开启 2FA（IP 限流防枚举，探测失败视为未开启）
+  useEffect(() => {
+    const name = username.trim();
+    if (!name) {
+      setRequires2fa(false);
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/auth/2fa-status?username=${encodeURIComponent(name)}`);
+        const data = await res.json();
+        if (!cancelled) setRequires2fa(!!data.requires2fa);
+      } catch {
+        /* 探测失败视为未开启 */
+      }
+    }, 300);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [username]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -42,9 +68,17 @@ export default function LoginPage() {
         }
       }
 
+      // 两步验证：需填写 6 位验证码才能提交
+      if (requires2fa && !/^\d{6}$/.test(totpCode)) {
+        setFormError("请输入 6 位两步验证码");
+        setLoading(false);
+        return;
+      }
+
       const res = await signIn("credentials", {
         username,
         password,
+        ...(requires2fa ? { totpCode } : {}),
         redirect: false,
       });
 
@@ -152,6 +186,25 @@ export default function LoginPage() {
                 </button>
               </div>
             </div>
+
+            {requires2fa && (
+              <div className="space-y-2">
+                <Label htmlFor="totpCode" className="text-white/80">两步验证码</Label>
+                <Input
+                  id="totpCode"
+                  name="totpCode"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={6}
+                  value={totpCode}
+                  onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, ""))}
+                  placeholder="6 位验证码（Authenticator）"
+                  className="input-glass text-center tracking-[0.3em]"
+                  required={requires2fa}
+                />
+              </div>
+            )}
 
             <Button
               type="submit"
