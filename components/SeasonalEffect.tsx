@@ -21,14 +21,20 @@ function FireflyCanvas({ canvasRef }: { canvasRef: React.RefObject<HTMLCanvasEle
     let animationFrameId: number;
     let particles: { x: number; y: number; opacity: number; speedX: number; speedY: number; radius: number }[] = [];
 
+    // DPR 上限 2：避免 Retina 屏 canvas 物理分辨率过高导致 fill 开销翻倍
     const resizeCanvas = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = Math.floor(window.innerWidth * dpr);
+      canvas.height = Math.floor(window.innerHeight * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     };
 
     const createParticles = () => {
       particles = [];
-      const count = window.innerWidth < 768 ? 24 : 48;
+      // 粒子数按视口面积缩放，并限制移动端上限（面积 ≈ 宽×高）
+      const area = window.innerWidth * window.innerHeight;
+      const max = window.innerWidth < 768 ? 24 : 48;
+      const count = Math.max(12, Math.min(max, Math.round(area / 40000)));
       for (let i = 0; i < count; i++) {
         particles.push({
           x: Math.random() * canvas.width,
@@ -77,11 +83,21 @@ function FireflyCanvas({ canvasRef }: { canvasRef: React.RefObject<HTMLCanvasEle
     animate();
 
     window.addEventListener("resize", debouncedResize);
+    // 页面隐藏时暂停动画，可见时恢复（省电/降低后台开销）
+    const onVisibility = () => {
+      if (document.hidden) {
+        cancelAnimationFrame(animationFrameId);
+      } else {
+        animationFrameId = requestAnimationFrame(animate);
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
 
     return () => {
       cancelAnimationFrame(animationFrameId);
       if (resizeTimer) cancelAnimationFrame(resizeTimer);
       window.removeEventListener("resize", debouncedResize);
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [canvasRef]);
 
@@ -102,14 +118,20 @@ function SnowCanvas({ canvasRef }: { canvasRef: React.RefObject<HTMLCanvasElemen
     let animationFrameId: number;
     let snowflakes: { x: number; y: number; opacity: number; speedX: number; speedY: number; radius: number; angle: number }[] = [];
 
+    // DPR 上限 2：避免 Retina 屏 canvas 物理分辨率过高导致 fill 开销翻倍
     const resizeCanvas = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = Math.floor(window.innerWidth * dpr);
+      canvas.height = Math.floor(window.innerHeight * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     };
 
     const createSnowflakes = () => {
       snowflakes = [];
-      const count = window.innerWidth < 768 ? 28 : 60;
+      // 粒子数按视口面积缩放，并限制移动端上限
+      const area = window.innerWidth * window.innerHeight;
+      const max = window.innerWidth < 768 ? 28 : 60;
+      const count = Math.max(14, Math.min(max, Math.round(area / 34000)));
       for (let i = 0; i < count; i++) {
         snowflakes.push({
           x: Math.random() * canvas.width,
@@ -172,11 +194,21 @@ function SnowCanvas({ canvasRef }: { canvasRef: React.RefObject<HTMLCanvasElemen
     animate();
 
     window.addEventListener("resize", debouncedResize);
+    // 页面隐藏时暂停动画，可见时恢复（省电/降低后台开销）
+    const onVisibility = () => {
+      if (document.hidden) {
+        cancelAnimationFrame(animationFrameId);
+      } else {
+        animationFrameId = requestAnimationFrame(animate);
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
 
     return () => {
       cancelAnimationFrame(animationFrameId);
       if (resizeTimer) cancelAnimationFrame(resizeTimer);
       window.removeEventListener("resize", debouncedResize);
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [canvasRef]);
 
