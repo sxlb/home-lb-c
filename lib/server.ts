@@ -71,7 +71,7 @@ export function formatZodError(zodError: z.ZodError): string {
 /* ==================== 操作日志 ==================== */
 
 /** 操作日志模块类型 */
-export type LogModule = "profile" | "social-links" | "site-links" | "friend-links" | "account" | "weather-setting";
+export type LogModule = "profile" | "social-links" | "site-links" | "friend-links" | "account" | "weather-setting" | "backup";
 
 export interface LogInput {
   module: LogModule;
