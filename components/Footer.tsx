@@ -10,6 +10,8 @@ interface Props {
   siteMps?: string;
   siteStart?: string;
   showStats?: boolean;
+  /** 页脚自定义 HTML（管理员可信内容，显示在版权行上方） */
+  siteFooterHtml?: string;
 }
 
 interface StatsData {
@@ -118,11 +120,13 @@ export default function Footer({
   siteMps = "",
   siteStart = "",
   showStats = false,
+  siteFooterHtml = "",
 }: Props) {
   const year = new Date().getFullYear();
   const url = siteUrl.trim();
   const icp = siteIcp.trim();
   const mps = siteMps.trim();
+  const footerHtml = siteFooterHtml.trim();
 
   const [days, setDays] = useState(0);
   const [loadTime, setLoadTime] = useState(0);
@@ -185,6 +189,12 @@ export default function Footer({
             {group.node}
           </span>
         ))}
+        {footerHtml && (
+          <div
+            className="text-xs md:text-sm"
+            dangerouslySetInnerHTML={{ __html: footerHtml }}
+          />
+        )}
         {/* Copyright 独立一行，靠右下角（优化透明度与扫光效果） */}
         <div className="mt-1.5 text-right text-[11px] text-white/35 md:text-xs">
           <span className="shine-text">

@@ -175,7 +175,7 @@ export default async function Home() {
         </section>
 
         {/* 页脚：版权信息 */}
-        <FooterLazy siteName={d.nickname} siteUrl={d.siteUrl} siteIcp={d.siteIcp} siteMps={d.siteMps} siteStart={d.siteStart} showStats={d.showStats} />
+        <FooterLazy siteName={d.nickname} siteUrl={d.siteUrl} siteIcp={d.siteIcp} siteMps={d.siteMps} siteStart={d.siteStart} showStats={d.showStats} siteFooterHtml={d.siteFooterHtml} />
         </main>
       </MusicProviderLazy>
     </ThemeProvider>

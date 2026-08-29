@@ -65,6 +65,7 @@ interface Profile {
   bgOverlay: number;
   avatarShape: string;
   avatarBorderColor: string;
+  siteFooterHtml: string;
   // 天气配置（与 /api/weather-setting 共用同一份 Profile 记录，保存时原样回传）
   weatherProvider: string;
   amapKey: string;
@@ -128,6 +129,7 @@ const INITIAL: Profile = {
   bgOverlay: 0,
   avatarShape: "circle",
   avatarBorderColor: "",
+  siteFooterHtml: "",
   // 天气配置（与 profileShared INITIAL_PROFILE 保持一致）
   weatherProvider: "tencent",
   amapKey: "",
@@ -875,6 +877,22 @@ export default function ProfilePanel() {
                   />
                   <p className="text-xs text-muted-foreground">
                     用于计算页脚「已运行 N 天」
+                  </p>
+                </div>
+
+                <div>
+                  <Label htmlFor="siteFooterHtml">页脚自定义 HTML</Label>
+                  <Textarea
+                    id="siteFooterHtml"
+                    name="siteFooterHtml"
+                    value={profile.siteFooterHtml}
+                    onChange={(e) => set("siteFooterHtml", e.target.value)}
+                    placeholder={'如 <a href="https://example.com">友链</a>'}
+                    rows={3}
+                    className="mt-1 font-mono text-xs"
+                  />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    显示在页脚版权行上方，支持 HTML 标签（管理员可信内容）
                   </p>
                 </div>
               </div>
