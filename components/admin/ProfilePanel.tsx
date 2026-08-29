@@ -36,6 +36,9 @@ interface Profile {
   iconfontUrl: string;
   logoArtFont: boolean;
   logoFont: string;
+  customFontEnabled: boolean;
+  customFontFamily: string;
+  customFontScope: string;
   loadingScreen: boolean;
   clickEffect: boolean;
   consoleEgg: boolean;
@@ -96,6 +99,9 @@ const INITIAL: Profile = {
   iconfontUrl: "",
   logoArtFont: true,
   logoFont: "zcool-kuail",
+  customFontEnabled: false,
+  customFontFamily: "",
+  customFontScope: "nickname",
   loadingScreen: true,
   clickEffect: true,
   consoleEgg: true,
@@ -159,29 +165,6 @@ const DATE_FORMAT_PRESETS = [
   { value: "YYYY-MM-DD dddd", label: "2026-08-22 周六" },
   { value: "MM月DD日 dddd", label: "08月22日 周六" },
   { value: "YYYY/M/D dddd", label: "2026/8/22 周六" },
-];
-
-// 昵称艺术字体候选（共 19 种，全部中英双语；与 layout.tsx 引入的字体一一对应）
-const LOGO_FONTS = [
-  { value: "ma-shan-zheng", label: "马善政毛笔楷书（中英）" },
-  { value: "zcool-kuail", label: "站酷快乐体（中英）" },
-  { value: "long-cang", label: "龙藏手写体（中英）" },
-  { value: "zcool-xiaowei", label: "站酷小薇（中英）" },
-  { value: "zcool-qingke", label: "站酷庆科黄油体（中英）" },
-  { value: "liu-jian-mao-cao", label: "柳建毛草（中英）" },
-  { value: "zhi-mang-xing", label: "智莽星行草（中英）" },
-  { value: "noto-serif-sc", label: "思源宋体（中英）" },
-  { value: "smiley-sans", label: "得意黑（中英）" },
-  { value: "maoken-sans", label: "猫啃什锦黑（中英）" },
-  { value: "yozai", label: "悠哉字体（中英）" },
-  { value: "lxgw-wen-kai", label: "霞鹜文楷（中英）" },
-  { value: "alimama-daka", label: "阿里妈妈东方大楷（中英）" },
-  { value: "dingtalk-jinbuti", label: "钉钉进步体（中英）" },
-  { value: "hongleixingshu", label: "鸿雷行书（中英）" },
-  { value: "xiaolai", label: "小赖手写体（中英）" },
-  { value: "slidefu", label: "演示春风楷（中英）" },
-  { value: "slideqiuhong", label: "演示秋鸿（中英）" },
-  { value: "nowar-rounded", label: "有爱圆体（中英）" },
 ];
 
 // 原生 select 的统一样式
@@ -380,24 +363,59 @@ export default function ProfilePanel() {
                   </label>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="logoFont">艺术字体样式</Label>
-                  <select
-                    id="logoFont"
-                    className={selectClass}
-                    value={profile.logoFont}
-                    disabled={!profile.logoArtFont}
-                    onChange={(e) => set("logoFont", e.target.value)}
-                  >
-                    {LOGO_FONTS.map((o) => (
-                      <option key={o.value} value={o.value}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
+                <div className="rounded-lg border border-border/50 bg-muted/20 px-3 py-2.5">
                   <p className="text-xs text-muted-foreground">
-                    18 款艺术字体全部支持中英文字符，可任意选择
+                    内置艺术字体：有爱圆体（中英双语），随镜像打包
                   </p>
+                </div>
+
+                <div className="mt-4 space-y-3">
+                  <label className="flex cursor-pointer items-center justify-between rounded-lg border border-input bg-background/50 px-3 py-2.5 transition-colors hover:bg-muted/30" htmlFor="customFontEnabled">
+                    <span className="flex flex-col">
+                      <span className="text-sm font-medium">自定义字体</span>
+                      <span className="text-xs text-muted-foreground">输入系统/网络字体名，无需重新构建</span>
+                    </span>
+                    <input
+                      id="customFontEnabled"
+                      type="checkbox"
+                      name="customFontEnabled"
+                      checked={profile.customFontEnabled}
+                      onChange={(e) => set("customFontEnabled", e.target.checked)}
+                      className="h-4 w-4 accent-primary"
+                    />
+                  </label>
+
+                  {profile.customFontEnabled && (
+                    <>
+                      <div>
+                        <Label htmlFor="customFontFamily">字体名称（CSS font-family）</Label>
+                        <input
+                          id="customFontFamily"
+                          name="customFontFamily"
+                          className="mt-1 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                          placeholder='如 "PingFang SC"、Microsoft YaHei'
+                          value={profile.customFontFamily}
+                          onChange={(e) => set("customFontFamily", e.target.value)}
+                        />
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          仅支持中英文、数字、空格、引号与连字符；浏览器无此字体时自动回退思源黑体
+                        </p>
+                      </div>
+                      <div>
+                        <Label htmlFor="customFontScope">应用范围</Label>
+                        <select
+                          id="customFontScope"
+                          name="customFontScope"
+                          className={selectClass}
+                          value={profile.customFontScope}
+                          onChange={(e) => set("customFontScope", e.target.value)}
+                        >
+                          <option value="nickname">仅昵称</option>
+                          <option value="all">全站</option>
+                        </select>
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 {/* 特效与功能开关组（2 列紧凑排列） */}
