@@ -21,8 +21,10 @@ const MODULE_LABEL: Record<string, string> = {
   profile: "站点信息",
   "social-links": "社交链接",
   "site-links": "网站链接",
+  "friend-links": "友情链接",
   account: "账号设置",
   "weather-setting": "天气设置",
+  backup: "数据管理",
 };
 
 /** 模块对应的标签颜色（tailwind 类名） */
@@ -30,8 +32,10 @@ const MODULE_COLOR: Record<string, string> = {
   profile: "bg-purple-500/15 text-purple-600 dark:text-purple-400",
   "social-links": "bg-blue-500/15 text-blue-600 dark:text-blue-400",
   "site-links": "bg-cyan-500/15 text-cyan-600 dark:text-cyan-400",
+  "friend-links": "bg-teal-500/15 text-teal-600 dark:text-teal-400",
   account: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
   "weather-setting": "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
+  backup: "bg-rose-500/15 text-rose-600 dark:text-rose-400",
 };
 
 const ACTION_LABEL: Record<string, string> = {
@@ -39,6 +43,7 @@ const ACTION_LABEL: Record<string, string> = {
   update: "修改",
   delete: "删除",
   batch_update: "批量保存",
+  restore: "恢复",
 };
 
 /** 操作类型对应的颜色 */
@@ -47,6 +52,7 @@ const ACTION_COLOR: Record<string, string> = {
   update: "text-blue-600 dark:text-blue-400",
   delete: "text-red-600 dark:text-red-400",
   batch_update: "text-purple-600 dark:text-purple-400",
+  restore: "text-rose-600 dark:text-rose-400",
 };
 
 function formatTime(iso: string): string {
@@ -59,11 +65,17 @@ function formatTime(iso: string): string {
 
 export default function OperationLogPanel() {
   const [logs, setLogs] = useState<OperationLog[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [module, setModule] = useState("");
+  const [keyword, setKeyword] = useState("");
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   // 请求序号：连点刷新时丢弃过期响应，防止旧响应覆盖新数据
   const seqRef = useRef(0);
   const mountedRef = useRef(true);
+
+  const PAGE_SIZE = 20;
 
   useEffect(() => {
     mountedRef.current = true;
@@ -72,14 +84,23 @@ export default function OperationLogPanel() {
     };
   }, []);
 
-  async function load() {
+  async function load(p = page, m = module, k = keyword) {
     const seq = ++seqRef.current;
     setLoading(true);
     try {
-      const res = await fetch("/api/operation-logs?limit=100");
+      const params = new URLSearchParams();
+      if (m) params.set("module", m);
+      if (k.trim()) params.set("keyword", k.trim());
+      params.set("page", String(p));
+      params.set("pageSize", String(PAGE_SIZE));
+      const res = await fetch(`/api/operation-logs?${params.toString()}`);
       if (!mountedRef.current || seq !== seqRef.current) return;
-      if (res.ok) setLogs(await res.json());
-      else toast.error("加载日志失败");
+      if (res.ok) {
+        const data = await res.json();
+        setLogs(data.items);
+        setTotal(data.total);
+        setPage(data.page);
+      } else toast.error("加载日志失败");
     } catch {
       if (mountedRef.current && seq === seqRef.current) toast.error("网络错误");
     } finally {
@@ -88,8 +109,16 @@ export default function OperationLogPanel() {
   }
 
   useEffect(() => {
-    load();
+    load(1, "", "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  const applyFilter = () => {
+    setPage(1);
+    load(1, module, keyword);
+  };
 
   return (
     <Card>
@@ -98,10 +127,10 @@ export default function OperationLogPanel() {
           <div className="space-y-1">
             <CardTitle className="text-lg">操作日志</CardTitle>
             <CardDescription>
-              最近 100 条后台增删改操作记录，用于排查问题
+              后台增删改操作记录，支持筛选、搜索与分页
             </CardDescription>
           </div>
-          <Button size="sm" variant="outline" onClick={load} disabled={loading} className="gap-1.5">
+          <Button size="sm" variant="outline" onClick={() => load(page, module, keyword)} disabled={loading} className="gap-1.5">
             {loading ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
@@ -112,6 +141,31 @@ export default function OperationLogPanel() {
         </div>
       </CardHeader>
       <CardContent>
+        {/* 筛选行 */}
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <select
+            value={module}
+            onChange={(e) => setModule(e.target.value)}
+            className="h-8 rounded-md border border-input bg-background px-2 text-sm"
+          >
+            <option value="">全部模块</option>
+            {Object.entries(MODULE_LABEL).map(([key, label]) => (
+              <option key={key} value={key}>{label}</option>
+            ))}
+          </select>
+          <input
+            value={keyword}
+            onChange={(e) => setKeyword(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && applyFilter()}
+            placeholder="搜索操作人或摘要"
+            className="h-8 w-48 rounded-md border border-input bg-background px-3 text-sm"
+          />
+          <Button size="sm" variant="outline" onClick={applyFilter} className="gap-1.5">
+            <RefreshCw className="h-4 w-4" />
+            筛选
+          </Button>
+        </div>
+
         {loading ? (
           <div className="flex items-center justify-center py-16 text-muted-foreground">
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -217,6 +271,40 @@ export default function OperationLogPanel() {
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* 分页栏 */}
+        {total > 0 && (
+          <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
+            <span>共 {total} 条记录</span>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={page <= 1 || loading}
+                onClick={() => {
+                  const p = page - 1;
+                  setPage(p);
+                  load(p, module, keyword);
+                }}
+              >
+                上一页
+              </Button>
+              <span>{page} / {totalPages}</span>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={page >= totalPages || loading}
+                onClick={() => {
+                  const p = page + 1;
+                  setPage(p);
+                  load(p, module, keyword);
+                }}
+              >
+                下一页
+              </Button>
+            </div>
           </div>
         )}
       </CardContent>
