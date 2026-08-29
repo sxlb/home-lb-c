@@ -2,22 +2,6 @@
 @tailwind components;
 @tailwind utilities;
 
-/* 本地完整字体 2 种（中英双语）：得意黑 + 猫啃什锦黑 */
-@font-face {
-  font-family: "SmileySans";
-  src: url("/fonts/smiley-sans.woff2") format("woff2");
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: "MaokenSans";
-  src: url("/fonts/maoken-sans.otf") format("opentype");
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
 @layer base {
   :root {
     --background: 0 0% 100%;
@@ -223,61 +207,7 @@
     container-type: inline-size;
   }
 
-  /* ===== 昵称艺术字体（共 18 种，全部中英双语） ===== */
-  .font-art-ma-shan {
-    font-family: var(--font-ma-shan), "STKaiti", "KaiTi", serif;
-  }
-  .font-art-zcool {
-    font-family: var(--font-zcool), "STKaiti", "KaiTi", sans-serif;
-  }
-  .font-art-long-cang {
-    font-family: var(--font-long-cang), "STKaiti", "KaiTi", cursive;
-  }
-  .font-art-zcool-xiaowei {
-    font-family: var(--font-zcool-xw), "STKaiti", "KaiTi", serif;
-  }
-  .font-art-zcool-qingke {
-    font-family: var(--font-zcool-qk), "STKaiti", "KaiTi", sans-serif;
-  }
-  .font-art-liu-jian-mao-cao {
-    font-family: var(--font-liu-jian), "STKaiti", "KaiTi", cursive;
-  }
-  .font-art-zhi-mang-xing {
-    font-family: var(--font-zhi-mang), "STKaiti", "KaiTi", cursive;
-  }
-  .font-art-noto-serif-sc {
-    font-family: var(--font-noto-serif-sc), "STSong", "SimSun", serif;
-  }
-  .font-art-smiley-sans {
-    font-family: "SmileySans", var(--font-noto-sc), sans-serif;
-  }
-  .font-art-maoken-sans {
-    font-family: "MaokenSans", var(--font-noto-sc), sans-serif;
-  }
-  .font-art-yozai {
-    font-family: "Yozai Medium", var(--font-noto-sc), sans-serif;
-  }
-  .font-art-lxgw-wen-kai {
-    font-family: "LXGW WenKai Screen", var(--font-noto-sc), serif;
-  }
-  .font-art-alimama-daka {
-    font-family: "Alimama DongFangDaKai", var(--font-noto-sc), serif;
-  }
-  .font-art-dingtalk-jinbuti {
-    font-family: "DingTalk JinBuTi", var(--font-noto-sc), sans-serif;
-  }
-  .font-art-hongleixingshu {
-    font-family: "hongleixingshu", var(--font-noto-sc), cursive;
-  }
-  .font-art-xiaolai {
-    font-family: "Xiaolai SC", var(--font-noto-sc), cursive;
-  }
-  .font-art-slidefu {
-    font-family: "Slidefu", var(--font-noto-sc), serif;
-  }
-  .font-art-slideqiuhong {
-    font-family: "Slideqiuhong", var(--font-noto-sc), cursive;
-  }
+  /* ===== 昵称艺术字体（内置：有爱圆体，中英双语） ===== */
   /* 有爱圆体（中） + Baloo 2（英）组合：西文走 Baloo，中文走有爱圆体 */
   .font-art-nowar {
     font-family: var(--font-baloo), var(--font-nowar), var(--font-noto-sc), sans-serif;
