@@ -20,6 +20,65 @@ export default function AccountPanel() {
   // 登出定时器引用：组件卸载时清理，避免切换面板后仍被强制登出
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // 两步验证状态
+  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
+  const [setupData, setSetupData] = useState<{ secret: string; otpauthUrl: string } | null>(null);
+  const [enableCode, setEnableCode] = useState("");
+  const [disableCode, setDisableCode] = useState("");
+  const [saving2fa, setSaving2fa] = useState(false);
+
+  // 初始化读取当前 2FA 状态
+  useEffect(() => {
+    fetch("/api/account/2fa")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => { if (data) setTwoFactorEnabled(!!data.enabled); })
+      .catch(() => { /* 忽略 */ });
+  }, []);
+
+  const call2fa = async (body: Record<string, string>) => {
+    setSaving2fa(true);
+    try {
+      const res = await fetch("/api/account/2fa", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (res.ok) return data;
+      toast.error(data.error || "操作失败");
+      return null;
+    } catch {
+      toast.error("网络错误");
+      return null;
+    } finally {
+      setSaving2fa(false);
+    }
+  };
+
+  const handleSetup = async () => {
+    const data = await call2fa({ action: "setup" });
+    if (data) setSetupData({ secret: data.secret, otpauthUrl: data.otpauthUrl });
+  };
+
+  const handleEnable = async () => {
+    const data = await call2fa({ action: "enable", code: enableCode });
+    if (data) {
+      setTwoFactorEnabled(true);
+      setSetupData(null);
+      setEnableCode("");
+      toast.success("两步验证已开启");
+    }
+  };
+
+  const handleDisable = async () => {
+    const data = await call2fa({ action: "disable", code: disableCode });
+    if (data) {
+      setTwoFactorEnabled(false);
+      setDisableCode("");
+      toast.success("两步验证已关闭");
+    }
+  };
+
   useEffect(() => {
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
@@ -189,6 +248,63 @@ export default function AccountPanel() {
             )}
           </Button>
         </form>
+
+        {/* ===== 两步验证（TOTP）===== */}
+        <div className="mt-6 space-y-3 rounded-xl border p-4">
+          <div className="flex items-center gap-2">
+            <KeyRound className="h-4 w-4 text-primary" />
+            <h3 className="text-sm font-semibold">两步验证（TOTP）</h3>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            使用 Google Authenticator 等应用扫码或手动添加，登录时需额外输入 6 位验证码。
+          </p>
+
+          {twoFactorEnabled ? (
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <span className="text-sm font-medium text-emerald-600">已开启</span>
+              <div className="flex items-center gap-2">
+                <Input
+                  value={disableCode}
+                  onChange={(e) => setDisableCode(e.target.value.replace(/\D/g, ""))}
+                  placeholder="6 位验证码"
+                  maxLength={6}
+                  className="h-8 w-28 text-center tracking-widest"
+                />
+                <Button size="sm" variant="outline" onClick={handleDisable} disabled={!disableCode || saving2fa}>
+                  关闭
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Button size="sm" onClick={handleSetup} disabled={saving2fa}>
+              启用两步验证
+            </Button>
+          )}
+
+          {setupData && !twoFactorEnabled && (
+            <div className="rounded-lg border bg-muted/30 p-3 text-xs">
+              <p className="mb-2 font-medium">将以下信息添加到验证器应用（或手动输入密钥）：</p>
+              <p className="mb-1 break-all text-muted-foreground">
+                密钥：<code className="text-foreground">{setupData.secret}</code>
+              </p>
+              <p className="mb-2 break-all text-muted-foreground">
+                OTPAuth：<code className="text-foreground">{setupData.otpauthUrl}</code>
+              </p>
+              <div className="flex items-center gap-2">
+                <Input
+                  value={enableCode}
+                  onChange={(e) => setEnableCode(e.target.value.replace(/\D/g, ""))}
+                  placeholder="输入验证码确认"
+                  maxLength={6}
+                  className="h-8 w-32 text-center tracking-widest"
+                />
+                <Button size="sm" onClick={handleEnable} disabled={!/^\d{6}$/.test(enableCode) || saving2fa}>
+                  确认开启
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
       </CardContent>
     </Card>
   );
