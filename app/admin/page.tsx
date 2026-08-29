@@ -22,6 +22,7 @@ import {
   Palette,
   Music,
   Database,
+  BarChart3,
 } from "lucide-react";
 import ProfilePanel from "@/components/admin/ProfilePanel";
 import LinksPanel from "@/components/admin/LinksPanel";
@@ -33,6 +34,7 @@ import HealthPanel from "@/components/admin/HealthPanel";
 import ThemePanel from "@/components/admin/ThemePanel";
 import MusicPanel from "@/components/admin/MusicPanel";
 import DataPanel from "@/components/admin/DataPanel";
+import StatsPanel from "@/components/admin/StatsPanel";
 
 type TabId =
   | "profile"
@@ -45,7 +47,8 @@ type TabId =
   | "account"
   | "logs"
   | "health"
-  | "data";
+  | "data"
+  | "stats";
 
 interface TabItem {
   id: TabId;
@@ -88,6 +91,7 @@ const NAV_GROUPS: NavGroup[] = [
       { id: "logs", label: "操作日志", icon: ScrollText, description: "查看系统操作记录与审计日志" },
       { id: "health", label: "服务状态", icon: Activity, description: "监控服务运行状态与健康指标" },
       { id: "data", label: "数据管理", icon: Database, description: "备份与恢复站点数据" },
+      { id: "stats", label: "访问统计", icon: BarChart3, description: "查看访问数据与趋势" },
     ],
   },
 ];
@@ -389,6 +393,7 @@ export default function AdminPage() {
               {activeTab === "logs" && <OperationLogPanel />}
               {activeTab === "health" && <HealthPanel />}
               {activeTab === "data" && <DataPanel />}
+              {activeTab === "stats" && <StatsPanel />}
             </div>
           </div>
         </div>
