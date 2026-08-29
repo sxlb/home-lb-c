@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
     }
 
     const sp = request.nextUrl.searchParams;
-    const module = sp.get("module") || undefined;
+    const moduleFilter = sp.get("module") || undefined;
     const keyword = sp.get("keyword")?.trim() || undefined;
 
     const rawPage = parseInt(sp.get("page") || "1", 10);
@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
     const pageSize = isNaN(rawPageSize) ? 20 : Math.min(Math.max(rawPageSize, 1), 100);
 
     const where = {
-      ...(module ? { module } : {}),
+      ...(moduleFilter ? { module: moduleFilter } : {}),
       ...(keyword
         ? { OR: [{ username: { contains: keyword } }, { summary: { contains: keyword } }] }
         : {}),
