@@ -148,6 +148,11 @@ function clearAttempts(key = "admin") {
   attempts.delete(key);
 }
 
+/** 账号维度限流 key（仅对已存在用户使用，避免锁定差异泄露账号存在性） */
+export function getLoginUserRateKey(username: string): string {
+  return `login:user:${username.toLowerCase()}`;
+}
+
 /** 清空全部登录限流状态（测试用） */
 export function resetLoginRateLimit(): void {
   attempts.clear();
@@ -162,6 +167,8 @@ const DUMMY_HASH = "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy
 export const AUTH_ERROR_CODES = {
   RATE_LIMITED: "rate_limited",
   INVALID_CREDENTIALS: "invalid_credentials",
+  TOTP_REQUIRED: "totp_required",
+  TOTP_INVALID: "totp_invalid",
 } as const;
 
 export const authOptions: NextAuthOptions = {
@@ -199,14 +206,35 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
+        // 账号维度锁定检查（用户存在后）：多 IP 分布式爆破时锁账号本身
+        const userKey = getLoginUserRateKey(credentials.username);
+        const userLock = checkRateLimit(userKey);
+        if (userLock.locked) {
+          return null;
+        }
+
         // bcrypt 验证密码
         const valid = await bcrypt.compare(credentials.password, user.password);
         if (!valid) {
           recordFailedAttempt(rateKey);
+          recordFailedAttempt(userKey);
           return null;
         }
 
+        // 两步验证：密码通过后校验 TOTP（开启时）
+        // 验证码缺失/错误同样计入失败次数（双 key），防暴力尝试验证码
+        const code = (credentials as { totpCode?: string }).totpCode?.trim() || "";
+        if (user.twoFactorEnabled) {
+          const { verifyTOTP } = await import("@/lib/totp");
+          if (!code || !verifyTOTP(user.twoFactorSecret, code)) {
+            recordFailedAttempt(rateKey);
+            recordFailedAttempt(userKey);
+            return null;
+          }
+        }
+
         clearAttempts(rateKey);
+        clearAttempts(userKey);
         return {
           id: String(user.id),
           name: user.username,
