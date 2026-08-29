@@ -40,6 +40,9 @@ model Profile {
   iconfontUrl          String   @default("") // 阿里云矢量图标库 symbol 模式脚本地址（https://at.alicdn.com/...），供社交/网站链接选择图标
   logoArtFont          Boolean  @default(true)
   logoFont             String   @default("zcool-kuail")
+  customFontEnabled      Boolean  @default(false) // 自定义字体总开关
+  customFontFamily       String   @default("") // 自定义字体名（CSS font-family，如 "PingFang SC"）
+  customFontScope        String   @default("nickname") // 自定义字体应用范围：nickname / all
   loadingScreen        Boolean  @default(true)
   clickEffect          Boolean  @default(true)
   consoleEgg           Boolean  @default(true)
