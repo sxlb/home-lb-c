@@ -30,6 +30,9 @@ export interface ProfileShape {
   iconfontUrl: string;
   logoArtFont: boolean;
   logoFont: string;
+  customFontEnabled: boolean;
+  customFontFamily: string;
+  customFontScope: string;
   loadingScreen: boolean;
   clickEffect: boolean;
   consoleEgg: boolean;
@@ -92,6 +95,9 @@ export const INITIAL_PROFILE: ProfileShape = {
   iconfontUrl: "",
   logoArtFont: true,
   logoFont: "zcool-kuail",
+  customFontEnabled: false,
+  customFontFamily: "",
+  customFontScope: "nickname",
   loadingScreen: true,
   clickEffect: true,
   consoleEgg: true,
