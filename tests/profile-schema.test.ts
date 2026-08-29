@@ -207,4 +207,38 @@ describe("profileSchema", () => {
       expect(result.success).toBe(false);
     });
   });
+
+  describe("自定义字体字段", () => {
+    it("默认值：开关 false、范围 nickname、字体名为空", () => {
+      const result = profileSchema.safeParse({});
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.customFontEnabled).toBe(false);
+        expect(result.data.customFontFamily).toBe("");
+        expect(result.data.customFontScope).toBe("nickname");
+      }
+    });
+
+    it("合法字体名通过（中英文、数字、空格、引号、连字符）", () => {
+      const result = profileSchema.safeParse({
+        customFontEnabled: true,
+        customFontFamily: '"PingFang SC", Microsoft YaHei',
+        customFontScope: "all",
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it("含危险字符的字体名被拒绝", () => {
+      const result = profileSchema.safeParse({
+        customFontEnabled: true,
+        customFontFamily: "Arial; url(https://evil.com/x.woff2)",
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it("非法范围值被拒绝", () => {
+      const result = profileSchema.safeParse({ customFontScope: "body" });
+      expect(result.success).toBe(false);
+    });
+  });
 });

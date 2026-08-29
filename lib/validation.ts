@@ -210,6 +210,25 @@ export const profileSchema = z.object({
     )
     .optional()
     .default("zcool-kuail"),
+  // 自定义字体（方案 A：输入 CSS 字体名，不存文件）
+  customFontEnabled: z.boolean().optional().default(false),
+  customFontFamily: z
+    .string()
+    .trim()
+    .max(64, "字体名最长 64 字符")
+    .refine(
+      (v) => v === "" || /^[\u4e00-\u9fa5A-Za-z0-9 "'-,]+$/.test(v),
+      "字体名仅支持中英文、数字、空格、引号与连字符"
+    )
+    .optional()
+    .default(""),
+  // 应用范围：nickname=仅昵称 / all=全站
+  customFontScope: z
+    .enum(["nickname", "all"], {
+      errorMap: () => ({ message: "应用范围必须是 nickname / all" }),
+    })
+    .optional()
+    .default("nickname"),
   // 网站链接区标题
   siteLinksTitle: z
     .string()
