@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { LoadingPlaceholder } from "./LinksPanel";
 import { useProfileForm } from "./useProfileForm";
 import UploadButton from "./UploadButton";
+import ThemePreview from "./ThemePreview";
 import {
   COVER_TYPES,
   SWITCH_INTERVALS,
@@ -111,6 +112,14 @@ export default function ThemePanel() {
         <CardDescription>配置背景壁纸、主题模式与整体视觉氛围</CardDescription>
       </CardHeader>
       <CardContent>
+        {/* 主题实时预览：CSS 变量随表单实时值变化，保存后前台同源生效 */}
+        <div className="mb-5">
+          <ThemePreview
+            accentColor={profile.accentColor}
+            glassOpacity={profile.glassOpacity}
+            glassBlur={profile.glassBlur}
+          />
+        </div>
         <form
           ref={formRef}
           onSubmit={(e) => {
