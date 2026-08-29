@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Plus, Trash2, Loader2, GripVertical, Globe } from "lucide-react";
+import { Plus, Trash2, Loader2, ChevronUp, ChevronDown, Pencil, Globe } from "lucide-react";
 import { useLinkList } from "./useLinkList";
 import IconfontPicker from "./IconfontPicker";
 import LucideIconPicker from "./LucideIconPicker";
@@ -54,6 +54,22 @@ interface LinksPanelProps {
   urlPlaceholder?: string;
 }
 
+/** LinkRow 组件 props */
+interface LinkRowProps {
+  link: LinkItem;
+  index: number;
+  total: number;
+  expanded: boolean;
+  showTip: boolean;
+  namePlaceholder?: string;
+  iconPlaceholder?: string;
+  urlPlaceholder?: string;
+  onToggle: () => void;
+  onMove: (dir: -1 | 1) => void;
+  onRemove: () => void;
+  onUpdate: (field: keyof LinkItem, value: string | number) => void;
+}
+
 /**
  * 链接列表面板（社交链接 / 网站链接共用）：
  * - 增/删/改单行 + 批量保存（useLinkList 统一状态管理）
@@ -86,6 +102,56 @@ export default function LinksPanel({
     { requireIcon: true }
   );
 
+  // 同一时间只展开一行（-1 表示全部收起）
+  const [expandedIndex, setExpandedIndex] = useState(-1);
+  // 未保存变更标记：任何增删改置 true，保存成功置 false
+  const [dirty, setDirty] = useState(false);
+
+  const markDirty = () => setDirty(true);
+
+  const handleAdd = () => {
+    addItem();
+    markDirty();
+    setExpandedIndex(links.length);
+  };
+
+  const handleRemove = (index: number) => {
+    removeItem(index);
+    markDirty();
+    setExpandedIndex((prev) => (prev === index ? -1 : prev > index ? prev - 1 : prev));
+  };
+
+  const handleUpdate = (index: number, field: keyof LinkItem, value: string | number) => {
+    updateItem(index, field, value);
+    markDirty();
+  };
+
+  // 上移/下移：交换相邻两行的内容字段（id/clientId 跟随行位置，避免主键错乱）
+  const handleMove = (index: number, dir: -1 | 1) => {
+    const target = index + dir;
+    if (target < 0 || target >= links.length) return;
+    const a = links[index];
+    const b = links[target];
+    const fields: (keyof LinkItem)[] = [
+      "name",
+      "icon",
+      "url",
+      "sort",
+      ...(showTip ? (["tip"] as (keyof LinkItem)[]) : []),
+    ];
+    for (const f of fields) {
+      updateItem(index, f, b[f]);
+      updateItem(target, f, a[f]);
+    }
+    markDirty();
+  };
+
+  const handleSave = async () => {
+    await save();
+    setDirty(false);
+    setExpandedIndex(-1);
+  };
+
   if (loading) {
     return <LoadingPlaceholder />;
   }
@@ -98,13 +164,13 @@ export default function LinksPanel({
             <CardTitle className="text-lg">{title}</CardTitle>
             <CardDescription>{description}</CardDescription>
           </div>
-          <Button size="sm" onClick={addItem} className="gap-1.5">
+          <Button size="sm" onClick={handleAdd} className="gap-1.5">
             <Plus className="h-4 w-4" />
             添加链接
           </Button>
         </div>
       </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className="space-y-2.5">
         {links.length === 0 && (
           <div className="flex flex-col items-center justify-center py-10 text-center">
             <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-muted">
@@ -114,107 +180,35 @@ export default function LinksPanel({
           </div>
         )}
         {links.map((link, index) => (
-          <div
+          <LinkRow
             key={link.id ?? link.clientId ?? index}
-            className="group relative rounded-xl border bg-card transition-all hover:border-primary/30 hover:shadow-sm"
-          >
-            {/* 拖拽手柄 + 序号（无拖拽实现，title 说明按排序值排列） */}
-            <div title="按「排序」数值排列" className="absolute left-0 top-0 flex h-full w-10 flex-col items-center justify-center gap-1 border-r border-border/50 bg-muted/30 text-muted-foreground/60 transition-colors group-hover:text-muted-foreground">
-              <GripVertical className="h-4 w-4" />
-              <span className="text-[10px] font-semibold tabular-nums">{String(index + 1).padStart(2, "0")}</span>
-            </div>
-
-            {/* 删除按钮 - 右上角图标按钮 */}
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => removeItem(index)}
-              className="absolute right-2 top-2 h-7 w-7 text-muted-foreground opacity-100 transition-all hover:bg-destructive/10 hover:text-destructive sm:opacity-0 sm:group-hover:opacity-100"
-              aria-label="删除"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </Button>
-
-            {/* 表单内容 - 左侧留出拖拽手柄空间 */}
-            <div className="space-y-2.5 pl-12 pr-3 py-3">
-              <div className="grid gap-2.5 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label htmlFor={`link-name-${index}`} className="text-xs font-medium text-muted-foreground">名称</Label>
-                  <Input
-                    id={`link-name-${index}`}
-                    name={`link-name-${index}`}
-                    value={link.name}
-                    onChange={(e) => updateItem(index, "name", e.target.value)}
-                    placeholder={namePlaceholder}
-                    className="h-8 text-sm"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor={`link-icon-${index}`} className="text-xs font-medium text-muted-foreground">图标</Label>
-                  <Input
-                    id={`link-icon-${index}`}
-                    name={`link-icon-${index}`}
-                    value={link.icon}
-                    onChange={(e) => updateItem(index, "icon", e.target.value)}
-                    placeholder={iconPlaceholder}
-                    className="h-8 text-sm"
-                  />
-                  {/* 图标选择器：Lucide 图标 / 图标库 Tab 切换 */}
-                  <IconPickerTabs
-                    value={link.icon}
-                    onChange={(name) => updateItem(index, "icon", name)}
-                  />
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor={`link-url-${index}`} className="text-xs font-medium text-muted-foreground">链接地址</Label>
-                <Input
-                  id={`link-url-${index}`}
-                  name={`link-url-${index}`}
-                  value={link.url}
-                  onChange={(e) => updateItem(index, "url", e.target.value)}
-                  placeholder={urlPlaceholder}
-                  className="h-8 text-sm"
-                />
-              </div>
-              <div className="grid gap-2.5 sm:grid-cols-2">
-                {showTip && (
-                  <div className="space-y-1.5">
-                    <Label htmlFor={`link-tip-${index}`} className="text-xs font-medium text-muted-foreground">悬停提示</Label>
-                    <Input
-                      id={`link-tip-${index}`}
-                      name={`link-tip-${index}`}
-                      value={link.tip ?? ""}
-                      onChange={(e) => updateItem(index, "tip", e.target.value)}
-                      placeholder="鼠标悬停时显示的文字"
-                      className="h-8 text-sm"
-                    />
-                  </div>
-                )}
-                <div className="space-y-1.5">
-                  <Label htmlFor={`link-sort-${index}`} className="text-xs font-medium text-muted-foreground">排序</Label>
-                  <Input
-                    id={`link-sort-${index}`}
-                    name={`link-sort-${index}`}
-                    type="number"
-                    min={0}
-                    step={1}
-                    value={link.sort}
-                    onChange={(e) => updateItem(index, "sort", e.target.value === "" ? 0 : Number(e.target.value))}
-                    className="h-8 text-sm"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
+            link={link}
+            index={index}
+            total={links.length}
+            expanded={expandedIndex === index}
+            showTip={showTip}
+            namePlaceholder={namePlaceholder}
+            iconPlaceholder={iconPlaceholder}
+            urlPlaceholder={urlPlaceholder}
+            onToggle={() => setExpandedIndex(expandedIndex === index ? -1 : index)}
+            onMove={(dir) => handleMove(index, dir)}
+            onRemove={() => handleRemove(index)}
+            onUpdate={(field, value) => handleUpdate(index, field, value)}
+          />
         ))}
         {links.length > 0 && (
-          <Button onClick={save} disabled={saving} className="w-full gap-1.5">
+          <Button
+            onClick={handleSave}
+            disabled={saving}
+            className={`w-full gap-1.5 ${dirty ? "ring-2 ring-primary/40" : ""}`}
+          >
             {saving ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
                 保存中...
               </>
+            ) : dirty ? (
+              "● 有未保存的更改"
             ) : (
               "保存链接"
             )}
@@ -222,6 +216,190 @@ export default function LinksPanel({
         )}
       </CardContent>
     </Card>
+  );
+}
+
+/**
+ * 链接行：收起态为紧凑预览（图标 + 名称/URL + 操作按钮），展开态为完整表单。
+ * 收起态是列表默认形态，编辑/排序/删除操作均在此层；展开态聚焦字段编辑。
+ */
+function LinkRow({
+  link,
+  index,
+  total,
+  expanded,
+  showTip,
+  namePlaceholder = "链接名称",
+  iconPlaceholder = "如 github, globe, link",
+  urlPlaceholder = "https://example.com",
+  onToggle,
+  onMove,
+  onRemove,
+  onUpdate,
+}: LinkRowProps) {
+  // 收起态：紧凑预览行
+  if (!expanded) {
+    return (
+      <div className="group flex items-center gap-3 rounded-xl border bg-card px-3 py-2.5 transition-all hover:border-primary/30 hover:shadow-sm">
+        {/* 图标缩略图 */}
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+          <LinkIconPreview icon={link.icon} />
+        </div>
+        {/* 名称 + URL */}
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium text-foreground">
+            {link.name.trim() || "未命名链接"}
+          </p>
+          <p className="truncate text-xs text-muted-foreground">
+            {link.url || "（未填写链接地址）"}
+          </p>
+        </div>
+        {/* 操作区：排序 / 编辑 / 删除 */}
+        <div className="flex shrink-0 items-center gap-0.5">
+          <button
+            type="button"
+            onClick={() => onMove(-1)}
+            disabled={index === 0}
+            className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30"
+            aria-label="上移"
+            title="上移"
+          >
+            <ChevronUp className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => onMove(1)}
+            disabled={index === total - 1}
+            className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30"
+            aria-label="下移"
+            title="下移"
+          >
+            <ChevronDown className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={onToggle}
+            className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            aria-label="编辑"
+            title="编辑"
+          >
+            <Pencil className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={onRemove}
+            className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+            aria-label="删除"
+            title="删除"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // 展开态：完整表单（图标选择器仅此处渲染，收起时零渲染）
+  return (
+    <div className="rounded-xl border bg-card p-3 sm:p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+            <LinkIconPreview icon={link.icon} />
+          </div>
+          <span className="text-sm font-semibold">编辑链接</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => onMove(-1)}
+            disabled={index === 0}
+            className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-30"
+            aria-label="上移"
+          >
+            <ChevronUp className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => onMove(1)}
+            disabled={index === total - 1}
+            className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-30"
+            aria-label="下移"
+          >
+            <ChevronDown className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor={`link-name-${index}`} className="text-xs font-medium text-muted-foreground">名称</Label>
+            <Input
+              id={`link-name-${index}`}
+              value={link.name}
+              onChange={(e) => onUpdate("name", e.target.value)}
+              placeholder={namePlaceholder}
+              className="h-8 text-sm"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor={`link-icon-${index}`} className="text-xs font-medium text-muted-foreground">图标</Label>
+            <Input
+              id={`link-icon-${index}`}
+              value={link.icon}
+              onChange={(e) => onUpdate("icon", e.target.value)}
+              placeholder={iconPlaceholder}
+              className="h-8 text-sm"
+            />
+          </div>
+        </div>
+        {/* 图标选择器：Lucide / 图标库 Tab */}
+        <IconPickerTabs value={link.icon} onChange={(name) => onUpdate("icon", name)} />
+        <div className="space-y-1.5">
+          <Label htmlFor={`link-url-${index}`} className="text-xs font-medium text-muted-foreground">链接地址</Label>
+          <Input
+            id={`link-url-${index}`}
+            value={link.url}
+            onChange={(e) => onUpdate("url", e.target.value)}
+            placeholder={urlPlaceholder}
+            className="h-8 text-sm"
+          />
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {showTip && (
+            <div className="space-y-1.5">
+              <Label htmlFor={`link-tip-${index}`} className="text-xs font-medium text-muted-foreground">悬停提示</Label>
+              <Input
+                id={`link-tip-${index}`}
+                value={link.tip ?? ""}
+                onChange={(e) => onUpdate("tip", e.target.value)}
+                placeholder="鼠标悬停时显示的文字"
+                className="h-8 text-sm"
+              />
+            </div>
+          )}
+          <div className="space-y-1.5">
+            <Label htmlFor={`link-sort-${index}`} className="text-xs font-medium text-muted-foreground">排序</Label>
+            <Input
+              id={`link-sort-${index}`}
+              type="number"
+              min={0}
+              step={1}
+              value={link.sort}
+              onChange={(e) => onUpdate("sort", e.target.value === "" ? 0 : Number(e.target.value))}
+              className="h-8 text-sm"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-3 flex justify-end">
+        <Button size="sm" onClick={onToggle}>
+          完成
+        </Button>
+      </div>
+    </div>
   );
 }
 
