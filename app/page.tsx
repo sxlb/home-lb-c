@@ -14,9 +14,10 @@ import FaviconUpdater from "@/components/FaviconUpdater";
 import ScriptInjector from "@/components/ScriptInjector";
 import { IconfontScript } from "@/components/Iconfont";
 import { MusicProviderLazy, MusicCardLazy } from "@/components/MusicProviderLazy";
+import DecorativeEffectsLazy from "@/components/DecorativeEffectsLazy";
 import dynamic from "next/dynamic";
 
-const Effects = dynamic(() => import("@/components/Effects"));
+const LoadingScreen = dynamic(() => import("@/components/LoadingScreen").then((m) => m.LoadingScreen), { ssr: true });
 const SeasonalEffect = dynamic(() => import("@/components/SeasonalEffect"));
 // 页脚懒加载：桌面端页脚在视口外，延迟加载减小首屏 JS
 const FooterLazy = dynamic(() => import("@/components/Footer"), {
@@ -70,8 +71,10 @@ export default async function Home() {
         <FaviconUpdater icon={d.siteIcon} />
         <ScriptInjector scripts={[d.analyticsScript, d.headScript]} />
 
-        <Effects
-          loadingScreen={d.loadingScreen}
+        {/* 全屏加载动画：首屏必需，保持预加载（ssr:true） */}
+        <LoadingScreen enabled={d.loadingScreen} siteName={d.nickname} />
+
+        <DecorativeEffectsLazy
           clickEffect={d.clickEffect}
           consoleEgg={d.consoleEgg}
           dynamicTitle={d.dynamicTitle}

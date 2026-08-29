@@ -6,119 +6,13 @@ import { BellRing, X } from "lucide-react";
 /**
  * ===== 页面装饰/工具类效果组件合集 =====
  *
- * 说明：以下 6 个组件均为"enabled 开关 + 返回 null/占位"的客户端效果组件，
- * 功能独立但形态高度一致（均为非核心装饰，由后台开关控制），合并为单文件：
+ * 5 个"enabled 开关 + 返回 null/占位"的客户端效果组件（点击粒子 / 控制台彩蛋 /
+ * 动态标题 / 顶部进度条 / 欢迎通知），功能独立但形态高度一致，合并为单文件：
  * - 各子组件仍以具名导出暴露，便于单测与按需引用
- * - 默认导出 Effects 组合组件，供首页一处挂载全部效果
- * 合并后减小文件数目，且这些组件本来就在页面加载后同时生效，
- * 不会因合并带来额外的按需加载负担。
+ * - 默认导出 Effects 组合组件，供首页一处挂载全部装饰效果
+ * 该文件由页面懒加载（ssr:false）：LoadingScreen 收起后再加载；
+ * 后台全部关闭时此 chunk 零下载。
  */
-
-/* ==================== 全屏加载动画 ==================== */
-
-interface LoadingScreenProps {
-  /** 是否启用加载动画（后台可配置） */
-  enabled?: boolean;
-  /** 站点昵称，显示在加载动画中央 */
-  siteName?: string;
-}
-
-/**
- * 全屏加载动画
- * - 三环旋转动画 + 站点名 + Loading 文字
- * - 条件全部满足后分屏收起，随后移除遮罩：
- *   1. 最短展示 800ms（避免闪屏）
- *   2. 页面 window load 完成
- *   3. 背景壁纸就绪（Background 组件广播 background-ready 事件）
- * - 安全兜底：最长 5s 强制收起，防止背景源异常导致加载动画卡死
- */
-export function LoadingScreen({ enabled = true, siteName = "" }: LoadingScreenProps) {
-  const [loaded, setLoaded] = useState(false);
-  const [removed, setRemoved] = useState(false);
-  const [bgReady, setBgReady] = useState(false);
-
-  // 监听背景就绪事件；若背景先于本组件挂载完成（window.__bgReady），直接视为就绪
-  useEffect(() => {
-    if (!enabled) return;
-    if ((window as unknown as { __bgReady?: boolean }).__bgReady) {
-      setBgReady(true);
-      return;
-    }
-    const onReady = () => setBgReady(true);
-    window.addEventListener("background-ready", onReady);
-    return () => window.removeEventListener("background-ready", onReady);
-  }, [enabled]);
-
-  useEffect(() => {
-    if (!enabled || removed) return;
-
-    let mounted = true;
-    let hideTimer: ReturnType<typeof setTimeout> | undefined;
-
-    const hide = () => {
-      if (!mounted || hideTimer) return;
-      // 先加 loaded 状态触发分屏收起动画
-      setLoaded(true);
-      // 等动画全部完成再移除节点：分屏收起 0.3s 延迟 + 0.5s，整体上移 1s 延迟 + 0.3s，共 1.3s
-      hideTimer = setTimeout(() => {
-        if (mounted) setRemoved(true);
-        // 广播"加载动画已完全移除"，供欢迎通知等组件在动画结束后再展示
-        window.dispatchEvent(new Event("loading-screen-removed"));
-      }, 1400);
-    };
-
-    const tryHide = () => {
-      if (document.readyState === "complete" && bgReady) hide();
-    };
-
-    // 最短展示时间（800ms）+ 条件判断
-    const minTimer = setTimeout(() => {
-      if (document.readyState === "complete" && bgReady) {
-        hide();
-      } else {
-        window.addEventListener("load", tryHide, { once: true });
-      }
-    }, 800);
-
-    // 背景就绪（bgReady 变化触发本 effect 重跑）后立即复查
-    if (bgReady && document.readyState === "complete") hide();
-
-    // 安全兜底：最长 5s 无论背景是否就绪都收起
-    const safety = setTimeout(hide, 5000);
-
-    return () => {
-      mounted = false;
-      if (minTimer) clearTimeout(minTimer);
-      if (safety) clearTimeout(safety);
-      if (hideTimer) clearTimeout(hideTimer);
-      window.removeEventListener("load", tryHide);
-    };
-  }, [enabled, bgReady, removed]);
-
-  if (!enabled || removed) return null;
-
-  return (
-    <div
-      id="loader-wrapper"
-      className={`fixed inset-0 z-[999] overflow-hidden bg-gradient-to-br from-[#1a1a2e] via-[#16213e] to-[#1a1a2e] ${
-        loaded ? "loader-loaded" : ""
-      }`}
-      aria-hidden
-    >
-      {/* 中心加载内容 */}
-      <div className="loader">
-        <div className="loader-circle" />
-        <div className="loader-text">
-          <span className="loader-name">{siteName || "个人主页"}</span>
-          <span className="loader-tip">Loading...</span>
-        </div>
-      </div>
-      {/* 左右分屏遮罩（使用与背景一致的渐变色） */}
-      <div className="loader-section loader-section-left" style={{ background: "linear-gradient(90deg, #1a1a2e 0%, #16213e 100%)" }} />
-      <div className="loader-section loader-section-right" style={{ background: "linear-gradient(270deg, #1a1a2e 0%, #16213e 100%)" }} />
-    </div>
-  );
-}
 
 /* ==================== 点击粒子特效 ==================== */
 
@@ -662,8 +556,6 @@ export function WelcomeNotice({
 /* ==================== Effects 组合组件 ==================== */
 
 interface EffectsProps {
-  /** 全屏加载动画开关 */
-  loadingScreen?: boolean;
   /** 点击粒子特效开关 */
   clickEffect?: boolean;
   /** 控制台彩蛋开关 */
@@ -684,10 +576,9 @@ interface EffectsProps {
 
 /**
  * 首页装饰效果集合：一处挂载全部开关控制的页面效果组件。
- * 保持与原先分散挂载一致的渲染顺序。
+ * 保持与原先分散挂载一致的渲染顺序。全屏加载动画已独立为 LoadingScreen 组件。
  */
 export default function Effects({
-  loadingScreen = true,
   clickEffect = true,
   consoleEgg = true,
   dynamicTitle = true,
@@ -699,7 +590,6 @@ export default function Effects({
 }: EffectsProps) {
   return (
     <>
-      <LoadingScreen enabled={loadingScreen} siteName={siteName} />
       <ClickEffect enabled={clickEffect} />
       <DevConsole enabled={consoleEgg} siteName={siteName} />
       <DynamicTitle enabled={dynamicTitle} siteName={siteName} />
