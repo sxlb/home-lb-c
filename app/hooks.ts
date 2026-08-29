@@ -9,26 +9,8 @@ import { resolveWallpaperUrl } from "@/lib/wallpaperServer";
 import type { Profile } from "@prisma/client";
 import type { ThemeMode } from "@/components/ThemeProvider";
 
-// ── 静态常量：字体映射表（不依赖运行时） ──────────────────────
+// ── 静态常量：内置艺术字体映射（仅保留有爱圆体，其余字体已随瘦身移除） ──
 const LOGO_FONT_CLASS: Record<string, string> = {
-  "ma-shan-zheng": "font-art-ma-shan",
-  "zcool-kuail": "font-art-zcool",
-  "long-cang": "font-art-long-cang",
-  "zcool-xiaowei": "font-art-zcool-xiaowei",
-  "zcool-qingke": "font-art-zcool-qingke",
-  "liu-jian-mao-cao": "font-art-liu-jian-mao-cao",
-  "zhi-mang-xing": "font-art-zhi-mang-xing",
-  "noto-serif-sc": "font-art-noto-serif-sc",
-  "smiley-sans": "font-art-smiley-sans",
-  "maoken-sans": "font-art-maoken-sans",
-  yozai: "font-art-yozai",
-  "lxgw-wen-kai": "font-art-lxgw-wen-kai",
-  "alimama-daka": "font-art-alimama-daka",
-  "dingtalk-jinbuti": "font-art-dingtalk-jinbuti",
-  hongleixingshu: "font-art-hongleixingshu",
-  xiaolai: "font-art-xiaolai",
-  slidefu: "font-art-slidefu",
-  slideqiuhong: "font-art-slideqiuhong",
   "nowar-rounded": "font-art-nowar",
 };
 
@@ -147,6 +129,12 @@ export async function getHomeData(profile: Profile | null): Promise<{
   /** 阿里云矢量图标库 symbol 脚本地址（空串表示未配置） */
   iconfontUrl: string;
   logoFontClass: string;
+  /** 自定义字体 font-family（仅范围=昵称时提供；全站时由 CustomFont 组件处理） */
+  logoFontFamily: string | undefined;
+  /** 自定义字体配置（透传给 CustomFont 组件） */
+  customFontEnabled: boolean;
+  customFontFamily: string;
+  customFontScope: string;
   loadingScreen: boolean;
   clickEffect: boolean;
   consoleEgg: boolean;
@@ -231,8 +219,16 @@ export async function getHomeData(profile: Profile | null): Promise<{
     friendLinksTitle: profile?.friendLinksTitle || "友情链接",
     iconfontUrl: profile?.iconfontUrl || "",
     logoFontClass: (profile?.logoArtFont ?? true)
-      ? (LOGO_FONT_CLASS[profile?.logoFont || "zcool-kuail"] || "font-art-zcool")
+      ? (LOGO_FONT_CLASS[profile?.logoFont || "nowar-rounded"] || "font-art-nowar")
       : "font-bold",
+    // 自定义字体（仅范围=昵称时注入到昵称元素；范围=全站时由 CustomFont 组件注入 body）
+    logoFontFamily: profile?.customFontEnabled && profile?.customFontFamily?.trim()
+      ? `"${profile.customFontFamily.trim()}", var(--font-noto-sc), var(--font-inter), sans-serif`
+      : undefined,
+    // 自定义字体配置透传（供 CustomFont 组件使用）
+    customFontEnabled: profile?.customFontEnabled ?? false,
+    customFontFamily: profile?.customFontFamily || "",
+    customFontScope: profile?.customFontScope || "nickname",
     loadingScreen: profile?.loadingScreen ?? true,
     clickEffect: profile?.clickEffect ?? true,
     consoleEgg: profile?.consoleEgg ?? true,
