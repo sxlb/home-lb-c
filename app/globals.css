@@ -275,6 +275,8 @@
     min-width: 0;
     min-height: 50px;
     padding: 0 1rem;
+    /* 作为绝对定位 tip 的定位基准 */
+    position: relative;
     background-color: transparent;
     border-radius: 10px;
     animation: fade 0.5s ease both;
@@ -316,10 +318,16 @@
       margin: 0 0.4rem;
     }
   }
+  /* 绝对定位于容器右侧：不参与 flex 流，避免 tip 出现/换长短时把居中图标挤动（修复悬停时卡片向左跳动） */
   .social-tip {
+    position: absolute;
+    right: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+    white-space: nowrap;
+    pointer-events: none;
     color: rgba(245, 245, 245, 0.9);
     display: none;
-    margin-left: 0.75rem;
     font-size: 0.8125rem;
     letter-spacing: 0.02em;
     animation: fade 0.4s ease both;
