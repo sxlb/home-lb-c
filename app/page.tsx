@@ -139,16 +139,16 @@ export default async function Home() {
               {/* 右侧区域：功能区 + 链接 */}
               <div className="flex w-full flex-col gap-5 md:w-1/2 md:max-w-[500px]">
                 {/* 功能卡片组：一言 + 时钟天气（lg 起才并排，避免 md 下时钟卡过窄导致时间溢出） */}
-                <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
                   {/* 一言 / 音乐控制面板（hover 或"打开音乐"按钮切换，对齐 home） */}
                   <div>
                     <MusicCardLazy hitokotoType={d.hitokotoType} />
                   </div>
 
                   {/* 时钟+天气：clock-card-container 启用容器查询（container-type: inline-size），
-                      时间字号按卡片宽度自适应（cqw）；min-h 保证最低高度 */}
-                  <div className="clock-card-container min-h-[170px] lg:min-h-[185px] xl:min-h-[195px]">
-                    <div className="card-glass card-func flex h-full w-full flex-col justify-end p-4">
+                      时间字号按卡片宽度自适应（cqw）；min-h 对齐参考站 .function 高度 165px */}
+                  <div className="clock-card-container min-h-[165px]">
+                    <div className="card-glass card-func flex h-full w-full flex-col justify-end p-5">
                       <ClockWeatherCapsule
                         timeFormat={d.timeFormat}
                         showSeconds={d.showSeconds}
