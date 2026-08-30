@@ -97,11 +97,11 @@ export default async function Home() {
         <CustomFont enabled={d.customFontEnabled} family={d.customFontFamily} scope={d.customFontScope} />
 
         <section className="relative z-10 flex w-full flex-1 flex-col items-center">
-          <div className="mx-auto flex w-full max-w-5xl flex-col items-center gap-5 px-5 pt-16 pb-20 md:my-auto md:items-start md:px-4 md:pt-0 md:pb-0">
+          <div className="mx-auto flex w-full max-w-5xl flex-col items-center gap-5 px-5 pt-16 pb-20 md:items-start md:px-4 md:pt-10 md:pb-0">
             {/* 左右栏等高（md:items-stretch），左栏内容在其区域内垂直居中，与右栏（功能卡+网站链接）形成平衡构图 */}
             <div className="flex w-full flex-col items-center gap-5 md:flex-row md:items-stretch">
               {/* 左侧区域：头像 + 简介 + 社交（垂直居中于等高左栏，左下方不留大片空白） */}
-              <div className="flex w-full flex-col items-center md:w-1/2 md:items-start md:justify-center">
+              <div className="flex w-full flex-col items-center md:w-1/2 md:items-start">
                 <div className="flex items-center gap-5 sm:gap-7 md:gap-8 lg:gap-9 xl:gap-12">
                   <Avatar
                     className={`h-[104px] w-[104px] shadow-card-md sm:h-[116px] sm:w-[116px] md:h-[144px] md:w-[144px] lg:h-[156px] lg:w-[156px] xl:h-[168px] xl:w-[168px] ${d.avatarShapeClass} ${
