@@ -166,16 +166,16 @@ export default function LinkTabs({
   return (
     <div className="site-links-container">
       {/* 标题行 + tab 切换 */}
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2.5">
+      <div className="mb-5 flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
           {useIconfontTitle ? (
-            <svg className="h-5 w-5 shrink-0 text-white/90 drop-shadow-[0_2px_6px_rgba(0,0,0,0.5)]" aria-hidden="true" focusable="false">
+            <svg className="h-6 w-6 shrink-0 text-white/90 drop-shadow-[0_2px_6px_rgba(0,0,0,0.5)]" aria-hidden="true" focusable="false">
               <use href={`#${siteIcon}`} />
             </svg>
           ) : (
-            <TitleIcon className="h-5 w-5 shrink-0 text-white/90 drop-shadow-[0_2px_6px_rgba(0,0,0,0.5)]" />
+            <TitleIcon className="h-6 w-6 shrink-0 text-white/90 drop-shadow-[0_2px_6px_rgba(0,0,0,0.5)]" />
           )}
-          <span className="truncate text-lg font-bold tracking-wide text-white drop-shadow-[0_2px_10px_rgba(0,0,0,0.55)]">
+          <span className="truncate text-xl font-bold tracking-wide text-white drop-shadow-[0_2px_10px_rgba(0,0,0,0.55)]">
             {titleText}
           </span>
         </div>
@@ -187,7 +187,7 @@ export default function LinkTabs({
                 key={t.key}
                 onClick={() => setTab(t.key as "site" | "friend")}
                 aria-label={t.label}
-                className={`rounded-full px-3 py-1 text-xs font-medium transition-all duration-200 ${
+                className={`rounded-full px-3.5 py-1.5 text-[13px] font-medium transition-all duration-200 ${
                   tab === t.key
                     ? "bg-white/90 text-neutral-900"
                     : "bg-white/10 text-white/70 hover:bg-white/20 hover:text-white"
@@ -209,11 +209,11 @@ export default function LinkTabs({
         tabIndex={0}
         className="select-none outline-none focus-visible:ring-2 focus-visible:ring-white/30"
       >
-        <div key={currentPage} className="animate-fade-in grid grid-cols-3 gap-3.5">
+        <div key={currentPage} className="animate-fade-in grid grid-cols-3 gap-4">
           {Array.from({ length: PAGE_SIZE }, (_, i) => {
             const link = pages[currentPage][i];
             if (!link) {
-              return <div key={`site-link-ph-${i}`} className="h-[72px]" aria-hidden />;
+              return <div key={`site-link-ph-${i}`} className="h-[86px]" aria-hidden />;
             }
             const isImg = isImageIcon(link.icon);
             const IconComponent = isImg ? Globe : getIcon(link.icon);
@@ -222,29 +222,29 @@ export default function LinkTabs({
               <button
                 key={link.id}
                 onClick={() => handleClick(link)}
-                className="card-btn flex h-[72px] flex-col items-center justify-center gap-1.5"
+                className="card-btn flex h-[86px] flex-col items-center justify-center gap-2"
                 title={link.name}
               >
                 {isImg ? (
                   <Image
                     src={link.icon}
                     alt={link.name}
-                    width={20}
-                    height={20}
-                    className="h-5 w-5 shrink-0 rounded-full object-cover"
+                    width={24}
+                    height={24}
+                    className="h-6 w-6 shrink-0 rounded-full object-cover"
                     unoptimized
                     onError={(e) => {
                       e.currentTarget.style.display = "none";
                     }}
                   />
                 ) : useIconfont ? (
-                  <svg className="h-5 w-5 shrink-0 text-white/80" aria-hidden="true" focusable="false">
+                  <svg className="h-6 w-6 shrink-0 text-white/80" aria-hidden="true" focusable="false">
                     <use href={`#${link.icon}`} />
                   </svg>
                 ) : (
-                  <IconComponent className="h-5 w-5 shrink-0 text-white/80" />
+                  <IconComponent className="h-6 w-6 shrink-0 text-white/80" />
                 )}
-                <span className="line-clamp-2 w-full break-words text-center text-xs font-medium leading-snug tracking-wide text-white/85">
+                <span className="line-clamp-2 w-full break-words text-center text-sm font-medium leading-snug tracking-wide text-white/85">
                   {link.name}
                 </span>
               </button>
@@ -255,18 +255,18 @@ export default function LinkTabs({
 
       {/* 翻页按钮：左右箭头 + 分页指示点（保留原网站链接交互） */}
       {pages.length > 1 && (
-        <div className="mt-4 flex items-center justify-center gap-4">
+        <div className="mt-5 flex items-center justify-center gap-4">
           <button
             onClick={() => setPage((p) => Math.max(p - 1, 0))}
             disabled={currentPage === 0}
             aria-label="上一页"
-            className={`flex h-7 w-7 items-center justify-center rounded-full transition-all duration-200 ${
+            className={`flex h-8 w-8 items-center justify-center rounded-full transition-all duration-200 ${
               currentPage === 0
                 ? "cursor-not-allowed bg-white/5 text-white/25"
                 : "bg-white/10 text-white/75 hover:bg-white/20 hover:text-white active:scale-95"
             }`}
           >
-            <ChevronLeft className="h-4 w-4" />
+            <ChevronLeft className="h-5 w-5" />
           </button>
 
           <div className="flex items-center gap-2">
@@ -275,8 +275,8 @@ export default function LinkTabs({
                 key={i}
                 onClick={() => goTo(i)}
                 aria-label={`第 ${i + 1} 页`}
-                className={`h-2 rounded-full transition-all duration-300 ease-out ${
-                  i === currentPage ? "w-6 bg-white/90" : "w-2 bg-white/20 hover:bg-white/40"
+                className={`h-2.5 rounded-full transition-all duration-300 ease-out ${
+                  i === currentPage ? "w-6 bg-white/90" : "w-2.5 bg-white/20 hover:bg-white/40"
                 }`}
               />
             ))}
@@ -286,13 +286,13 @@ export default function LinkTabs({
             onClick={() => setPage((p) => Math.min(p + 1, pages.length - 1))}
             disabled={currentPage === pages.length - 1}
             aria-label="下一页"
-            className={`flex h-7 w-7 items-center justify-center rounded-full transition-all duration-200 ${
+            className={`flex h-8 w-8 items-center justify-center rounded-full transition-all duration-200 ${
               currentPage === pages.length - 1
                 ? "cursor-not-allowed bg-white/5 text-white/25"
                 : "bg-white/10 text-white/75 hover:bg-white/20 hover:text-white active:scale-95"
             }`}
           >
-            <ChevronRight className="h-4 w-4" />
+            <ChevronRight className="h-5 w-5" />
           </button>
         </div>
       )}

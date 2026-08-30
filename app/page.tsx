@@ -102,21 +102,21 @@ export default async function Home() {
             <div className="flex w-full flex-col items-center gap-5 md:flex-row md:items-stretch">
               {/* 左侧区域：头像 + 简介 + 社交（垂直居中于等高左栏，左下方不留大片空白） */}
               <div className="flex w-full flex-col items-center md:w-1/2 md:items-start md:justify-center">
-                <div className="flex items-center gap-4 sm:gap-6 md:gap-7 lg:gap-8 xl:gap-10">
+                <div className="flex items-center gap-5 sm:gap-7 md:gap-8 lg:gap-9 xl:gap-12">
                   <Avatar
-                    className={`h-[88px] w-[88px] shadow-card-md sm:h-[100px] sm:w-[100px] md:h-[120px] md:w-[120px] lg:h-[130px] lg:w-[130px] xl:h-[140px] xl:w-[140px] ${d.avatarShapeClass} ${
+                    className={`h-[104px] w-[104px] shadow-card-md sm:h-[116px] sm:w-[116px] md:h-[144px] md:w-[144px] lg:h-[156px] lg:w-[156px] xl:h-[168px] xl:w-[168px] ${d.avatarShapeClass} ${
                       d.avatarBorderColor ? "" : "ring-2 ring-white/30"
                     }`}
                     style={d.avatarStyle}
                   >
                     {d.finalAvatar ? <AvatarImage src={d.finalAvatar} alt={d.nickname} /> : null}
-                    <AvatarFallback className="bg-white/10 text-xl uppercase text-white md:text-3xl">
+                    <AvatarFallback className="bg-white/10 text-3xl uppercase text-white md:text-4xl">
                       {d.nickname.charAt(0)}
                     </AvatarFallback>
                   </Avatar>
                   <h1 className={`${d.logoFontClass} text-glow-accent leading-none tracking-tight truncate logo-title`}>
                     <span
-                      className="text-[28px] leading-none sm:text-3xl md:text-4xl lg:text-5xl xl:text-6xl"
+                      className="text-[36px] leading-none sm:text-[38px] md:text-[46px] lg:text-[56px] xl:text-[68px]"
                       style={d.logoFontFamily ? { fontFamily: d.logoFontFamily } : undefined}
                     >
                       <LogoFontLoader text={d.nickname} fontClass={d.logoFontClass} fontFamily={d.logoFontFamily} />
@@ -125,10 +125,10 @@ export default async function Home() {
                 </div>
 
                 {/* 简介卡片 */}
-                <div className="card-glass card-info mt-5 flex max-w-[480px] w-full items-start justify-between gap-3 p-4">
-                  <Quote className="mt-0.5 h-[18px] w-[18px] shrink-0 rotate-180 text-white/50" />
-                  <p className="min-w-0 flex-1 break-words text-base leading-relaxed text-white/90">{d.bio}</p>
-                  <Quote className="mt-0.5 h-[18px] w-[18px] shrink-0 text-white/50" />
+                <div className="card-glass card-info mt-6 flex max-w-[500px] w-full items-start justify-between gap-4 p-5">
+                  <Quote className="mt-0.5 h-[20px] w-[20px] shrink-0 rotate-180 text-white/50" />
+                  <p className="min-w-0 flex-1 break-words text-[17px] leading-relaxed text-white/90">{d.bio}</p>
+                  <Quote className="mt-0.5 h-[20px] w-[20px] shrink-0 text-white/50" />
                 </div>
 
                 {/* 社交链接 */}
@@ -136,7 +136,7 @@ export default async function Home() {
               </div>
 
               {/* 右侧区域：功能区 + 链接 */}
-              <div className="flex w-full flex-col gap-4 md:w-1/2 md:max-w-[480px]">
+              <div className="flex w-full flex-col gap-5 md:w-1/2 md:max-w-[500px]">
                 {/* 功能卡片组：一言 + 时钟天气（lg 起才并排，避免 md 下时钟卡过窄导致时间溢出） */}
                 <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                   {/* 一言 / 音乐控制面板（hover 或"打开音乐"按钮切换，对齐 home） */}
@@ -146,7 +146,7 @@ export default async function Home() {
 
                   {/* 时钟+天气：clock-card-container 启用容器查询（container-type: inline-size），
                       时间字号按卡片宽度自适应（cqw）；min-h 保证最低高度 */}
-                  <div className="clock-card-container min-h-[150px] lg:min-h-[160px] xl:min-h-[170px]">
+                  <div className="clock-card-container min-h-[170px] lg:min-h-[185px] xl:min-h-[195px]">
                     <div className="card-glass card-func flex h-full w-full flex-col justify-end p-4">
                       <ClockWeatherCapsule
                         timeFormat={d.timeFormat}
@@ -159,7 +159,7 @@ export default async function Home() {
 
                 {/* 导航链接：网站 + 友情，tab 切换，统一网站卡样式 */}
                 {(d.siteLinks.length > 0 || d.friendLinks.length > 0) && (
-                  <div className="card-glass card-list w-full rounded-2xl p-4">
+                  <div className="card-glass card-list w-full rounded-2xl p-5">
                     <LinkTabs
                       siteLinks={d.siteLinks.map((l) => ({ ...l, icon: l.icon ?? "" }))}
                       friendLinks={d.friendLinks}

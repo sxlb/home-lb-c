@@ -104,14 +104,14 @@ export default function SocialLinks({ initialLinks }: SocialLinksProps) {
               title={link.tip || link.name}
               aria-label={link.tip || link.name}
             >
-              {/* 24px 图标，margin 0 12px（对齐 home .icon margin） */}
-              <span style={{ margin: "0 12px", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+              {/* 30px 图标，margin 0 14px（放大并对齐） */}
+              <span style={{ margin: "0 14px", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
                 {useIconfont ? (
-                  <svg className="h-[24px] w-[24px]" aria-hidden="true" focusable="false">
+                  <svg className="h-[30px] w-[30px]" aria-hidden="true" focusable="false">
                     <use href={`#${link.icon}`} />
                   </svg>
                 ) : (
-                  <IconComponent className="h-[24px] w-[24px]" />
+                  <IconComponent className="h-[30px] w-[30px]" />
                 )}
               </span>
             </a>

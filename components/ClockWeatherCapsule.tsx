@@ -129,8 +129,8 @@ export default function ClockWeatherCapsule({
        <div className="flex h-full w-full flex-col justify-end">
          {/* 时钟+天气合并为一个紧凑组 */}
          <div className="flex flex-col items-center gap-1.5">
-           {/* 日期行 — 移动端 11px，桌面端（md+）13px 提升可读性 */}
-           <div ref={dateRef} className="text-center text-[11px] tracking-[0.2em] text-white/50 md:text-[13px]">
+           {/* 日期行 — 移动端 12px，桌面端（md+）14px 提升可读性 */}
+           <div ref={dateRef} className="text-center text-[12px] tracking-[0.2em] text-white/50 md:text-[14px]">
              --
            </div>
 
@@ -141,8 +141,8 @@ export default function ClockWeatherCapsule({
                ref={timeRef}
                className={`font-clock leading-none tracking-wider text-white/85 ${
                  timeFormat === "12"
-                   ? "text-[clamp(24px,11cqw,36px)]"
-                   : "text-[clamp(28px,17cqw,48px)]"
+                   ? "text-[clamp(27px,12cqw,42px)]"
+                   : "text-[clamp(32px,19cqw,56px)]"
                }`}
             >
               --:--
@@ -152,18 +152,18 @@ export default function ClockWeatherCapsule({
            {/* 天气信息 */}
            <div className="flex flex-col items-center gap-1.5 text-center">
              {/* 城市名 */}
-             <div className="overflow-hidden whitespace-nowrap text-sm tracking-wide text-white/70">
+             <div className="overflow-hidden whitespace-nowrap text-[15px] tracking-wide text-white/70">
                {city || "--"}
              </div>
 
              {/* 天气 + 温度 + 风向 */}
              <div className="flex items-center justify-center gap-3 overflow-hidden whitespace-nowrap">
-               <span className="text-sm text-white/60">{weather || "--"}</span>
+               <span className="text-[15px] text-white/60">{weather || "--"}</span>
                <span className="opacity-30">·</span>
-               <span className="text-base font-semibold">{temperature || "--"}</span>
+               <span className="text-lg font-semibold">{temperature || "--"}</span>
                <span className="opacity-30">·</span>
-               <span className="hidden items-center gap-1 text-xs text-white/50 sm:flex">
-                 <WindIcon className="h-3.5 w-3.5 shrink-0" />
+               <span className="hidden items-center gap-1 text-[13px] text-white/50 sm:flex">
+                 <WindIcon className="h-4 w-4 shrink-0" />
                  {dir} {power}
                </span>
              </div>

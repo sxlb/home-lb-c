@@ -95,7 +95,7 @@ export default function Hitokoto({ type = "", onOpenMusic }: Props) {
         </button>
       )}
       <p
-        className={`w-full break-words text-sm leading-loose transition-opacity duration-300 md:text-base md:leading-loose ${
+        className={`w-full break-words text-[15px] leading-loose transition-opacity duration-300 md:text-lg md:leading-loose ${
           loading ? "opacity-50" : "opacity-100"
         }`}
         style={{
@@ -108,7 +108,7 @@ export default function Hitokoto({ type = "", onOpenMusic }: Props) {
       >
         {data.text}
       </p>
-      <span className="self-end text-xs font-medium tracking-wide text-white/80 md:text-sm" style={{ letterSpacing: "0.04em" }}>
+      <span className="self-end text-[13px] font-medium tracking-wide text-white/80 md:text-sm" style={{ letterSpacing: "0.04em" }}>
         —「 {data.from} 」
       </span>
     </div>
