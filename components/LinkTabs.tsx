@@ -209,11 +209,11 @@ export default function LinkTabs({
         tabIndex={0}
         className="select-none outline-none focus-visible:ring-2 focus-visible:ring-white/30"
       >
-        <div key={currentPage} className="animate-fade-in grid grid-cols-3 gap-4">
+        <div key={currentPage} className="animate-fade-in grid grid-cols-3 gap-5">
           {Array.from({ length: PAGE_SIZE }, (_, i) => {
             const link = pages[currentPage][i];
             if (!link) {
-              return <div key={`site-link-ph-${i}`} className="h-[86px]" aria-hidden />;
+              return <div key={`site-link-ph-${i}`} className="h-[100px]" aria-hidden />;
             }
             const isImg = isImageIcon(link.icon);
             const IconComponent = isImg ? Globe : getIcon(link.icon);
@@ -222,29 +222,29 @@ export default function LinkTabs({
               <button
                 key={link.id}
                 onClick={() => handleClick(link)}
-                className="card-btn flex h-[86px] flex-col items-center justify-center gap-2"
+                className="card-btn flex h-[100px] w-full flex-row items-center justify-center gap-2"
                 title={link.name}
               >
                 {isImg ? (
                   <Image
                     src={link.icon}
                     alt={link.name}
-                    width={24}
-                    height={24}
-                    className="h-6 w-6 shrink-0 rounded-full object-cover"
+                    width={26}
+                    height={26}
+                    className="h-[26px] w-[26px] shrink-0 rounded-full object-cover"
                     unoptimized
                     onError={(e) => {
                       e.currentTarget.style.display = "none";
                     }}
                   />
                 ) : useIconfont ? (
-                  <svg className="h-6 w-6 shrink-0 text-white/80" aria-hidden="true" focusable="false">
+                  <svg className="h-[26px] w-[26px] shrink-0 text-white/80" aria-hidden="true" focusable="false">
                     <use href={`#${link.icon}`} />
                   </svg>
                 ) : (
-                  <IconComponent className="h-6 w-6 shrink-0 text-white/80" />
+                  <IconComponent className="h-[26px] w-[26px] shrink-0 text-white/80" />
                 )}
-                <span className="line-clamp-2 w-full break-words text-center text-sm font-medium leading-snug tracking-wide text-white/85">
+                <span className="hidden max-w-[7.5rem] truncate text-base font-medium tracking-wide text-white/85 md:inline">
                   {link.name}
                 </span>
               </button>
