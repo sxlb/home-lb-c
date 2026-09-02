@@ -25,3 +25,8 @@ prisma/dev.db-journal
 
 # 运行时数据目录（Docker 卷映射）
 data
+
+# 参考源码克隆与本地设计稿（不入库）
+.ref-home/
+home-lb-src.tar.gz
+sxlb-ui-design.svg

@@ -1,5 +1,18 @@
 import { z } from "zod";
 
+// 站点公告新增/编辑校验 schema（title 必填、content 必填、时间区间可空）
+export const announcementSchema = z.object({
+  title: z.string().trim().min(1, "标题不能为空").max(100, "标题过长"),
+  content: z.string().trim().min(1, "内容不能为空").max(5000, "内容过长"),
+  pinned: z.boolean().default(false),
+  enabled: z.boolean().default(true),
+  sort: z.number().int().min(0).max(9999).default(0),
+  startAt: z.string().datetime({ offset: true, message: "startAt 需为 ISO 时间" }).nullable().default(null),
+  endAt: z.string().datetime({ offset: true, message: "endAt 需为 ISO 时间" }).nullable().default(null),
+});
+// 编辑时允许部分字段：标题/内容/置顶/上线/排序/时间
+export const announcementPatchSchema = announcementSchema.partial();
+
 // 右上角欢迎通知：默认 5 句欢迎语（{siteName} 会被替换为站点昵称）
 export const DEFAULT_WELCOME_MESSAGES = [
   "欢迎来到 {siteName} 的小站～",

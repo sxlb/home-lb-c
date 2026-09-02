@@ -111,6 +111,17 @@ export default function LinkTabs({
       window.dispatchEvent(event);
       return;
     }
+    // 热门链接统计：fire-and-forget 上报（失败静默，不影响跳转）
+    try {
+      fetch("/api/stats/click", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: link.id, name: link.name, url: link.url }),
+        keepalive: true,
+      }).catch(() => {});
+    } catch {
+      /* 忽略 */
+    }
     window.open(link.url, "_blank", "noopener,noreferrer");
   };
 

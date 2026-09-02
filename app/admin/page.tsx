@@ -23,6 +23,7 @@ import {
   Music,
   Database,
   BarChart3,
+  Megaphone,
 } from "lucide-react";
 import ProfilePanel from "@/components/admin/ProfilePanel";
 import LinksPanel from "@/components/admin/LinksPanel";
@@ -35,6 +36,7 @@ import ThemePanel from "@/components/admin/ThemePanel";
 import MusicPanel from "@/components/admin/MusicPanel";
 import DataPanel from "@/components/admin/DataPanel";
 import StatsPanel from "@/components/admin/StatsPanel";
+import AnnouncementPanel from "@/components/admin/AnnouncementPanel";
 
 type TabId =
   | "profile"
@@ -44,6 +46,7 @@ type TabId =
   | "site"
   | "friend"
   | "weather"
+  | "announcements"
   | "account"
   | "logs"
   | "health"
@@ -75,6 +78,7 @@ const NAV_GROUPS: NavGroup[] = [
       { id: "site", label: "网站链接", icon: Globe, description: "管理主页显示的网站列表（博客、网盘等）" },
       { id: "friend", label: "友情链接", icon: Users, description: "管理首页展示的友情链接与合作伙伴" },
       { id: "weather", label: "天气设置", icon: CloudSun, description: "配置天气组件的城市与展示样式" },
+      { id: "announcements", label: "站点公告", icon: Megaphone, description: "发布/编辑公告，前台上方展示" },
     ],
   },
   {
@@ -389,6 +393,7 @@ export default function AdminPage() {
               )}
               {activeTab === "friend" && <FriendLinksPanel />}
               {activeTab === "weather" && <WeatherPanel />}
+              {activeTab === "announcements" && <AnnouncementPanel />}
               {activeTab === "account" && <AccountPanel />}
               {activeTab === "logs" && <OperationLogPanel />}
               {activeTab === "health" && <HealthPanel />}

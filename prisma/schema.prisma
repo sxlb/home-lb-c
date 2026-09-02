@@ -138,3 +138,43 @@ model VisitStat {
   pv   Int    @default(0)
   uv   Int    @default(0)
 }
+
+model SiteAnnouncement {
+  id        Int       @id @default(autoincrement())
+  title     String
+  content   String
+  pinned    Boolean   @default(false)  // 是否置顶（置顶优先展示）
+  enabled   Boolean   @default(true)   // 是否上线显示
+  sort      Int       @default(0)
+  startAt   DateTime?                 // 定时上线（空 = 不限）
+  endAt     DateTime?                 // 定时下线（空 = 不限）
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([enabled])
+}
+
+model VisitRecord {
+  id             Int      @id @default(autoincrement())
+  date           String
+  hour           Int      @default(0)                 // 东八区小时，用于时段分布
+  ip             String   @default("")                 // 记录来源 IP（用于地域聚合与去重分析）
+  referrerDomain String   @default("")                 // 来源站（referer 的域名，空=直接访问/书签）
+  device         String   @default("desktop")          // desktop / mobile / tablet
+  os             String   @default("")                 // 操作系统
+  browser        String   @default("")                 // 浏览器
+  createdAt      DateTime @default(now())
+
+  @@index([date])
+}
+
+model SiteLinkClick {
+  id        Int      @id @default(autoincrement())
+  linkId    Int      @unique
+  name      String
+  url       String
+  count     Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  @@index([count])
+}

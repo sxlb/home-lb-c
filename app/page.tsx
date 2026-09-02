@@ -19,6 +19,8 @@ import dynamic from "next/dynamic";
 
 const LoadingScreen = dynamic(() => import("@/components/LoadingScreen").then((m) => m.LoadingScreen), { ssr: true });
 const SeasonalEffect = dynamic(() => import("@/components/SeasonalEffect"));
+// 公告条：非首屏必需，延迟加载减小首屏 JS
+const AnnouncementBar = dynamic(() => import("@/components/AnnouncementBar"), { ssr: true });
 // 页脚懒加载：桌面端页脚在视口外，延迟加载减小首屏 JS
 const FooterLazy = dynamic(() => import("@/components/Footer"), {
   ssr: true,
@@ -97,7 +99,11 @@ export default async function Home() {
         <CustomFont enabled={d.customFontEnabled} family={d.customFontFamily} scope={d.customFontScope} />
 
         <section className="relative z-10 flex w-full flex-1 flex-col items-center">
-          <div className="mx-auto flex w-full max-w-5xl flex-col items-center gap-5 px-5 pt-16 pb-20 md:my-auto md:items-start md:px-4 md:pt-0 md:pb-0">
+          {/* 站点公告：顶部展示当前有效公告（置顶优先） */}
+          <div className="mt-4 flex w-full justify-center px-5 md:mt-6 md:px-4">
+            <AnnouncementBar />
+          </div>
+          <div className="mx-auto flex w-full max-w-5xl flex-col items-center gap-5 px-5 pt-4 pb-20 md:my-auto md:items-start md:px-4 md:pb-0 md:pt-0">
             {/* 双栏：各自自然高度、整体垂直居中（对齐全站 .all align-items:center）；
                 左栏 translateY(20px) 下移，复刻参考站左低右高的错位张力 */}
             <div className="flex w-full flex-col items-center gap-5 md:flex-row md:items-center">
