@@ -45,10 +45,20 @@ jobs:
           node-version: 22
           cache: npm
 
-      # 将本次 release 版本同步进 package.json（仅工作区，不提交回仓库，避免 CI 循环），
+      # 将本次 release 版本同步进 package.json / package-lock.json（仅工作区，不提交回仓库，避免 CI 循环），
       # 使构建产物内嵌的"当前版本"（CURRENT_VERSION）与本次发布版本一致。
+      # 不用 `npm version`：当版本与现有值相同时它会以 "Version not changed" 报错（exit 1）而打断首发构建。
       - name: Sync version into package.json
-        run: npm version "${{ steps.version.outputs.VERSION }}" --no-git-tag-version
+        run: |
+          node -e '
+            const fs = require("fs");
+            const v = process.argv[1];
+            for (const f of ["package.json", "package-lock.json"]) {
+              const j = JSON.parse(fs.readFileSync(f, "utf8"));
+              j.version = v;
+              fs.writeFileSync(f, JSON.stringify(j, null, 2) + "\n");
+            }
+          ' "${{ steps.version.outputs.VERSION }}"
 
       - name: Install dependencies
         run: npm ci
