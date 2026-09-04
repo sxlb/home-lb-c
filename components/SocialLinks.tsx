@@ -104,8 +104,8 @@ export default function SocialLinks({ initialLinks }: SocialLinksProps) {
               title={link.tip || link.name}
               aria-label={link.tip || link.name}
             >
-              {/* 30px 图标，margin 0 14px（放大并对齐） */}
-              <span style={{ margin: "0 14px", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+              {/* 30px 图标，间距交由容器 row gap 统一控制（左侧紧凑，仅拉近图标间距离） */}
+              <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
                 {useIconfont ? (
                   <svg className="h-[30px] w-[30px]" aria-hidden="true" focusable="false">
                     <use href={`#${link.icon}`} />

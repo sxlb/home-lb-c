@@ -176,9 +176,10 @@ export default function LinkTabs({
 
   return (
     <div className="site-links-container">
-      {/* 标题行 + tab 切换 */}
-      <div className="mb-5 flex items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-3">
+      {/* 标题 + 切换 tab 融合：统一左排为一组（标题居中集群 + 细分隔线 + tab），
+          消除"大标题在左、切换钮在右"的割裂感 */}
+      <div className="mb-5 flex items-center gap-3">
+        <div className="flex min-w-0 items-center gap-2.5">
           {useIconfontTitle ? (
             <svg className="h-6 w-6 shrink-0 text-white/90 drop-shadow-[0_2px_6px_rgba(0,0,0,0.5)]" aria-hidden="true" focusable="false">
               <use href={`#${siteIcon}`} />
@@ -186,28 +187,31 @@ export default function LinkTabs({
           ) : (
             <TitleIcon className="h-6 w-6 shrink-0 text-white/90 drop-shadow-[0_2px_6px_rgba(0,0,0,0.5)]" />
           )}
-          <span className="truncate text-xl font-bold tracking-wide text-white drop-shadow-[0_2px_10px_rgba(0,0,0,0.55)]">
+          <span className="truncate text-lg font-bold tracking-wide text-white drop-shadow-[0_2px_10px_rgba(0,0,0,0.55)]">
             {titleText}
           </span>
         </div>
 
         {tabs.length > 1 && (
-          <div className="flex shrink-0 items-center gap-1.5">
-            {tabs.map((t) => (
-              <button
-                key={t.key}
-                onClick={() => setTab(t.key as "site" | "friend")}
-                aria-label={t.label}
-                className={`rounded-full px-3.5 py-1.5 text-[13px] font-medium transition-all duration-200 ${
-                  tab === t.key
-                    ? "bg-white/90 text-neutral-900"
-                    : "bg-white/10 text-white/70 hover:bg-white/20 hover:text-white"
-                }`}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
+          <>
+            <span className="h-5 w-px shrink-0 bg-white/20" aria-hidden />
+            <div className="flex shrink-0 items-center gap-1.5">
+              {tabs.map((t) => (
+                <button
+                  key={t.key}
+                  onClick={() => setTab(t.key as "site" | "friend")}
+                  aria-label={t.label}
+                  className={`rounded-full px-3.5 py-1.5 text-[13px] font-medium transition-all duration-200 ${
+                    tab === t.key
+                      ? "bg-white/90 text-neutral-900"
+                      : "bg-white/10 text-white/70 hover:bg-white/20 hover:text-white"
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          </>
         )}
       </div>
 
@@ -266,7 +270,7 @@ export default function LinkTabs({
 
       {/* 翻页按钮：左右箭头 + 分页指示点（保留原网站链接交互） */}
       {pages.length > 1 && (
-        <div className="mt-5 flex items-center justify-center gap-4">
+        <div className="mt-5 flex items-center justify-center gap-4 lg:mt-6">
           <button
             onClick={() => setPage((p) => Math.max(p - 1, 0))}
             disabled={currentPage === 0}

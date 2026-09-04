@@ -500,77 +500,64 @@ export function WelcomeNotice({
   }
 
   return (
-    // 全屏居中欢迎通知：fixed 撑满视口，flex 居中；外层 pointer-events-none 让页面其余区域可正常滚动交互，
-    // 点击页面任意位置仍会关闭（document 捕获阶段监听）；居中卡片自身 pointer-events-auto 可点击关闭按钮
+    // 顶部欢迎横幅：作为页面正常流的最上方元素，与下方公告条同区构成"通知栈"（融合、不重叠），
+    // 去掉全屏遮罩与居中弹窗的"割裂感"。点击卡片外任意位置即可关闭（document 捕获监听），
+    // 外层 pointer-events-none 让下方内容正常交互，卡片自身 pointer-events-auto 可点关闭按钮。
     <div
-      className="pointer-events-none fixed inset-0 z-[100]"
+      className="pointer-events-none mt-4 flex w-full justify-center px-4"
       role="status"
       aria-live="polite"
     >
-      <div className="flex h-full w-full items-center justify-center p-4">
-        {/* 背景压暗蒙层：让居中卡片成为视觉焦点（点击穿透，仍可触发关闭） */}
-        <div className="animate-fade pointer-events-none absolute inset-0 bg-black/40 backdrop-blur-[3px]" />
+      <div className="animate-notice-center pointer-events-auto relative w-full max-w-[560px]">
+        <div className="relative overflow-hidden rounded-2xl border border-white/20 bg-gradient-to-br from-[#1b2440]/85 via-[#161d33]/82 to-[#101627]/85 shadow-xl shadow-black/40 backdrop-blur-xl">
+          {/* 顶部强调色渐变条（颜色随后台强调色，更宽的光晕） */}
+          <div
+            className="pointer-events-none absolute inset-x-0 top-0 h-[3px]"
+            style={{
+              background:
+                "linear-gradient(90deg, transparent 0%, color-mix(in srgb, var(--accent-color, #7dd3fc) 90%, transparent) 50%, transparent 100%)",
+            }}
+          />
+          {/* 左侧竖条强调线 */}
+          <div
+            className="pointer-events-none absolute inset-y-0 left-0 w-[3px] rounded-l-2xl"
+            style={{
+              background:
+                "linear-gradient(180deg, transparent 8%, color-mix(in srgb, var(--accent-color, #7dd3fc) 80%, transparent) 50%, transparent 92%)",
+            }}
+          />
 
-        {/* 居中卡片：半透明玻璃拟态，背景更实（透明度 85%~90%），质感更高级 */}
-        <div className="animate-notice-center pointer-events-auto relative w-full max-w-[540px]">
-          <div className="relative overflow-hidden rounded-2xl border border-white/25 bg-gradient-to-br from-[#1b2440]/90 via-[#161d33]/88 to-[#101627]/90 p-6 shadow-2xl shadow-black/50 backdrop-blur-2xl md:p-7">
-            {/* 顶部强调色渐变条（颜色随后台强调色，更宽的光晕） */}
-            <div
-              className="pointer-events-none absolute inset-x-0 top-0 h-[3px]"
+          <div className="relative flex items-center gap-3 px-5 py-4 md:gap-4 md:px-6">
+            {/* 铃铛图标徽章 */}
+            <span
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
               style={{
-                background:
-                  "linear-gradient(90deg, transparent 0%, color-mix(in srgb, var(--accent-color, #7dd3fc) 90%, transparent) 50%, transparent 100%)",
+                backgroundColor: "color-mix(in srgb, var(--accent-color, #7dd3fc) 22%, transparent)",
+                color: "var(--accent-color, #7dd3fc)",
               }}
-            />
-            {/* 右上角柔和光斑点缀：增强玻璃质感与立体感 */}
-            <div
-              className="pointer-events-none absolute -right-16 -top-16 h-40 w-40 rounded-full opacity-25 blur-3xl"
-              style={{
-                background: "radial-gradient(circle, var(--accent-color, #7dd3fc), transparent 70%)",
-              }}
-            />
-            {/* 左侧竖条强调线 */}
-            <div
-              className="pointer-events-none absolute inset-y-0 left-0 w-[3px] rounded-l-2xl"
-              style={{
-                background:
-                  "linear-gradient(180deg, transparent 8%, color-mix(in srgb, var(--accent-color, #7dd3fc) 85%, transparent) 50%, transparent 92%)",
-              }}
-            />
+            >
+              <BellRing className="h-5 w-5" />
+            </span>
 
-            <div className="relative flex items-start gap-4">
-              {/* 铃铛图标徽章 */}
-              <span
-                className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-xl shadow-lg"
-                style={{
-                  backgroundColor: "color-mix(in srgb, var(--accent-color, #7dd3fc) 22%, transparent)",
-                  color: "var(--accent-color, #7dd3fc)",
-                  boxShadow: "0 4px 14px color-mix(in srgb, var(--accent-color, #7dd3fc) 30%, transparent)",
-                }}
-              >
-                <BellRing className="h-[22px] w-[22px]" />
-              </span>
-
-              <div className="min-w-0 flex-1">
-                <p className="break-words text-[15px] leading-relaxed text-white md:text-base">
-                  {text}
-                  {visitorInfo && (
-                    <span className="mt-2 block text-[13px] text-white/55">
-                      {visitorInfo}
-                    </span>
-                  )}
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setRemoved(true)}
-                className="-mr-1 -mt-1 shrink-0 rounded-lg border border-white/10 bg-white/10 p-2 text-white/60 transition-all hover:bg-white/20 hover:text-white active:scale-95"
-                aria-label="关闭欢迎消息"
-              >
-                <X className="h-4 w-4" />
-              </button>
+            <div className="min-w-0 flex-1">
+              <p className="break-words text-[14px] leading-relaxed text-white md:text-[15px]">
+                {text}
+                {visitorInfo && (
+                  <span className="mt-1 block text-[13px] text-white/55">
+                    {visitorInfo}
+                  </span>
+                )}
+              </p>
             </div>
+
+            <button
+              type="button"
+              onClick={() => setRemoved(true)}
+              className="-mr-1 shrink-0 rounded-lg border border-white/10 bg-white/10 p-1.5 text-white/60 transition-all hover:bg-white/20 hover:text-white active:scale-95"
+              aria-label="关闭欢迎消息"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
           </div>
         </div>
       </div>

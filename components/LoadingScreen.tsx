@@ -12,28 +12,14 @@ interface LoadingScreenProps {
 /**
  * 全屏加载动画
  * - 三环旋转动画 + 站点名 + Loading 文字
- * - 条件全部满足后分屏收起，随后移除遮罩：
- *   1. 最短展示 800ms（避免闪屏）
- *   2. 页面 window load 完成 或 宽松就绪（800ms + 2s 等待，弱网下壁纸未就绪也收口）
- *   3. 背景壁纸就绪（Background 组件广播 background-ready 事件）
- * - 安全兜底：最长 5s 强制收起，防止背景源异常导致加载动画卡死
+ * - 收起时机：最短展示 800ms 后，若壁纸已就绪（或壁纸源失败）即收起。
+ *   期间壁纸已在后台通过 SSR preload + new Image() 预加载，保证动画结束壁纸必然已在底层，
+ *   不再因宽松超时"提前收口"导致动画结束后出现黑屏待壁纸。
+ * - 安全兜底：最长 7s 强制收起，防止背景源异常导致加载动画卡死
  */
 export function LoadingScreen({ enabled = true, siteName = "" }: LoadingScreenProps) {
   const [loaded, setLoaded] = useState(false);
   const [removed, setRemoved] = useState(false);
-  const [bgReady, setBgReady] = useState(false);
-
-  // 监听背景就绪事件；若背景先于本组件挂载完成（window.__bgReady），直接视为就绪
-  useEffect(() => {
-    if (!enabled) return;
-    if ((window as unknown as { __bgReady?: boolean }).__bgReady) {
-      setBgReady(true);
-      return;
-    }
-    const onReady = () => setBgReady(true);
-    window.addEventListener("background-ready", onReady);
-    return () => window.removeEventListener("background-ready", onReady);
-  }, [enabled]);
 
   useEffect(() => {
     if (!enabled || removed) return;
@@ -53,41 +39,35 @@ export function LoadingScreen({ enabled = true, siteName = "" }: LoadingScreenPr
       }, 1400);
     };
 
-    const tryHide = () => {
-      if (document.readyState === "complete" && bgReady) hide();
+    // 壁纸就绪后立即收起（Background 成功或失败都会广播 background-ready）
+    const onBgReady = () => {
+      if (mounted && !hideTimer) hide();
     };
 
-    // 最短展示时间（800ms）+ 条件判断
+    // 最短展示 800ms（避免闪屏），期间壁纸已通过 SSR preload 后台下载、
+    // Background 组件 new Image() 预加载——动画结束时壁纸必然已渲染在底层，不会出现"壁纸还没出来"。
     const minTimer = setTimeout(() => {
-      if (document.readyState === "complete" && bgReady) {
-        hide();
-      } else {
-        window.addEventListener("load", tryHide, { once: true });
+      if (mounted && !hideTimer) {
+        if ((window as unknown as { __bgReady?: boolean }).__bgReady) {
+          hide();
+        } else {
+          window.addEventListener("background-ready", onBgReady, { once: true });
+        }
       }
     }, 800);
 
-    // 宽松就绪兜底：最短展示 800ms + 2s 等待（2800ms 时点）后，壁纸未就绪也收起
-    // 避免弱网下背景源慢导致加载动画长时间遮挡首屏（LCP 优化）
-    const relaxedTimer = setTimeout(() => {
-      if (!mounted || hideTimer) return;
-      if (document.readyState === "complete" && !bgReady) hide();
-    }, 2800);
-
-    // 背景就绪（bgReady 变化触发本 effect 重跑）后立即复查
-    if (bgReady && document.readyState === "complete") hide();
-
-    // 安全兜底：最长 5s 无论背景是否就绪都收起
-    const safety = setTimeout(hide, 5000);
+    // 安全兜底：仅供背景源/事件异常时兜底，正常判定完全由 background-ready 决定，
+    // 从而保证"动画结束前壁纸已就绪"。不再提供 2.8s 的宽松提前收起（那是黑屏的根源）。
+    const safety = setTimeout(hide, 7000);
 
     return () => {
       mounted = false;
       if (minTimer) clearTimeout(minTimer);
-      if (relaxedTimer) clearTimeout(relaxedTimer);
       if (safety) clearTimeout(safety);
       if (hideTimer) clearTimeout(hideTimer);
-      window.removeEventListener("load", tryHide);
+      window.removeEventListener("background-ready", onBgReady);
     };
-  }, [enabled, bgReady, removed]);
+  }, [enabled, removed]);
 
   if (!enabled || removed) return null;
 

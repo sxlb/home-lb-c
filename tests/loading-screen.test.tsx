@@ -106,6 +106,6 @@ describe("LoadingScreen", () => {
     const removeSpy = vi.spyOn(window, "removeEventListener");
     const { unmount } = render(<LoadingScreen enabled />);
     unmount();
-    expect(removeSpy).toHaveBeenCalledWith("load", expect.any(Function));
+    expect(removeSpy).toHaveBeenCalledWith("background-ready", expect.any(Function));
   });
 });

@@ -103,10 +103,10 @@ export default async function Home() {
           <div className="mt-4 flex w-full justify-center px-5 md:mt-6 md:px-4">
             <AnnouncementBar />
           </div>
-          <div className="mx-auto flex w-full max-w-5xl flex-col items-center gap-5 px-5 pt-4 pb-20 md:my-auto md:items-start md:px-4 md:pb-0 md:pt-0">
+          <div className="mx-auto flex w-full max-w-6xl flex-col items-center gap-5 px-5 pt-4 pb-20 md:my-auto md:items-start md:px-6 md:pb-0 md:pt-0 lg:gap-8">
             {/* 双栏：各自自然高度、整体垂直居中（对齐全站 .all align-items:center）；
                 左栏 translateY(20px) 下移，复刻参考站左低右高的错位张力 */}
-            <div className="flex w-full flex-col items-center gap-5 md:flex-row md:items-center">
+            <div className="flex w-full flex-col items-center gap-5 md:flex-row md:items-center md:gap-8 lg:gap-12">
               {/* 左侧区域：头像 + 简介 + 社交（内容贴顶对齐，头像在最上方） */}
               <div className="flex w-full flex-col items-center md:w-1/2 md:items-start md:translate-y-5">
                 <div className="flex items-center gap-5 sm:gap-7 md:gap-8 lg:gap-9 xl:gap-12">
@@ -143,9 +143,9 @@ export default async function Home() {
               </div>
 
               {/* 右侧区域：功能区 + 链接 */}
-              <div className="flex w-full flex-col gap-5 md:w-1/2 md:max-w-[500px]">
+              <div className="flex w-full flex-col gap-5 md:w-1/2 md:max-w-[500px] lg:gap-7">
                 {/* 功能卡片组：一言 + 时钟天气（lg 起才并排，避免 md 下时钟卡过窄导致时间溢出） */}
-                <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+                <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 lg:gap-6">
                   {/* 一言 / 音乐控制面板（hover 或"打开音乐"按钮切换，对齐 home） */}
                   <div>
                     <MusicCardLazy hitokotoType={d.hitokotoType} />
@@ -153,8 +153,8 @@ export default async function Home() {
 
                   {/* 时钟+天气：clock-card-container 启用容器查询（container-type: inline-size），
                       时间字号按卡片宽度自适应（cqw）；min-h 对齐参考站 .function 高度 165px */}
-                  <div className="clock-card-container min-h-[165px]">
-                    <div className="card-glass card-func flex h-full w-full flex-col justify-end p-5">
+                  <div className="clock-card-container min-h-[180px]">
+                    <div className="card-glass card-func flex h-full w-full flex-col justify-end p-5 lg:p-6">
                       <ClockWeatherCapsule
                         timeFormat={d.timeFormat}
                         showSeconds={d.showSeconds}
@@ -166,7 +166,7 @@ export default async function Home() {
 
                 {/* 导航链接：网站 + 友情，tab 切换，统一网站卡样式 */}
                 {(d.siteLinks.length > 0 || d.friendLinks.length > 0) && (
-                  <div className="card-glass card-list w-full rounded-2xl p-5">
+                  <div className="card-glass card-list w-full rounded-2xl p-5 lg:p-6">
                     <LinkTabs
                       siteLinks={d.siteLinks.map((l) => ({ ...l, icon: l.icon ?? "" }))}
                       friendLinks={d.friendLinks}
