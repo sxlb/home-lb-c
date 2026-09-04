@@ -9,9 +9,9 @@ COPY prisma/schema.prisma ./prisma/schema.prisma
 # npm_config_registry 环境变量优先级高于 .npmrc，故能覆盖其中的 registry 配置。
 ARG NPM_REGISTRY=https://registry.npmjs.org
 ENV npm_config_registry=$NPM_REGISTRY
-# Prisma 引擎二进制下载镜像：VPS 在国内，默认 binaries.prisma.sh 被墙会导致
-# @prisma/client postinstall / prisma generate 卡死或取不到 linux-musl 引擎
-ENV PRISMA_ENGINES_MIRROR=https://registry.npmmirror.com/-/binary/prisma
+# 不设置 PRISMA_ENGINES_MIRROR，让 prisma 走默认的 binaries.prisma.sh（GitHub）下载引擎：
+# 本部署机实测该域名毫秒级可达，而 npmmirror 的引擎二进制线路会拖慢/卡死 prisma generate，
+# 与之前 npm 卡死同源。故不再强制镜像。
 # 优先 npm ci（可复现构建）；lock 缺失时回退 npm install。
 # --mount=type=cache 将 npm 缓存目录挂载到宿主机持久层，依赖 tarball 跨部署复用，
 # 避免小机重复冷下载（BuildKit 特性；docker compose v2 默认开启）。
@@ -27,7 +27,6 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 # 先复制 Prisma schema：仅 schema 变化时才重新 generate，命中缓存
 COPY prisma/schema.prisma ./prisma/schema.prisma
-ENV PRISMA_ENGINES_MIRROR=https://registry.npmmirror.com/-/binary/prisma
 RUN npx prisma generate
 # 再复制其余源码（不会破坏上方的 generate 缓存层）
 COPY . .
