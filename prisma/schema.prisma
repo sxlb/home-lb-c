@@ -165,7 +165,9 @@ model VisitRecord {
   browser        String   @default("")                 // 浏览器
   createdAt      DateTime @default(now())
 
-  @@index([date])
+  // 组合索引：(date, hour) 同时覆盖「按日期范围过滤 + 按时段聚合」的统计查询，
+  // 以及纯日期范围扫描（最左前缀），故不再需要单独的 date 索引
+  @@index([date, hour])
 }
 
 model SiteLinkClick {
@@ -177,4 +179,18 @@ model SiteLinkClick {
   updatedAt DateTime @updatedAt
 
   @@index([count])
+}
+
+model ImageAsset {
+  id        Int      @id @default(autoincrement())
+  url       String   @unique // 存储相对路径（/api/uploads/file/xxx）
+  fileName  String
+  mimeType  String   @default("image/png")
+  size      Int      @default(0)
+  width     Int      @default(0)
+  height    Int      @default(0)
+  usage     String   @default("") // avatar/siteicon/link/wallpaper/logo...
+  createdAt DateTime @default(now())
+
+  @@index([mimeType])
 }

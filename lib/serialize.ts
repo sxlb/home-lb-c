@@ -1,0 +1,20 @@
+/**
+ * 进程内写串行化队列。
+ *
+ * SQLite 同一时刻只允许一个写事务；当同一进程内多个请求并发执行写操作时，
+ * 未加等待的写会直接返回 SQLITE_BUSY。个人站点为单实例部署（内存限流器同理），
+ * 因此用一个模块级 Promise 链把所有写任务串行执行，从根源消除同进程写竞争。
+ *
+ * 注意：串行化只保证"单实例内"不冲突；多实例 / Serverless 场景仍需
+ * 改用外部数据库或分布式锁（见 lib/db.ts 中的 WAL/busy_timeout 兜底）。
+ */
+
+let tail: Promise<unknown> = Promise.resolve();
+
+/** 将 task 排入写队列串行执行，返回该任务自身的 Promise（失败不影响后续任务） */
+export function serialized<T>(task: () => Promise<T>): Promise<T> {
+  const run = tail.then(() => task());
+  // 无论前序任务成败都放行下一个；吞掉错误避免 tail 进入 rejected 态
+  tail = run.catch(() => undefined);
+  return run;
+}

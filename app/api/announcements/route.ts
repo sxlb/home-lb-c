@@ -4,7 +4,7 @@ import {
   internalError, error, success, requireSession, parseJsonBody,
   formatZodError, writeOperationLog, getClientIp,
 } from "@/lib/server";
-import { announcementSchema } from "@/lib/validation";
+import { announcementSchema, announcementBatchSchema } from "@/lib/validation";
 
 export const dynamic = "force-dynamic";
 
@@ -63,5 +63,82 @@ export async function POST(request: NextRequest) {
     return success(created, 201);
   } catch (e) {
     return internalError("[POST /api/announcements] 创建失败", e);
+  }
+}
+
+/** 后台：批量保存公告（整表替换语义，与链接面板一致）。项含 id 则更新、无 id 则新增、未提交则删除。 */
+export async function PUT(request: NextRequest) {
+  try {
+    const session = await requireSession();
+    if (!session) {
+      return error("未授权", 401);
+    }
+    const json = await parseJsonBody(request);
+    if (!Array.isArray(json)) {
+      return error("请求体需为公告数组");
+    }
+    const parsed = announcementBatchSchema.safeParse(json);
+    if (!parsed.success) {
+      return error(`参数校验失败：${formatZodError(parsed.error)}`);
+    }
+    const items = parsed.data;
+    const username = session.user?.name || "unknown";
+    const ip = getClientIp(request);
+
+    const dataOf = (it: (typeof items)[number]) => ({
+      title: it.title,
+      content: it.content,
+      pinned: it.pinned,
+      enabled: it.enabled,
+      sort: it.sort,
+      startAt: it.startAt ? new Date(it.startAt) : null,
+      endAt: it.endAt ? new Date(it.endAt) : null,
+    });
+
+    const result = await prisma.$transaction(async (tx) => {
+      const existingRows = await tx.siteAnnouncement.findMany({ select: { id: true } });
+      const existingIds = existingRows.map((r) => r.id);
+      const submitIds = items.filter((it) => it.id != null).map((it) => it.id!);
+
+      let createdCount = 0;
+      let updatedCount = 0;
+      for (const it of items) {
+        // id 存在且属于现有关键更新，否则按新增处理（避免陈旧 id 触发 update 报错）
+        if (it.id != null && existingIds.includes(it.id)) {
+          await tx.siteAnnouncement.update({ where: { id: it.id }, data: dataOf(it) });
+          updatedCount += 1;
+        } else {
+          await tx.siteAnnouncement.create({ data: dataOf(it) });
+          createdCount += 1;
+        }
+      }
+
+      // 整表替换：删除未被提交的旧记录
+      const toDelete = existingIds.filter((id) => !submitIds.includes(id));
+      let deletedCount = 0;
+      if (toDelete.length > 0) {
+        const del = await tx.siteAnnouncement.deleteMany({ where: { id: { in: toDelete } } });
+        deletedCount = del.count;
+      }
+
+      await tx.operationLog.create({
+        data: {
+          module: "announcements",
+          action: "batch_update",
+          username,
+          summary: `批量保存公告：新增 ${createdCount} / 更新 ${updatedCount} / 删除 ${deletedCount}`,
+          detail: JSON.stringify({ createdCount, updatedCount, deletedCount }),
+          ip,
+        },
+      });
+      return { createdCount, updatedCount, deletedCount };
+    });
+
+    const list = await prisma.siteAnnouncement.findMany({
+      orderBy: [{ pinned: "desc" }, { sort: "asc" }, { createdAt: "desc" }],
+    });
+    return NextResponse.json({ list, ...result });
+  } catch (e) {
+    return internalError("[PUT /api/announcements] 批量保存失败", e);
   }
 }

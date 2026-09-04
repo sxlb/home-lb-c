@@ -48,11 +48,33 @@ const config: Config = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        // 语义状态色（P1 设计令牌）：success/warning/error/info + 浅底（attached to soft）
+        success: {
+          DEFAULT: "hsl(var(--success))",
+          soft: "hsl(var(--success-soft))",
+        },
+        warning: {
+          DEFAULT: "hsl(var(--warning))",
+          soft: "hsl(var(--warning-soft))",
+        },
+        error: {
+          DEFAULT: "hsl(var(--error))",
+          soft: "hsl(var(--error-soft))",
+        },
+        info: {
+          DEFAULT: "hsl(var(--info))",
+          soft: "hsl(var(--info-soft))",
+        },
       },
       borderRadius: {
-        lg: "var(--radius)",
-        md: "calc(var(--radius) - 2px)",
-        sm: "calc(var(--radius) - 4px)",
+        // shadcn 圆角接入设计令牌（值为既有视觉，不产生回归）：
+        //   卡片/大块面(lg)=radius-md · 控件(md)=radius-sm · 小徽标(sm)=radius-xs
+        lg: "var(--radius-md)",
+        md: "var(--radius-sm)",
+        sm: "var(--radius-xs)",
+        // 大卡片/弹层：取代 tailwind 默认 12px(xl)/16px(2xl)，收口到令牌刻度(lg/xl)
+        xl: "var(--radius-lg)",
+        "2xl": "var(--radius-xl)",
       },
     },
   },

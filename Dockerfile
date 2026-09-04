@@ -4,6 +4,9 @@ FROM node:22-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json* ./
 COPY prisma/schema.prisma ./prisma/schema.prisma
+# Prisma 引擎二进制下载镜像：VPS 在国内，默认 binaries.prisma.sh 被墙会导致
+# @prisma/client postinstall / prisma generate 卡死或取不到 linux-musl 引擎
+ENV PRISMA_ENGINES_MIRROR=https://registry.npmmirror.com/-/binary/prisma
 # 优先 npm ci（可复现构建）；lock 缺失时回退 npm install
 RUN npm ci || npm install
 
@@ -14,10 +17,13 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 # 先复制 Prisma schema：仅 schema 变化时才重新 generate，命中缓存
 COPY prisma/schema.prisma ./prisma/schema.prisma
+ENV PRISMA_ENGINES_MIRROR=https://registry.npmmirror.com/-/binary/prisma
 RUN npx prisma generate
 # 再复制其余源码（不会破坏上方的 generate 缓存层）
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
+# 限制构建 Node 堆内存，防止在 2GB 小机上 next build OOM 拖垮整台服务器
+ENV NODE_OPTIONS=--max-old-space-size=1536
 # 字体构建容错：优先正常构建（保留 next/font/google 真实自托管字体）；
 # 若 fonts.gstatic.com 在国内被墙导致下载失败，则用 NEXT_FONT_GOOGLE_MOCKED_RESPONSES=1
 # 兜底重跑一次（离线 mock 字体），保证镜像构建永不因 Google Fonts 阻断。
@@ -35,7 +41,8 @@ RUN addgroup -g 1001 -S app && adduser -S home -u 1001 -G app
 
 # 安装 openssl：让 Prisma Client/CLI 在运行时能正确探测 OpenSSL 版本，
 # 消除 "Prisma failed to detect the libssl/openssl version" 启动告警（Alpine 最小镜像默认缺失）
-RUN apk add --no-cache openssl
+# tzdata：配合上方 ENV TZ 提供时区数据库（Alpine 默认不含 zoneinfo）
+RUN apk add --no-cache openssl tzdata
 
 # 复制 standalone 产物与静态资源（public 目录归属 home:app）
 COPY --from=builder --chown=home:app /app/public ./public

@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { RefreshCw, CheckCircle2, XCircle, MinusCircle, Loader2, Activity, Zap, AlertTriangle } from "lucide-react";
+import { PanelHeader, EmptyState } from "./panel";
 
 interface ServiceStatus {
   id: string;
@@ -30,7 +31,7 @@ function formatTime(ts: number): string {
 function StatusBadge({ status }: { status: ServiceStatus["status"] }) {
   if (status === "ok") {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+      <span className="inline-flex items-center gap-1 rounded-full bg-success/15 px-2.5 py-0.5 text-xs font-semibold text-success">
         <CheckCircle2 className="h-3.5 w-3.5" />
         正常
       </span>
@@ -38,7 +39,7 @@ function StatusBadge({ status }: { status: ServiceStatus["status"] }) {
   }
   if (status === "fail") {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-red-500/15 px-2.5 py-0.5 text-xs font-semibold text-red-600 dark:text-red-400">
+      <span className="inline-flex items-center gap-1 rounded-full bg-error/15 px-2.5 py-0.5 text-xs font-semibold text-error">
         <XCircle className="h-3.5 w-3.5" />
         异常
       </span>
@@ -62,9 +63,9 @@ function LatencyBadge({ latency, status }: { latency: number; status: ServiceSta
       </span>
     );
   }
-  let colorClass = "text-emerald-600 dark:text-emerald-400";
-  if (latency > 500) colorClass = "text-amber-600 dark:text-amber-400";
-  if (latency > 1500) colorClass = "text-red-600 dark:text-red-400";
+  let colorClass = "text-success";
+  if (latency > 500) colorClass = "text-warning";
+  if (latency > 1500) colorClass = "text-error";
   return (
     <span className={`inline-flex items-center gap-1 text-xs font-medium tabular-nums ${colorClass}`}>
       <Zap className="h-3 w-3" />
@@ -131,32 +132,33 @@ export default function HealthPanel() {
 
   return (
     <Card>
-      <CardHeader>
-        <div className="flex items-start justify-between gap-3">
-          <div className="space-y-1">
-            <CardTitle className="text-lg">外部服务状态</CardTitle>
-            <CardDescription>实时探测天气 / 壁纸 / 一言 / 翻译等上游服务可用性</CardDescription>
-          </div>
-          <Button size="sm" variant="outline" onClick={() => load(true)} disabled={refreshing} className="gap-1.5 shrink-0">
-            {refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-            刷新
-          </Button>
+      {/* 页面级标题/描述由 admin/page.tsx 提供，卡内仅保留右侧刷新操作 */}
+      <CardContent>
+        <div className="mb-3">
+          <PanelHeader
+            actions={
+              <Button size="sm" variant="outline" onClick={() => load(true)} disabled={refreshing} className="gap-1.5 shrink-0">
+                {refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                刷新
+              </Button>
+            }
+          />
         </div>
         {data && (
-          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+          <div className="mb-4 flex flex-wrap items-center gap-2 text-xs">
             <span className="text-muted-foreground">
               上次检测：{formatTime(data.checkedAt)}
               {data.cached ? "（30秒缓存）" : ""}
             </span>
             <span className="text-border">·</span>
             <div className="flex items-center gap-1.5">
-              <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
-              <span className="text-emerald-600 dark:text-emerald-400 font-medium">正常 {okCount}</span>
+              <span className="inline-block h-2 w-2 rounded-full bg-success" />
+              <span className="text-success font-medium">正常 {okCount}</span>
             </div>
             <span className="text-border">·</span>
             <div className="flex items-center gap-1.5">
-              <span className={`inline-block h-2 w-2 rounded-full ${failCount > 0 ? "bg-red-500 animate-pulse" : "bg-red-300"}`} />
-              <span className={failCount > 0 ? "text-red-600 dark:text-red-400 font-medium" : "text-muted-foreground"}>异常 {failCount}</span>
+              <span className={`inline-block h-2 w-2 rounded-full ${failCount > 0 ? "bg-error animate-pulse" : "bg-error/40"}`} />
+              <span className={failCount > 0 ? "text-error font-medium" : "text-muted-foreground"}>异常 {failCount}</span>
             </div>
             <span className="text-border">·</span>
             <div className="flex items-center gap-1.5">
@@ -165,15 +167,17 @@ export default function HealthPanel() {
             </div>
           </div>
         )}
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-2">
+        {services.length === 0 && (
+          <EmptyState icon={<Activity className="h-5 w-5" />} title="暂无探测结果" hint="点击右上角刷新开始检测" />
+        )}
+        {services.length > 0 && (
+          <div className="space-y-2">
           {services.map((s) => {
             const borderColor =
               s.status === "ok"
-                ? "border-l-emerald-500/50 hover:border-l-emerald-500"
+                ? "border-l-success/50 hover:border-l-success"
                 : s.status === "fail"
-                ? "border-l-red-500/50 hover:border-l-red-500"
+                ? "border-l-error/50 hover:border-l-error"
                 : "border-l-muted-foreground/30 hover:border-l-muted-foreground/50";
             return (
               <div
@@ -197,7 +201,7 @@ export default function HealthPanel() {
 
                 {/* 错误信息 */}
                 {s.status === "fail" && s.error && (
-                  <div className="flex w-full items-start gap-1.5 text-xs text-red-500 dark:text-red-400 sm:w-auto">
+                  <div className="flex w-full items-start gap-1.5 text-xs text-error sm:w-auto">
                     <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
                     <span className="truncate">{s.error}</span>
                   </div>
@@ -210,15 +214,8 @@ export default function HealthPanel() {
               </div>
             );
           })}
-          {services.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-10 text-center">
-              <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-muted">
-                <Activity className="h-5 w-5 text-muted-foreground" />
-              </div>
-              <p className="text-sm text-muted-foreground">暂无探测结果</p>
-            </div>
-          )}
         </div>
+        )}
       </CardContent>
     </Card>
   );

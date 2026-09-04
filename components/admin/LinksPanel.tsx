@@ -4,9 +4,10 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Plus, Trash2, Loader2, ChevronUp, ChevronDown, Pencil, Globe } from "lucide-react";
 import { useLinkList } from "./useLinkList";
+import { PanelHeader, EmptyState } from "./panel";
 import IconfontPicker from "./IconfontPicker";
 import LucideIconPicker from "./LucideIconPicker";
 import { resolveLucideIcon, isLucideIcon } from "@/components/lucideIconResolver";
@@ -34,10 +35,6 @@ interface LinkItem {
 interface LinksPanelProps {
   /** 链接列表 API 路径（如 /api/social-links、/api/site-links） */
   apiPath: string;
-  /** 面板标题 */
-  title: string;
-  /** 面板描述 */
-  description: string;
   /** 列表为空时的提示文案 */
   emptyText: string;
   /** 保存成功提示 */
@@ -77,8 +74,6 @@ interface LinkRowProps {
  */
 export default function LinksPanel({
   apiPath,
-  title,
-  description,
   emptyText,
   successMessage,
   showTip = false,
@@ -158,26 +153,18 @@ export default function LinksPanel({
 
   return (
     <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <div className="space-y-1">
-            <CardTitle className="text-lg">{title}</CardTitle>
-            <CardDescription>{description}</CardDescription>
-          </div>
-          <Button size="sm" onClick={handleAdd} className="gap-1.5">
-            <Plus className="h-4 w-4" />
-            添加链接
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-2.5">
+      <CardContent className="space-y-3">
+        {/* 页面级标题/描述由 admin/page.tsx 提供，卡内仅保留右侧主操作区 */}
+        <PanelHeader
+          actions={
+            <Button size="sm" onClick={handleAdd} className="gap-1.5">
+              <Plus className="h-4 w-4" />
+              添加链接
+            </Button>
+          }
+        />
         {links.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-10 text-center">
-            <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-muted">
-              <Plus className="h-5 w-5 text-muted-foreground" />
-            </div>
-            <p className="text-sm text-muted-foreground">{emptyText}</p>
-          </div>
+          <EmptyState icon={<Plus className="h-5 w-5" />} title={emptyText} />
         )}
         {links.map((link, index) => (
           <LinkRow
@@ -196,24 +183,22 @@ export default function LinksPanel({
             onUpdate={(field, value) => handleUpdate(index, field, value)}
           />
         ))}
-        {links.length > 0 && (
-          <Button
-            onClick={handleSave}
-            disabled={saving}
-            className={`w-full gap-1.5 ${dirty ? "ring-2 ring-primary/40" : ""}`}
-          >
-            {saving ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                保存中...
-              </>
-            ) : dirty ? (
-              "● 有未保存的更改"
-            ) : (
-              "保存链接"
-            )}
-          </Button>
-        )}
+        <Button
+          onClick={handleSave}
+          disabled={saving}
+          className={`w-full gap-1.5 ${dirty ? "ring-2 ring-primary/40" : ""}`}
+        >
+          {saving ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              保存中...
+            </>
+          ) : dirty ? (
+            "● 有未保存的更改"
+          ) : (
+            "保存链接"
+          )}
+        </Button>
       </CardContent>
     </Card>
   );

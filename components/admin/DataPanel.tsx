@@ -2,8 +2,8 @@
 
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Download, Upload, Loader2, Database, FileJson } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Download, Upload, Loader2, FileJson } from "lucide-react";
 import { toast } from "sonner";
 
 interface BackupSummary {
@@ -80,17 +80,7 @@ export default function DataPanel() {
 
   return (
     <Card>
-      <CardHeader>
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-            <Database className="h-5 w-5" />
-          </div>
-          <div>
-            <CardTitle className="text-lg">数据管理</CardTitle>
-            <CardDescription>备份与恢复站点数据（配置、社交/网站/友情链接），不包含账号密码</CardDescription>
-          </div>
-        </div>
-      </CardHeader>
+      {/* 页面级标题/描述由 admin/page.tsx 提供，卡内不再重复标题 */}
       <CardContent className="space-y-6">
         {/* 备份区 */}
         <div className="rounded-xl border bg-muted/20 p-4">
@@ -129,7 +119,7 @@ export default function DataPanel() {
 
             {summary && (
               <div className="rounded-lg border bg-background/60 p-3 text-sm">
-                <div className="mb-2 flex items-center gap-1.5 text-emerald-600">
+                <div className="mb-2 flex items-center gap-1.5 text-success">
                   <FileJson className="h-4 w-4" />
                   <span className="font-medium">备份文件信息</span>
                 </div>

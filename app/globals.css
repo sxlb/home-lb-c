@@ -22,7 +22,38 @@
     --input: 0 0% 89.8%;
     --ring: 0 0% 3.9%;
     --radius: 0.5rem;
-    /* 高级配置：主题强调色 + 玻璃卡片质感（默认值，由 ThemeProvider 按后台配置覆盖） */
+    /*
+      语义状态色（P1 设计令牌）：success / warning / error / info + 浅底 soft。
+      用法：text-success · bg-success/15 · bg-success-soft（浅底深字）等。
+      浅色为 600 段，深色(.dark)自动切为 400 段较亮版本，保证暗底可读。
+    */
+    --success: 142 71% 45%;
+    --success-soft: 138 75% 95%;
+    --warning: 32 95% 44%;
+    --warning-soft: 33 96% 94%;
+    --error: 0 84% 60%;
+    --error-soft: 0 84% 95%;
+    --info: 217 91% 50%;
+    --info-soft: 214 92% 95%;
+    /* ================= 设计令牌 · 投影 / 圆角 / 玻璃 =================
+       阴影（--shadow-1..5）：通用阴影类 .shadow-card-* 与玻璃卡片 .card-glass 共用同一数据源。
+         1-2 近距/微抬 · 3 基础卡片(rest) · 4-5 提升/悬停；--shadow-active 为按压态。
+       圆角（--radius-*）：与 shadcn 的 --radius(8px) 对齐，主卡默认取 --radius-md。
+       shadcn 映射：rounded-lg→--radius-md · rounded-md→--radius-sm · rounded-sm→--radius-xs。
+    */
+    --shadow-1: 0 1px 4px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06);
+    --shadow-2: 0 2px 8px rgba(0, 0, 0, 0.12), 0 1px 3px rgba(0, 0, 0, 0.08);
+    --shadow-3: 0 4px 12px rgba(0, 0, 0, 0.15), 0 2px 6px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+    --shadow-4: 0 6px 16px rgba(0, 0, 0, 0.18), 0 3px 10px rgba(0, 0, 0, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+    --shadow-5: 0 8px 24px rgba(0, 0, 0, 0.2), 0 4px 12px rgba(0, 0, 0, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+    --shadow-active: 0 2px 8px rgba(0, 0, 0, 0.15), 0 1px 4px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    --radius-xs: 4px;
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 10px;
+    --radius-xl: 14px;
+    --radius-full: 9999px;
+    /* 主题强调色 + 玻璃质感（默认值，由 ThemeProvider 按后台配置覆盖） */
     --accent-color: #7dd3fc;
     --card-alpha: 0.35;
     --glass-blur: 16px;
@@ -47,6 +78,15 @@
     --border: 0 0% 20%;
     --input: 0 0% 20%;
     --ring: 0 0% 70%;
+    /* 语义状态色（dark）：切换为更亮版本保证暗底可读 */
+    --success: 142 76% 55%;
+    --success-soft: 144 60% 16%;
+    --warning: 32 95% 58%;
+    --warning-soft: 32 80% 20%;
+    --error: 0 72% 62%;
+    --error-soft: 0 72% 20%;
+    --info: 217 91% 62%;
+    --info-soft: 216 85% 22%;
   }
 }
 
@@ -100,30 +140,22 @@
   background: transparent;
 }
 
-/* ========== 通用阴影系统 ========== */
+/* ========== 通用阴影系统 ==========
+   .shadow-card-xs..lg 由 base 层 --shadow-1..5 令牌统一供给，避免硬编码值散落 */
 .shadow-card-xs {
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06);
+  box-shadow: var(--shadow-1);
 }
 .shadow-card-sm {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12), 0 1px 3px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--shadow-2);
 }
 .shadow-card {
-  box-shadow:
-    0 4px 12px rgba(0, 0, 0, 0.15),
-    0 2px 6px rgba(0, 0, 0, 0.1),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  box-shadow: var(--shadow-3);
 }
 .shadow-card-md {
-  box-shadow:
-    0 6px 16px rgba(0, 0, 0, 0.18),
-    0 3px 10px rgba(0, 0, 0, 0.12),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  box-shadow: var(--shadow-4);
 }
 .shadow-card-lg {
-  box-shadow:
-    0 8px 24px rgba(0, 0, 0, 0.2),
-    0 4px 12px rgba(0, 0, 0, 0.12),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  box-shadow: var(--shadow-5);
 }
 
 @layer components {
@@ -134,17 +166,13 @@
      ============================================ */
 
   :root {
-    --card-alpha: 0.35;
-    --card-radius: 8px;
+    /* 玻璃卡片参数：圆角/投影统一走令牌；
+       alpha(遮罩深浅) 与 blur 由 ThemeProvider 按后台滑杆覆盖，此处不再重复定义 */
+    --card-radius: var(--radius-md); /* 主卡默认 8px */
     --card-padding: 0;
-    --card-shadow-base:
-      0 4px 12px rgba(0, 0, 0, 0.15),
-      0 2px 6px rgba(0, 0, 0, 0.1),
-      inset 0 1px 0 rgba(255, 255, 255, 0.08);
-    --card-shadow-hover:
-      0 8px 24px rgba(0, 0, 0, 0.2),
-      0 4px 12px rgba(0, 0, 0, 0.12),
-      inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    --card-shadow-base: var(--shadow-3); /* rest 基础 */
+    --card-shadow-hover: var(--shadow-5); /* hover 提升 */
+    --card-shadow-active: var(--shadow-active); /* 按压 */
   }
 
   .card-glass {
@@ -166,17 +194,14 @@
   }
   .card-glass:active {
     transform: translateY(0) scale(0.99);
-    box-shadow:
-      0 2px 8px rgba(0, 0, 0, 0.15),
-      0 1px 4px rgba(0, 0, 0, 0.1),
-      inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    box-shadow: var(--card-shadow-active);
   }
 
   /* ---------- 语义化变体 ---------- */
 
   /* 简介卡片：大圆角 + 稍深遮罩，突出文字可读性 */
   .card-info {
-    --card-radius: 10px;
+    --card-radius: var(--radius-lg);
     --card-alpha: 0.4;
   }
 
@@ -189,7 +214,7 @@
   /* SiteLinks 内部按钮：小圆角 + 固定内边距 */
   .card-btn {
     @apply card-glass;
-    --card-radius: 10px;
+    --card-radius: var(--radius-lg);
     --card-alpha: 0.25;
     padding: 0.75rem;
   }
@@ -250,12 +275,16 @@
   /* ===== 强调色渐变边框（用于重要卡片顶部）===== */
   .border-accent-gradient {
     border-top: 2px solid transparent;
+    /* 中部加浓的强调色高光，两端淡出：提升重要卡片顶部的视觉存在感 */
     border-image: linear-gradient(
       90deg,
-      transparent,
-      var(--accent-color, #7dd3fc),
-      transparent
+      transparent 0%,
+      color-mix(in srgb, var(--accent-color, #7dd3fc) 35%, transparent) 25%,
+      var(--accent-color, #7dd3fc) 50%,
+      color-mix(in srgb, var(--accent-color, #7dd3fc) 35%, transparent) 75%,
+      transparent 100%
     ) 1;
+    border-image-slice: 2;
   }
 
   /* ===== 柔和高亮背景（用于标签/徽章）===== */

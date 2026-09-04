@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth";
 import { authOptions, validateAuthEnv } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { profileSchema } from "@/lib/validation";
+import { extractForwardedIp, extractRealIp, isValidIp } from "@/lib/ip";
 import type { z, ZodTypeAny } from "zod";
 
 /**
@@ -71,7 +72,17 @@ export function formatZodError(zodError: z.ZodError): string {
 /* ==================== 操作日志 ==================== */
 
 /** 操作日志模块类型 */
-export type LogModule = "profile" | "social-links" | "site-links" | "friend-links" | "account" | "weather-setting" | "backup" | "announcements";
+export type LogModule =
+  | "profile"
+  | "social-links"
+  | "site-links"
+  | "friend-links"
+  | "account"
+  | "weather-setting"
+  | "backup"
+  | "announcements"
+  | "logs" // 操作日志自身：导出 / 清理审计
+  | "media"; // 媒体库：上传 / 复制 / 删除
 
 export interface LogInput {
   module: LogModule;
@@ -113,30 +124,15 @@ export async function writeOperationLog(input: LogInput) {
   }
 }
 
-const IPV4_RE = /^\d{1,3}(\.\d{1,3}){3}$/;
-const IPV6_RE = /^[0-9a-fA-F:]+$/;
-
-/** 校验 IP：IPv4 校验各段值域，IPv6 做宽松字符+长度校验 */
-export function isValidIp(ip: string): boolean {
-  if (!ip || ip.length > 45) return false;
-  if (IPV4_RE.test(ip)) return ip.split(".").every((n) => Number(n) <= 255);
-  return IPV6_RE.test(ip);
-}
-
-/** 从请求头提取客户端 IP（仅接受合法格式，丢弃伪造/非法值） */
+/** 从请求头提取客户端 IP（校验逻辑见 lib/ip.ts，供 auth 等复用避免循环依赖） */
 export function getClientIp(req: NextRequest): string {
-  const xff = req.headers.get("x-forwarded-for");
-  if (xff) {
-    const first = xff.split(",")[0].trim();
-    if (isValidIp(first)) return first;
-  }
-  const real = req.headers.get("x-real-ip");
-  if (real) {
-    const realTrim = real.trim();
-    if (isValidIp(realTrim)) return realTrim;
-  }
-  return "";
+  const forwarded = extractForwardedIp(req.headers.get("x-forwarded-for"));
+  if (forwarded) return forwarded;
+  return extractRealIp(req.headers.get("x-real-ip"));
 }
+
+// 兼容既有导入：isValidIp 现定义于 lib/ip.ts（此处仅为 re-export）
+export { isValidIp };
 
 /** diffLinks 中参与"除 name 外字段比较"的键清单 */
 const LINK_KEYS = ["icon", "url", "tip", "description", "sort"] as const;
@@ -432,6 +428,9 @@ export function createLinkListApi<S extends ZodTypeAny>({
       const result = await prisma.$transaction(async (tx) => {
         const d = txDelegate(tx);
         await d.deleteMany();
+        // 空列表（用户删除了全部链接）时跳过 createMany：
+        // Prisma 的 createMany 不允许空数组，直接调用会抛错导致保存失败。
+        if (items.length === 0) return { count: 0 };
         return d.createMany({ data: items });
       });
 

@@ -5,7 +5,7 @@ import { useSession, signOut } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Loader2, User, Lock, KeyRound } from "lucide-react";
 
@@ -138,14 +138,7 @@ export default function AccountPanel() {
 
   return (
     <Card>
-      <CardHeader>
-        <div className="space-y-1">
-          <CardTitle className="text-lg">账号设置</CardTitle>
-          <CardDescription>
-            修改登录账号和密码（首次登录后建议立即修改）
-          </CardDescription>
-        </div>
-      </CardHeader>
+      {/* 页面级标题/描述由 admin/page.tsx 提供，卡内不再重复标题 */}
       <CardContent>
         <form onSubmit={onSubmit} className="space-y-5">
           {/* 账号信息区域 */}
@@ -261,7 +254,7 @@ export default function AccountPanel() {
 
           {twoFactorEnabled ? (
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <span className="text-sm font-medium text-emerald-600">已开启</span>
+              <span className="text-sm font-medium text-success">已开启</span>
               <div className="flex items-center gap-2">
                 <Input
                   value={disableCode}

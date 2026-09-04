@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
 import { DEFAULT_WELCOME_MESSAGES } from "@/lib/validation";
 import { LoadingPlaceholder } from "./LinksPanel";
@@ -261,10 +261,7 @@ export default function ProfilePanel() {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>站点信息</CardTitle>
-        <CardDescription>修改主页显示的信息与进阶配置</CardDescription>
-      </CardHeader>
+      {/* 页面级标题头由 admin/page.tsx 提供，卡内不再重复标题 */}
       <CardContent>
         <form ref={formRef} onSubmit={onSubmit} className="space-y-3 pb-16">
           {/* ========== 基础信息 ========== */}
@@ -272,7 +269,7 @@ export default function ProfilePanel() {
             <summary className="flex cursor-pointer items-center justify-between px-4 py-3.5 font-medium transition-colors hover:bg-muted/40 [&::-webkit-details-marker]:hidden list-none">
               <span className="flex items-center gap-2.5">
                 <span className="h-2 w-2 rounded-full bg-primary shadow-[0_0_8px_rgba(var(--primary),0.5)]" />
-                <span>基础信息</span>
+                <span className="text-sm font-semibold tracking-tight">站点资料</span>
                 <span className="text-xs font-normal text-muted-foreground">基本信息 · 欢迎通知 · SEO 配置</span>
               </span>
               <svg className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-open:rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -646,7 +643,7 @@ export default function ProfilePanel() {
             <summary className="flex cursor-pointer items-center justify-between px-4 py-3.5 font-medium transition-colors hover:bg-muted/40 [&::-webkit-details-marker]:hidden list-none">
               <span className="flex items-center gap-2.5">
                 <span className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
-                <span>内容展示</span>
+                <span className="text-sm font-semibold tracking-tight">内容展示</span>
                 <span className="text-xs font-normal text-muted-foreground">时钟 · 一言</span>
               </span>
               <svg className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-open:rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -743,7 +740,7 @@ export default function ProfilePanel() {
             <summary className="flex cursor-pointer items-center justify-between px-4 py-3.5 font-medium transition-colors hover:bg-muted/40 [&::-webkit-details-marker]:hidden list-none">
               <span className="flex items-center gap-2.5">
                 <span className="h-2 w-2 rounded-full bg-sky-500 shadow-[0_0_8px_rgba(14,165,233,0.5)]" />
-                <span>网站链接区</span>
+                <span className="text-sm font-semibold tracking-tight">网站链接区</span>
                 <span className="text-xs font-normal text-muted-foreground">区域标题 · 图标库地址</span>
               </span>
               <svg className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-open:rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -819,7 +816,7 @@ export default function ProfilePanel() {
             <summary className="flex cursor-pointer items-center justify-between px-4 py-3.5 font-medium transition-colors hover:bg-muted/40 [&::-webkit-details-marker]:hidden list-none">
               <span className="flex items-center gap-2.5">
                 <span className="h-2 w-2 rounded-full bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]" />
-                <span>页脚与脚本</span>
+                <span className="text-sm font-semibold tracking-tight">页脚与脚本</span>
                 <span className="text-xs font-normal text-muted-foreground">页脚信息 · 统计与脚本</span>
               </span>
               <svg className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-open:rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

@@ -3,7 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { LoadingPlaceholder } from "./LinksPanel";
 import { useProfileForm } from "./useProfileForm";
 import { SONG_SERVERS, SONG_API_PRESETS, selectClass } from "./profileShared";
@@ -17,10 +17,7 @@ export default function MusicPanel() {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>音乐设置</CardTitle>
-        <CardDescription>配置音乐播放器的歌单来源与播放平台</CardDescription>
-      </CardHeader>
+      {/* 页面级标题头由 admin/page.tsx 提供，卡内不再重复标题 */}
       <CardContent>
         <form ref={formRef} onSubmit={(e) => { e.preventDefault(); save(); }} className="space-y-3 pb-16">
           <div className="space-y-5 rounded-lg border border-border bg-card px-5 py-5 shadow-sm">

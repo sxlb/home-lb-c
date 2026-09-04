@@ -4,9 +4,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Plus, Trash2, Loader2, GripVertical, Users } from "lucide-react";
 import { useLinkList } from "./useLinkList";
+import { PanelHeader, EmptyState } from "./panel";
 import { LoadingPlaceholder } from "./LinksPanel";
 
 interface FriendLinkItem {
@@ -33,7 +34,7 @@ export default function FriendLinksPanel() {
     description: "",
     sort: 0,
   };
-  const { items: links, loading, saving, addItem, removeItem, updateItem, save } = useLinkList(
+  const { items: links, loading, saving, dirty, addItem, removeItem, updateItem, save } = useLinkList(
     "/api/friend-links",
     emptyItem,
     "友情链接保存成功",
@@ -47,26 +48,21 @@ export default function FriendLinksPanel() {
 
   return (
     <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <div className="space-y-1">
-            <CardTitle className="text-lg">友情链接</CardTitle>
-            <CardDescription>管理首页展示的友情链接（合作伙伴、优秀站点等）</CardDescription>
-          </div>
-          <Button size="sm" onClick={addItem} className="gap-1.5">
-            <Plus className="h-4 w-4" />
-            添加链接
-          </Button>
-        </div>
-      </CardHeader>
       <CardContent className="space-y-3">
+        {/* 页面级标题/描述由 admin/page.tsx 提供，卡内仅保留右侧主操作区 */}
+        <PanelHeader
+          actions={
+            <Button size="sm" onClick={addItem} className="gap-1.5">
+              <Plus className="h-4 w-4" />
+              添加链接
+            </Button>
+          }
+        />
         {links.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-10 text-center">
-            <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-muted">
-              <Users className="h-5 w-5 text-muted-foreground" />
-            </div>
-            <p className="text-sm text-muted-foreground">暂无友情链接，点击右上角「添加链接」创建</p>
-          </div>
+          <EmptyState
+            icon={<Users className="h-5 w-5" />}
+            title="暂无友情链接，点击右上角「添加链接」创建"
+          />
         )}
         {links.map((link, index) => (
           <div
@@ -154,18 +150,22 @@ export default function FriendLinksPanel() {
             </div>
           </div>
         ))}
-        {links.length > 0 && (
-          <Button onClick={save} disabled={saving} className="w-full gap-1.5">
-            {saving ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                保存中...
-              </>
-            ) : (
-              "保存链接"
-            )}
-          </Button>
-        )}
+        <Button
+          onClick={save}
+          disabled={saving}
+          className={`w-full gap-1.5 ${dirty ? "ring-2 ring-primary/40" : ""}`}
+        >
+          {saving ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              保存中...
+            </>
+          ) : dirty ? (
+            "● 有未保存的更改"
+          ) : (
+            "保存链接"
+          )}
+        </Button>
       </CardContent>
     </Card>
   );

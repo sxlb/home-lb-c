@@ -2,6 +2,7 @@ import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/db";
+import { isValidIp } from "@/lib/ip";
 
 // ---- 类型增强：把"是否需要强制改密"标记透传到 session / JWT ----
 declare module "next-auth" {
@@ -62,8 +63,23 @@ const LOCK_MS = 10 * 60 * 1000;
 type Attempt = { count: number; firstAt: number; lockUntil: number };
 const attempts = new Map<string, Attempt>();
 
-/** 宽松校验 IP 字面量字符（IPv4/IPv6），非法值丢弃，防止伪造头污染 key */
-const LOGIN_IP_RE = /^[0-9a-fA-F:.]+$/;
+// 上限保护：攻击者可通过伪造 x-forwarded-for 等头生成大量不同 key。
+// 若不设上限，attempts Map 会随唯一 key 数量无界增长（内存 DoS）。
+// 超限时先清理已过期条目，仍超限则按插入顺序淘汰最旧条目（Map 保持插入序）。
+const MAX_ATTEMPT_KEYS = 5_000;
+
+function pruneAttempts(now: number): void {
+  if (attempts.size < MAX_ATTEMPT_KEYS) return;
+  for (const [k, a] of attempts) {
+    const expired = (a.lockUntil > 0 && now >= a.lockUntil) || now - a.firstAt > WINDOW_MS;
+    if (expired) attempts.delete(k);
+  }
+  while (attempts.size >= MAX_ATTEMPT_KEYS) {
+    const oldest = attempts.keys().next().value;
+    if (oldest === undefined) break;
+    attempts.delete(oldest);
+  }
+}
 
 /**
  * 头对象的最小兼容形态：
@@ -90,26 +106,33 @@ function readLoginHeader(headers: LoginHeaderSource, name: string): string {
 
 /**
  * 从请求头提取限流 key（按来源 IP）：优先 x-forwarded-for 首个合法 IP，
- * 其次 x-real-ip；均非法时回退 "unknown"（所有无头请求共享一个桶，仍有限流）。
- * 两个头都可被请求方伪造，但伪造只会让攻击者锁住"自己的伪造 IP"，
- * 无法影响真实管理员；无需信任其准确性。
+ * 其次 x-real-ip；均非法/缺失时回退 "unknown"。
+ *
+ * 信任模型说明：个人站点常见两种部署——
+ * 1) 位于可信反向代理/CDN 之后：转发头由代理写入，取值准确；
+ * 2) 直接暴露公网：转发头可被请求方任意伪造。
+ * 无论哪种场景，伪造只会让攻击者把失败次数记到"自己伪造的 key"上（自锁），
+ * 无法绕过真正的防线：已存在账号的 userKey（login:user:<username>）按账号维度
+ * 独立锁定，不依赖 IP。此处仅做严格结构校验（拒绝越界 IPv4/超长/非 IP 字符），
+ * 并把 key 总量限制在 MAX_ATTEMPT_KEYS 内，防止伪造头撑爆内存。
  */
 export function getLoginRateLimitKey(headers?: LoginHeaderSource): string {
   let ip = "";
   const xff = readLoginHeader(headers, "x-forwarded-for");
   if (xff) {
     const first = xff.split(",")[0].trim();
-    if (LOGIN_IP_RE.test(first)) ip = first;
+    if (isValidIp(first)) ip = first;
   }
   if (!ip) {
     const real = readLoginHeader(headers, "x-real-ip").trim();
-    if (LOGIN_IP_RE.test(real)) ip = real;
+    if (isValidIp(real)) ip = real;
   }
   return `login:${ip || "unknown"}`;
 }
 
 export function checkRateLimit(key = "admin"): { locked: boolean; remainingMs: number } {
   const now = Date.now();
+  pruneAttempts(now);
   const a = attempts.get(key);
 
   if (a && now < a.lockUntil) {
@@ -129,6 +152,7 @@ export function checkRateLimit(key = "admin"): { locked: boolean; remainingMs: n
 
 export function recordFailedAttempt(key = "admin") {
   const now = Date.now();
+  pruneAttempts(now);
   const a = attempts.get(key) || { count: 0, firstAt: now, lockUntil: 0 };
 
   if (now < a.lockUntil) return;

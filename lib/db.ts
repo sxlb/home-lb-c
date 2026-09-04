@@ -8,3 +8,16 @@ export const prisma = globalForPrisma.prisma || new PrismaClient();
 if (!globalForPrisma.prisma) {
   globalForPrisma.prisma = prisma;
 }
+
+// SQLite 写入并发兜底（尽力而为，失败静默，不阻塞启动）：
+// - journal_mode=WAL：读写并发不再互相阻塞，显著降低 SQLITE_BUSY（对数据库文件持久生效）
+// - busy_timeout=5000：遇到锁竞争时等待最多 5s，而不是立即抛 "database is locked"
+// 测试环境跳过：vitest 通常 mock 本模块，且不应触碰真实库文件
+if (process.env.NODE_ENV !== "test" && (process.env.DATABASE_URL ?? "").startsWith("file:")) {
+  try {
+    void prisma.$queryRawUnsafe("PRAGMA journal_mode = WAL;").catch(() => {});
+    void prisma.$executeRawUnsafe("PRAGMA busy_timeout = 5000;").catch(() => {});
+  } catch {
+    /* 忽略：Pragma 仅尽力而为 */
+  }
+}

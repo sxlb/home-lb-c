@@ -2,9 +2,19 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
-import { RefreshCw, Loader2, ChevronDown, Clock, User, Globe } from "lucide-react";
+import {
+  RefreshCw,
+  Loader2,
+  ChevronDown,
+  Clock,
+  User,
+  Globe,
+  Download,
+  Trash2,
+} from "lucide-react";
+import { PanelHeader, EmptyState } from "./panel";
 
 interface OperationLog {
   id: number;
@@ -25,6 +35,8 @@ const MODULE_LABEL: Record<string, string> = {
   account: "账号设置",
   "weather-setting": "天气设置",
   backup: "数据管理",
+  announcements: "站点公告",
+  logs: "操作日志",
 };
 
 /** 模块对应的标签颜色（tailwind 类名） */
@@ -36,6 +48,8 @@ const MODULE_COLOR: Record<string, string> = {
   account: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
   "weather-setting": "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
   backup: "bg-rose-500/15 text-rose-600 dark:text-rose-400",
+  announcements: "bg-fuchsia-500/15 text-fuchsia-600 dark:text-fuchsia-400",
+  logs: "bg-slate-500/15 text-slate-600 dark:text-slate-400",
 };
 
 const ACTION_LABEL: Record<string, string> = {
@@ -44,15 +58,19 @@ const ACTION_LABEL: Record<string, string> = {
   delete: "删除",
   batch_update: "批量保存",
   restore: "恢复",
+  export: "导出",
+  clean: "清理",
 };
 
-/** 操作类型对应的颜色 */
+/** 操作类型对应的语义状态色（P1 设计令牌） */
 const ACTION_COLOR: Record<string, string> = {
-  create: "text-emerald-600 dark:text-emerald-400",
-  update: "text-blue-600 dark:text-blue-400",
-  delete: "text-red-600 dark:text-red-400",
-  batch_update: "text-purple-600 dark:text-purple-400",
-  restore: "text-rose-600 dark:text-rose-400",
+  create: "text-success",
+  update: "text-info",
+  delete: "text-error",
+  batch_update: "text-warning",
+  restore: "text-warning",
+  export: "text-info",
+  clean: "text-error",
 };
 
 function formatTime(iso: string): string {
@@ -74,6 +92,14 @@ export default function OperationLogPanel() {
   // 请求序号：连点刷新时丢弃过期响应，防止旧响应覆盖新数据
   const seqRef = useRef(0);
   const mountedRef = useRef(true);
+  // 导出 / 清理
+  const [exporting, setExporting] = useState(false);
+  const [showClean, setShowClean] = useState(false);
+  const [cleanFrom, setCleanFrom] = useState("");
+  const [cleanTo, setCleanTo] = useState("");
+  const [cleanAll, setCleanAll] = useState(false);
+  const [cleanPending, setCleanPending] = useState(false);
+  const [cleaning, setCleaning] = useState(false);
 
   const PAGE_SIZE = 20;
 
@@ -120,27 +146,125 @@ export default function OperationLogPanel() {
     load(1, module, keyword);
   };
 
+  /** 按当前筛选条件导出 CSV */
+  async function exportLogs() {
+    setExporting(true);
+    try {
+      const params = new URLSearchParams();
+      if (module) params.set("module", module);
+      if (keyword.trim()) params.set("keyword", keyword.trim());
+      const res = await fetch(`/api/logs/export?${params.toString()}`);
+      if (!res.ok) {
+        const d = await res.json().catch(() => null);
+        toast.error(d?.error || "导出失败");
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `operation-logs-${new Date().toISOString().slice(0, 19).replace(/[T:]/g, "-")}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success("日志已导出");
+    } catch {
+      toast.error("导出失败，请重试");
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  /** 第一段确认：记录清理范围，等待用户二次确认 */
+  function requestClean() {
+    if (!cleanAll && !cleanFrom && !cleanTo) {
+      toast.error("请选择清理时间段，或勾选「全部记录」");
+      return;
+    }
+    setCleanPending(true);
+  }
+
+  /** 第二段确认：真正执行清理 */
+  async function confirmClean() {
+    setCleaning(true);
+    try {
+      const res = await fetch("/api/logs/clean", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ from: cleanAll ? undefined : cleanFrom || undefined, to: cleanAll ? undefined : cleanTo || undefined }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success(data.summary || "清理成功");
+        setShowClean(false);
+        setCleanPending(false);
+        setCleanFrom("");
+        setCleanTo("");
+        setCleanAll(false);
+        if (cleanAll || (!cleanFrom && !cleanTo)) {
+          // 清理了全部或大部分：直接回到第一页
+          setPage(1);
+          load(1, module, keyword);
+        } else {
+          load(page, module, keyword);
+        }
+      } else {
+        toast.error(data.error || "清理失败");
+      }
+    } catch {
+      toast.error("清理失败，请重试");
+    } finally {
+      setCleaning(false);
+    }
+  }
+
   return (
     <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <div className="space-y-1">
-            <CardTitle className="text-lg">操作日志</CardTitle>
-            <CardDescription>
-              后台增删改操作记录，支持筛选、搜索与分页
-            </CardDescription>
-          </div>
-          <Button size="sm" variant="outline" onClick={() => load(page, module, keyword)} disabled={loading} className="gap-1.5">
-            {loading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <RefreshCw className="h-4 w-4" />
-            )}
-            刷新
-          </Button>
-        </div>
-      </CardHeader>
+      {/* 页面级标题/描述由 admin/page.tsx 提供，卡内仅保留右侧刷新操作 */}
       <CardContent>
+        <div className="mb-3">
+          <PanelHeader
+            actions={
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={exportLogs}
+                  disabled={exporting || loading}
+                  className="gap-1.5"
+                >
+                  {exporting ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Download className="h-4 w-4" />
+                  )}
+                  导出 CSV
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setShowClean((v) => !v);
+                    setCleanPending(false);
+                  }}
+                  className="gap-1.5 border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  清理历史
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => load(page, module, keyword)} disabled={loading} className="gap-1.5">
+                  {loading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4" />
+                  )}
+                  刷新
+                </Button>
+              </>
+            }
+          />
+        </div>
         {/* 筛选行 */}
         <div className="mb-3 flex flex-wrap items-center gap-2">
           <select
@@ -166,18 +290,87 @@ export default function OperationLogPanel() {
           </Button>
         </div>
 
+        {/* 清理区：默认收起，二次确认 */}
+        {showClean && (
+          <div className="mb-3 rounded-xl border border-destructive/30 bg-destructive/5 p-4">
+            <h3 className="mb-1 flex items-center gap-1.5 text-sm font-semibold text-destructive">
+              <Trash2 className="h-4 w-4" />
+              清理历史日志
+            </h3>
+            <p className="mb-4 text-xs text-destructive/80">
+              危险操作：按时间段删除操作日志，不可撤销。清理本身会写入一条审计日志。
+            </p>
+
+            <div className="mb-3 flex flex-wrap items-center gap-3">
+              <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+                起始时间
+                <input
+                  type="datetime-local"
+                  value={cleanFrom}
+                  disabled={cleanAll}
+                  onChange={(e) => {
+                    setCleanFrom(e.target.value);
+                    setCleanPending(false);
+                  }}
+                  className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground disabled:opacity-50"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+                结束时间
+                <input
+                  type="datetime-local"
+                  value={cleanTo}
+                  disabled={cleanAll}
+                  onChange={(e) => {
+                    setCleanTo(e.target.value);
+                    setCleanPending(false);
+                  }}
+                  className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground disabled:opacity-50"
+                />
+              </label>
+              <label className="ml-1 mt-5 flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={cleanAll}
+                  onChange={(e) => {
+                    setCleanAll(e.target.checked);
+                    setCleanPending(false);
+                  }}
+                  className="h-4 w-4 accent-destructive"
+                />
+                全部记录
+              </label>
+            </div>
+
+            {cleanPending ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="mr-2 text-xs font-medium text-destructive">
+                  确认清理{cleanAll ? "全部" : ` ${cleanFrom || "起始"} ~ ${cleanTo || "当前"} `}范围内的操作日志？
+                </p>
+                <Button size="sm" variant="destructive" onClick={confirmClean} disabled={cleaning} className="gap-1.5">
+                  {cleaning && <Loader2 className="h-4 w-4 animate-spin" />}
+                  确认执行清理
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setCleanPending(false)} disabled={cleaning}>
+                  取消
+                </Button>
+              </div>
+            ) : (
+              <Button size="sm" variant="destructive" onClick={requestClean} className="gap-1.5">
+                <Trash2 className="h-4 w-4" />
+                清理
+              </Button>
+            )}
+          </div>
+        )}
+
         {loading ? (
           <div className="flex items-center justify-center py-16 text-muted-foreground">
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             加载中...
           </div>
         ) : logs.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 text-center">
-            <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-muted">
-              <Clock className="h-5 w-5 text-muted-foreground" />
-            </div>
-            <p className="text-sm text-muted-foreground">暂无操作记录</p>
-          </div>
+          <EmptyState icon={<Clock className="h-5 w-5" />} title="暂无操作记录" hint="调整筛选条件或稍后刷新查看" />
         ) : (
           <div className="space-y-1.5">
             {logs.map((log) => {

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Loader2, MapPin, Cloud, Eye, EyeOff, Check, Settings2 } from "lucide-react";
 import { LoadingPlaceholder } from "./LinksPanel";
@@ -118,14 +118,7 @@ export default function WeatherPanel() {
 
   return (
     <Card>
-      <CardHeader>
-        <div className="space-y-1">
-          <CardTitle className="text-lg">天气设置</CardTitle>
-          <CardDescription>
-            选择天气数据源并配置对应参数，主页天气卡片将按此获取数据
-          </CardDescription>
-        </div>
-      </CardHeader>
+      {/* 页面级标题/描述由 admin/page.tsx 提供，卡内不再重复标题 */}
       <CardContent className="space-y-5">
         {/* 数据源选择 */}
         <div className="space-y-3">

@@ -1,6 +1,7 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { internalError, error, parseJsonBody, isRateLimited, getClientIp } from "@/lib/server";
+import { serialized } from "@/lib/serialize";
 
 export const dynamic = "force-dynamic";
 
@@ -24,10 +25,13 @@ export async function POST(request: NextRequest) {
     const name = typeof body.name === "string" ? body.name.slice(0, 100) : "";
     const url = typeof body.url === "string" ? body.url.slice(0, 2000) : "";
 
-    await prisma.siteLinkClick.upsert({
-      where: { linkId },
-      update: { count: { increment: 1 }, name: name || undefined, url: url || undefined },
-      create: { linkId, name, url, count: 1 },
+    // upsert 为写操作，放入串行队列避免并发写触发 SQLITE_BUSY
+    await serialized(async () => {
+      await prisma.siteLinkClick.upsert({
+        where: { linkId },
+        update: { count: { increment: 1 }, name: name || undefined, url: url || undefined },
+        create: { linkId, name, url, count: 1 },
+      });
     });
 
     return NextResponse.json({ ok: true });

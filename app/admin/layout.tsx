@@ -1,6 +1,7 @@
 "use client";
 
 import { SessionProvider } from "next-auth/react";
+import "./admin.css";
 
 /**
  * 后台布局：仅 /admin 下的页面注入 SessionProvider。

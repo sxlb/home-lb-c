@@ -4,10 +4,9 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 import {
   User,
-  Share2,
-  Globe,
   Settings,
   ScrollText,
   CloudSun,
@@ -18,18 +17,21 @@ import {
   LayoutDashboard,
   ShieldCheck,
   Wrench,
-  Users,
   Palette,
   Music,
   Database,
   BarChart3,
   Megaphone,
+  ExternalLink,
+  Copy,
+  Images,
+  Link2,
 } from "lucide-react";
 import ProfilePanel from "@/components/admin/ProfilePanel";
-import LinksPanel from "@/components/admin/LinksPanel";
-import FriendLinksPanel from "@/components/admin/FriendLinksPanel";
+import LinksManager from "@/components/admin/LinksManager";
 import AccountPanel from "@/components/admin/AccountPanel";
 import OperationLogPanel from "@/components/admin/OperationLogPanel";
+import MediaPanel from "@/components/admin/MediaPanel";
 import WeatherPanel from "@/components/admin/WeatherPanel";
 import HealthPanel from "@/components/admin/HealthPanel";
 import ThemePanel from "@/components/admin/ThemePanel";
@@ -42,16 +44,15 @@ type TabId =
   | "profile"
   | "theme"
   | "music"
-  | "social"
-  | "site"
-  | "friend"
+  | "links"
   | "weather"
   | "announcements"
   | "account"
   | "logs"
   | "health"
   | "data"
-  | "stats";
+  | "stats"
+  | "media";
 
 interface TabItem {
   id: TabId;
@@ -68,34 +69,39 @@ interface NavGroup {
 
 const NAV_GROUPS: NavGroup[] = [
   {
-    label: "内容管理",
+    label: "站点内容",
     icon: LayoutDashboard,
     items: [
       { id: "profile", label: "站点信息", icon: User, description: "设置个人主页的基本资料与展示信息" },
+      { id: "announcements", label: "站点公告", icon: Megaphone, description: "发布/编辑公告，前台上方展示" },
+      { id: "links", label: "链接管理", icon: Link2, description: "集中管理社交、网站与友情链接" },
+    ],
+  },
+  {
+    label: "外观与功能",
+    icon: Palette,
+    items: [
       { id: "theme", label: "主题与壁纸", icon: Palette, description: "配置背景壁纸、主题模式与整体视觉氛围" },
       { id: "music", label: "音乐设置", icon: Music, description: "配置音乐播放器的歌单来源与播放平台" },
-      { id: "social", label: "社交链接", icon: Share2, description: "管理主页显示的社交链接（GitHub、邮箱等）" },
-      { id: "site", label: "网站链接", icon: Globe, description: "管理主页显示的网站列表（博客、网盘等）" },
-      { id: "friend", label: "友情链接", icon: Users, description: "管理首页展示的友情链接与合作伙伴" },
       { id: "weather", label: "天气设置", icon: CloudSun, description: "配置天气组件的城市与展示样式" },
-      { id: "announcements", label: "站点公告", icon: Megaphone, description: "发布/编辑公告，前台上方展示" },
     ],
   },
   {
     label: "系统设置",
     icon: ShieldCheck,
     items: [
-      { id: "account", label: "账号设置", icon: Settings, description: "修改登录密码与账号安全选项" },
+      { id: "account", label: "账号与安全", icon: Settings, description: "修改登录密码与账号安全选项" },
     ],
   },
   {
-    label: "运维工具",
+    label: "运维与统计",
     icon: Wrench,
     items: [
+      { id: "stats", label: "访问统计", icon: BarChart3, description: "查看访问数据与趋势" },
       { id: "logs", label: "操作日志", icon: ScrollText, description: "查看系统操作记录与审计日志" },
       { id: "health", label: "服务状态", icon: Activity, description: "监控服务运行状态与健康指标" },
       { id: "data", label: "数据管理", icon: Database, description: "备份与恢复站点数据" },
-      { id: "stats", label: "访问统计", icon: BarChart3, description: "查看访问数据与趋势" },
+      { id: "media", label: "媒体库", icon: Images, description: "集中管理上传的图片资源" },
     ],
   },
 ];
@@ -111,11 +117,36 @@ export default function AdminPage() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   // 默认账号改密提示（本次会话内可关闭）
   const [hideDefaultWarning, setHideDefaultWarning] = useState(false);
+  // 站点首页地址（用于「打开主页 / 复制主页地址」，来源为站点信息配置，缺省回退到当前源）
+  const [siteUrl, setSiteUrl] = useState("");
 
   // 切换分类：桌面端直接切换；移动端切换后关闭抽屉
   function selectTab(id: TabId) {
     setActiveTab(id);
     setMobileNavOpen(false);
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/profile")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!cancelled && d?.siteUrl) setSiteUrl(d.siteUrl);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const homepageUrl = siteUrl || (typeof window !== "undefined" ? window.location.origin : "");
+  async function copyHomepage() {
+    try {
+      await navigator.clipboard.writeText(homepageUrl);
+      toast.success("主页地址已复制");
+    } catch {
+      toast.error("复制失败，请重试");
+    }
   }
 
   useEffect(() => {
@@ -200,7 +231,7 @@ export default function AdminPage() {
   );
 
   return (
-    <main className="min-h-screen bg-background">
+    <main className="admin min-h-screen bg-background">
       {/* 移动端纵向排列（顶栏在上），桌面端横向排列（侧边栏在左） */}
       <div className="flex min-h-screen flex-col md:flex-row">
         {/* ===== 桌面端：左侧固定侧边导航 ===== */}
@@ -230,11 +261,20 @@ export default function AdminPage() {
             })}
           </nav>
 
-          <div className="border-t p-3">
+          <div className="space-y-2 border-t p-3">
+            <a
+              href={homepageUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex w-full items-center justify-center gap-1.5 rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+              <ExternalLink className="h-4 w-4" />
+              打开主页
+            </a>
             <Button
               variant="outline"
               size="sm"
-              className="w-full transition-all duration-200 hover:border-red-300 hover:bg-red-50 hover:text-red-600 dark:hover:border-red-800 dark:hover:bg-red-950/40 dark:hover:text-red-400"
+              className="w-full transition-all duration-200 hover:border-error/40 hover:bg-error/10 hover:text-error"
               onClick={() => signOut({ callbackUrl: "/admin/login" })}
             >
               <LogOut className="mr-2 h-4 w-4" />
@@ -316,6 +356,31 @@ export default function AdminPage() {
                 );
               })}
             </nav>
+
+            <div className="space-y-2 border-t p-3">
+              <a
+                href={homepageUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => setMobileNavOpen(false)}
+                className="flex w-full items-center justify-center gap-1.5 rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              >
+                <ExternalLink className="h-4 w-4" />
+                打开主页
+              </a>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full transition-all duration-200 hover:border-error/40 hover:bg-error/10 hover:text-error"
+                onClick={() => {
+                  setMobileNavOpen(false);
+                  signOut({ callbackUrl: "/admin/login" });
+                }}
+              >
+                <LogOut className="mr-2 h-4 w-4" />
+                退出登录
+              </Button>
+            </div>
           </div>
         </aside>
 
@@ -324,7 +389,7 @@ export default function AdminPage() {
           <div className="mx-auto max-w-4xl px-4 py-6 pb-16 md:px-8 md:py-8">
             {/* 强制改密提示：mustChangePassword 为 true 时显示；改密成功后（后端置 false）自动消失 */}
             {session?.user?.mustChangePassword && !hideDefaultWarning && (
-              <div className="mb-6 flex items-start justify-between gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3.5 text-sm text-amber-700 shadow-sm backdrop-blur dark:text-amber-300">
+              <div className="mb-6 flex items-start justify-between gap-3 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3.5 text-sm text-warning shadow-sm backdrop-blur">
                 <p className="leading-relaxed">
                   当前登录账号 <strong className="font-semibold">{username}</strong> 仍在使用默认密码，存在被暴力破解的风险，请尽快前往「账号设置」修改密码。
                 </p>
@@ -341,7 +406,7 @@ export default function AdminPage() {
 
             {/* 页面标题头 */}
             {currentTab && (
-              <div className="mb-6">
+              <div className="mb-8 flex flex-wrap items-start justify-between gap-3">
                 <div className="flex items-center gap-3">
                   <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
                     {(() => {
@@ -358,6 +423,15 @@ export default function AdminPage() {
                     </p>
                   </div>
                 </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={copyHomepage}
+                  className="gap-1.5 text-muted-foreground"
+                >
+                  <Copy className="h-4 w-4" />
+                  复制主页地址
+                </Button>
               </div>
             )}
 
@@ -366,32 +440,7 @@ export default function AdminPage() {
               {activeTab === "profile" && <ProfilePanel />}
               {activeTab === "theme" && <ThemePanel />}
               {activeTab === "music" && <MusicPanel />}
-              {activeTab === "social" && (
-                <LinksPanel
-                  apiPath="/api/social-links"
-                  title="社交链接"
-                  description="管理主页显示的社交链接（GitHub、邮箱等）"
-                  emptyText="暂无社交链接，点击右上角「添加链接」创建"
-                  successMessage="社交链接保存成功"
-                  showTip
-                  namePlaceholder="如 GitHub"
-                  iconPlaceholder="如 github, mail, twitter"
-                  urlPlaceholder="https://github.com/yourname 或 mailto:xxx"
-                />
-              )}
-              {activeTab === "site" && (
-                <LinksPanel
-                  apiPath="/api/site-links"
-                  title="网站链接"
-                  description="管理主页显示的网站列表（博客、网盘等）"
-                  emptyText="暂无网站链接，点击右上角「添加链接」创建"
-                  successMessage="网站链接保存成功"
-                  namePlaceholder="如 博客"
-                  iconPlaceholder="如 book-open, cloud, music"
-                  urlPlaceholder="https://blog.example.com"
-                />
-              )}
-              {activeTab === "friend" && <FriendLinksPanel />}
+              {activeTab === "links" && <LinksManager />}
               {activeTab === "weather" && <WeatherPanel />}
               {activeTab === "announcements" && <AnnouncementPanel />}
               {activeTab === "account" && <AccountPanel />}
@@ -399,6 +448,7 @@ export default function AdminPage() {
               {activeTab === "health" && <HealthPanel />}
               {activeTab === "data" && <DataPanel />}
               {activeTab === "stats" && <StatsPanel />}
+              {activeTab === "media" && <MediaPanel />}
             </div>
           </div>
         </div>

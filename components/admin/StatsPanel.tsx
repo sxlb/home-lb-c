@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Activity, Eye, Users, TrendingUp, TrendingDown, Link2 } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Eye, Users, TrendingUp, TrendingDown, Link2, Focus, CalendarRange } from "lucide-react";
 import { toast } from "sonner";
 
 interface DailyStat { date: string; pv: number; uv: number }
@@ -10,6 +10,11 @@ interface BarRow { name: string; count: number }
 interface HourPoint { hour: number; count: number }
 interface TopLink { name: string; count: number; url: string }
 interface GeoData { total: number; unknown: number; regions: { name: string; count: number }[] }
+interface WeekCompare {
+  curStart: string; curEnd: string; prevStart: string; prevEnd: string;
+  curPv: number; curUv: number; prevPv: number; prevUv: number;
+  pvDelta: number; uvDelta: number;
+}
 
 interface DashboardData {
   totalPv: number; totalUv: number;
@@ -17,12 +22,14 @@ interface DashboardData {
   yesterdayPv: number; yesterdayUv: number;
   daily: DailyStat[];
   referrers: BarRow[];
+  sourceBuckets: BarRow[];
   devices: BarRow[];
   os: BarRow[];
   browsers: BarRow[];
   hours: HourPoint[];
   topLinks: TopLink[];
   geo: GeoData;
+  weekCompare: WeekCompare;
 }
 
 /** 概要卡片 */
@@ -40,7 +47,7 @@ function StatCard({ label, value, delta, icon: Icon, accent }: {
       <div className="mt-2 flex items-baseline gap-2">
         <span className="text-2xl font-semibold tabular-nums">{value}</span>
         {delta !== undefined && (
-          <span className={`flex items-center gap-0.5 text-xs font-medium ${up ? "text-emerald-600" : "text-red-500"}`}>
+          <span className={`flex items-center gap-0.5 text-xs font-medium ${up ? "text-success" : "text-error"}`}>
             {up ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
             {up ? "+" : ""}{delta}%
           </span>
@@ -143,6 +150,76 @@ function HourChart({ data }: { data: HourPoint[] }) {
   );
 }
 
+/** 来源构成（直接/搜索/社交/外链）——横向比例条 + 占比 */
+function SourceCompose({ rows }: { rows: BarRow[] }) {
+  const total = rows.reduce((s, r) => s + r.count, 0);
+  const isEmpty = total === 0;
+  const COLORS = ["#3b82f6", "#8b5cf6", "#ec4899", "#10b981"];
+  return (
+    <div className="rounded-xl border bg-card p-4">
+      <h3 className="mb-3 flex items-center gap-1.5 text-sm font-semibold"><Focus className="h-4 w-4" />来源构成（最近 30 天）</h3>
+      {isEmpty ? (
+        <p className="py-4 text-center text-xs text-muted-foreground">暂无访问明细</p>
+      ) : (
+        <div className="space-y-3">
+          <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-muted">
+            {rows.map((r, i) => (
+              r.count > 0 && <div key={r.name} className="h-full" style={{ width: `${(r.count / total) * 100}%`, background: COLORS[i % COLORS.length] }} />
+            ))}
+          </div>
+          <ul className="space-y-2">
+            {rows.map((r, i) => {
+              const pct = total ? Math.round((r.count / total) * 1000) / 10 : 0;
+              return (
+                <li key={r.name} className="flex items-center gap-2 text-xs">
+                  <span className="flex h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: COLORS[i % COLORS.length] }} />
+                  <span className="flex-1">{r.name}</span>
+                  <span className="tabular-nums">{r.count}</span>
+                  <span className="w-11 shrink-0 text-right tabular-nums text-muted-foreground">{pct}%</span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** 本周 vs 上周对比 */
+function WeekCompareCard({ w, today }: { w: WeekCompare; today: string }) {
+  const currentWeekLabel = w.curStart === today ? "本周" : `${w.curStart} ~ ${w.curEnd}`;
+  const prevWeekLabel = `${w.prevStart} ~ ${w.prevEnd}`;
+  const rows = [
+    { label: "PV", cur: w.curPv, prev: w.prevPv, delta: w.pvDelta },
+    { label: "UV", cur: w.curUv, prev: w.prevUv, delta: w.uvDelta },
+  ];
+  return (
+    <div className="rounded-xl border bg-card p-4">
+      <h3 className="mb-3 flex items-center gap-1.5 text-sm font-semibold"><CalendarRange className="h-4 w-4" />周环比（本周 vs 上周）</h3>
+      {rows.map((r) => {
+        const up = r.delta >= 0;
+        return (
+          <div key={r.label} className="mb-3 rounded-lg border bg-muted/40 px-3 py-2.5 last:mb-0">
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>{r.label}</span>
+              <span title={`上周（${prevWeekLabel}）：${r.prev}`}>本周（{currentWeekLabel}）：{r.cur}</span>
+            </div>
+            <div className="mt-1 flex items-baseline gap-2">
+              <span className="text-lg font-semibold tabular-nums">{r.cur}</span>
+              <span className={`flex items-center gap-0.5 text-xs font-medium ${up ? "text-success" : "text-error"}`}>
+                {up ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                {up ? "+" : ""}{r.delta}%
+              </span>
+              <span className="text-[11px] text-muted-foreground">上周 {r.prev}</span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function StatsPanel() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -169,17 +246,7 @@ export default function StatsPanel() {
 
   return (
     <Card>
-      <CardHeader>
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-            <Activity className="h-5 w-5" />
-          </div>
-          <div>
-            <CardTitle className="text-lg">访问统计</CardTitle>
-            <CardDescription>今日与累计访问、趋势、来源、设备与热门链接</CardDescription>
-          </div>
-        </div>
-      </CardHeader>
+      {/* 页面级标题/描述由 admin/page.tsx 提供，卡内不再重复标题 */}
       <CardContent className="space-y-4">
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <StatCard label="今日 PV" value={data?.todayPv ?? 0} delta={deltaPv} icon={Eye} accent="text-blue-500" />
@@ -191,6 +258,12 @@ export default function StatsPanel() {
         <div className="grid gap-3 md:grid-cols-2">
           <TrendChart data={recent} label="PV" color="#3b82f6" />
           <TrendChart data={recent} label="UV" color="#8b5cf6" />
+        </div>
+
+        {/* F4 深度分析：来源构成 + 周环比 */}
+        <div className="grid gap-3 md:grid-cols-2">
+          <SourceCompose rows={data?.sourceBuckets ?? []} />
+          {data?.weekCompare && <WeekCompareCard w={data.weekCompare} today={data.weekCompare.curEnd} />}
         </div>
 
         {/* 增强维度：时段 + 设备 */}
@@ -206,7 +279,7 @@ export default function StatsPanel() {
 
         <div className="grid gap-3 md:grid-cols-2">
           <MiniBars title="访问来源" rows={data?.referrers ?? []} empty="暂无来源数据（均为直接访问）" />
-          <MiniBars title="地域分布（Top 12 IP，尽力解析）" rows={(GEO?.regions ?? []).map((r) => ({ name: r.name, count: r.count }))} empty="暂无地域数据" />
+          <MiniBars title="访客地域分布（IP 库离线解析）" rows={(GEO?.regions ?? []).map((r) => ({ name: r.name, count: r.count }))} empty="暂无地域数据" />
         </div>
 
         {/* 热门链接 */}

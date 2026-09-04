@@ -3,12 +3,13 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
 import { LoadingPlaceholder } from "./LinksPanel";
 import { useProfileForm } from "./useProfileForm";
 import UploadButton from "./UploadButton";
 import ThemePreview from "./ThemePreview";
+import { SectionBlock, SubTitle } from "./panel";
 import {
   COVER_TYPES,
   SWITCH_INTERVALS,
@@ -18,51 +19,6 @@ import {
   selectClass,
   rangeClass,
 } from "./profileShared";
-
-/** 折叠分组（details）统一样式 */
-function SectionBlock({
-  title,
-  subtitle,
-  dotClass,
-  open,
-  children,
-}: {
-  title: string;
-  subtitle: string;
-  dotClass: string;
-  open?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <details
-      open={open}
-      className="group overflow-hidden rounded-lg border border-border bg-card shadow-sm transition-all"
-    >
-      <summary className="flex cursor-pointer items-center justify-between px-4 py-3.5 font-medium transition-colors hover:bg-muted/40 [&::-webkit-details-marker]:hidden list-none">
-        <span className="flex items-center gap-2.5">
-          <span className={`h-2 w-2 rounded-full ${dotClass}`} />
-          <span>{title}</span>
-          <span className="text-xs font-normal text-muted-foreground">{subtitle}</span>
-        </span>
-        <svg className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-open:rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <polyline points="6 9 12 15 18 9"></polyline>
-        </svg>
-      </summary>
-      <div className="space-y-5 border-t px-5 py-5">{children}</div>
-    </details>
-  );
-}
-
-/** 小节标题（居中分隔线形式） */
-function SubTitle({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="flex items-center gap-2">
-      <div className="h-px flex-1 bg-border/60" />
-      <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{children}</h4>
-      <div className="h-px flex-1 bg-border/60" />
-    </div>
-  );
-}
 
 /** 滑块组（含左侧标签 / 右侧当前值） */
 function RangeField({
@@ -107,10 +63,7 @@ export default function ThemePanel() {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>主题与壁纸</CardTitle>
-        <CardDescription>配置背景壁纸、主题模式与整体视觉氛围</CardDescription>
-      </CardHeader>
+      {/* 页面级标题头由 admin/page.tsx 提供，卡内不再重复标题 */}
       <CardContent>
         {/* 主题实时预览：CSS 变量随表单实时值变化，保存后前台同源生效 */}
         <div className="mb-5">

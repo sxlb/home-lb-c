@@ -13,6 +13,11 @@ export const announcementSchema = z.object({
 // 编辑时允许部分字段：标题/内容/置顶/上线/排序/时间
 export const announcementPatchSchema = announcementSchema.partial();
 
+// 公告批量保存：数组，每项可含可选 id（有则更新、无则新增）
+export const announcementBatchSchema = z.array(
+  announcementSchema.extend({ id: z.number().int().positive().optional() })
+);
+
 // 右上角欢迎通知：默认 5 句欢迎语（{siteName} 会被替换为站点昵称）
 export const DEFAULT_WELCOME_MESSAGES = [
   "欢迎来到 {siteName} 的小站～",

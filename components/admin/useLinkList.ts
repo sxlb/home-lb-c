@@ -50,6 +50,8 @@ export function useLinkList<T extends LinkItem>(
   const [items, setItems] = useState<T[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  // 是否存在未保存的修改：驱动「● 有未保存的更改」提示（统一三个链接面板）
+  const [dirty, setDirty] = useState(false);
 
   /** 拉取服务端列表；失败返回 null（内部已 toast） */
   const fetchList = useCallback(async (): Promise<T[] | null> => {
@@ -84,10 +86,12 @@ export function useLinkList<T extends LinkItem>(
       ...prev,
       { ...emptyItem, sort: prev.length, clientId: nextClientId() } as T,
     ]);
+    setDirty(true);
   }, [emptyItem]);
 
   const removeItem = useCallback((index: number) => {
     setItems((prev) => prev.filter((_, i) => i !== index));
+    setDirty(true);
   }, []);
 
   const updateItem = useCallback(<K extends keyof T>(index: number, field: K, value: T[K]) => {
@@ -96,6 +100,7 @@ export function useLinkList<T extends LinkItem>(
       updated[index] = { ...updated[index], [field]: value };
       return updated;
     });
+    setDirty(true);
   }, []);
 
   // 批量保存：过滤名称为空的行 + 本地逐行预校验 + 保存后以服务端数据为准重新拉取
@@ -129,6 +134,7 @@ export function useLinkList<T extends LinkItem>(
         // 覆盖用户在保存期间的新输入（响应返回时 items 已变化）
         const fresh = await fetchList();
         if (fresh) setItems(fresh);
+        setDirty(false);
       } else {
         const data = await res.json();
         toast.error(data.error || "保存失败");
@@ -140,5 +146,5 @@ export function useLinkList<T extends LinkItem>(
     }
   }, [items, apiPath, successMessage, urlPattern, requireIcon, fetchList]);
 
-  return { items, loading, saving, addItem, removeItem, updateItem, save };
+  return { items, loading, saving, dirty, addItem, removeItem, updateItem, save };
 }
