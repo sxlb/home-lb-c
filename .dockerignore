@@ -25,6 +25,18 @@ data
 # 测试 / 文档 / 部署脚本（构建无需带入镜像，减小构建上下文）
 tests
 scripts
+docs
 README.md
+FONT_LICENSES.md
 deploy.sh
 deploy.ps1
+
+# 参考模板 / 设计稿 / 本地部署产物（不进镜像，进一步轻量化构建上下文）
+.ref-home
+sxlb-ui-design.svg
+home-lb-src.tar.gz
+
+# CI 配置与本地增量缓存
+.github
+*.tsbuildinfo
+tsconfig.tsbuildinfo

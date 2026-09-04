@@ -7,8 +7,13 @@ COPY prisma/schema.prisma ./prisma/schema.prisma
 # Prisma 引擎二进制下载镜像：VPS 在国内，默认 binaries.prisma.sh 被墙会导致
 # @prisma/client postinstall / prisma generate 卡死或取不到 linux-musl 引擎
 ENV PRISMA_ENGINES_MIRROR=https://registry.npmmirror.com/-/binary/prisma
-# 优先 npm ci（可复现构建）；lock 缺失时回退 npm install
-RUN npm ci || npm install
+# 优先 npm ci（可复现构建）；lock 缺失时回退 npm install。
+# --mount=type=cache 将 npm 缓存目录挂载到宿主机持久层，依赖 tarball 跨部署复用，
+# 避免小机重复冷下载（BuildKit 特性；docker compose v2 默认开启）。
+# --no-audit/--no-fund 关闭审计与赞助提示，--prefer-offline 优先用本地缓存，显著提速。
+RUN --mount=type=cache,id=npm,target=/root/.npm \
+    npm ci --no-audit --no-fund --prefer-offline || \
+    npm install --no-audit --no-fund --prefer-offline
 
 # ===== 阶段 2: 构建 =====
 FROM node:22-alpine AS builder
@@ -27,7 +32,9 @@ ENV NODE_OPTIONS=--max-old-space-size=1536
 # 字体构建容错：优先正常构建（保留 next/font/google 真实自托管字体）；
 # 若 fonts.gstatic.com 在国内被墙导致下载失败，则用 NEXT_FONT_GOOGLE_MOCKED_RESPONSES=1
 # 兜底重跑一次（离线 mock 字体），保证镜像构建永不因 Google Fonts 阻断。
-RUN npm run build || { export NEXT_FONT_GOOGLE_MOCKED_RESPONSES=1 && npm run build; }
+# --mount=type=cache 持久化 Next 增量构建缓存（.next/cache），仅源码变化时重建受影响部分。
+RUN --mount=type=cache,id=nextbuild,target=/app/.next/cache \
+    npm run build || { export NEXT_FONT_GOOGLE_MOCKED_RESPONSES=1 && npm run build; }
 
 # ===== 阶段 3: 运行时 =====
 FROM node:22-alpine AS runner
