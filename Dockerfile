@@ -4,6 +4,11 @@ FROM node:22-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json* ./
 COPY prisma/schema.prisma ./prisma/schema.prisma
+# 包源可配置：默认官方 npmjs（该部署机实测直连 ~0.04s 最快）；
+# 若某台机器直连 npmjs 过慢，可用 --build-arg NPM_REGISTRY=https://registry.npmmirror.com 覆盖。
+# npm_config_registry 环境变量优先级高于 .npmrc，故能覆盖其中的 registry 配置。
+ARG NPM_REGISTRY=https://registry.npmjs.org
+ENV npm_config_registry=$NPM_REGISTRY
 # Prisma 引擎二进制下载镜像：VPS 在国内，默认 binaries.prisma.sh 被墙会导致
 # @prisma/client postinstall / prisma generate 卡死或取不到 linux-musl 引擎
 ENV PRISMA_ENGINES_MIRROR=https://registry.npmmirror.com/-/binary/prisma
