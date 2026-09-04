@@ -82,7 +82,8 @@ export type LogModule =
   | "backup"
   | "announcements"
   | "logs" // 操作日志自身：导出 / 清理审计
-  | "media"; // 媒体库：上传 / 复制 / 删除
+  | "media" // 媒体库：上传 / 复制 / 删除
+  | "update"; // 系统更新：检查 / 更新 / 回滚
 
 export interface LogInput {
   module: LogModule;

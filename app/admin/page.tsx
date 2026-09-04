@@ -26,6 +26,7 @@ import {
   Copy,
   Images,
   Link2,
+  Rocket,
 } from "lucide-react";
 import ProfilePanel from "@/components/admin/ProfilePanel";
 import LinksManager from "@/components/admin/LinksManager";
@@ -39,6 +40,7 @@ import MusicPanel from "@/components/admin/MusicPanel";
 import DataPanel from "@/components/admin/DataPanel";
 import StatsPanel from "@/components/admin/StatsPanel";
 import AnnouncementPanel from "@/components/admin/AnnouncementPanel";
+import UpdatePanel from "@/components/admin/UpdatePanel";
 
 type TabId =
   | "profile"
@@ -52,7 +54,8 @@ type TabId =
   | "health"
   | "data"
   | "stats"
-  | "media";
+  | "media"
+  | "update";
 
 interface TabItem {
   id: TabId;
@@ -102,6 +105,7 @@ const NAV_GROUPS: NavGroup[] = [
       { id: "health", label: "服务状态", icon: Activity, description: "监控服务运行状态与健康指标" },
       { id: "data", label: "数据管理", icon: Database, description: "备份与恢复站点数据" },
       { id: "media", label: "媒体库", icon: Images, description: "集中管理上传的图片资源" },
+      { id: "update", label: "系统更新", icon: Rocket, description: "检测并更新站点版本、查看日志与回滚" },
     ],
   },
 ];
@@ -449,6 +453,7 @@ export default function AdminPage() {
               {activeTab === "data" && <DataPanel />}
               {activeTab === "stats" && <StatsPanel />}
               {activeTab === "media" && <MediaPanel />}
+              {activeTab === "update" && <UpdatePanel />}
             </div>
           </div>
         </div>

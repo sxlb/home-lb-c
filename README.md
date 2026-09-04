@@ -1,6 +1,6 @@
 # home-lb 个人主页
 
-一个开箱即用的现代个人主页 / 导航首页。基于 Next.js 15（App Router）+ TypeScript + Tailwind CSS + Prisma（SQLite）构建，内置后台管理系统，支持 Docker 一键部署与自动打包发版。
+一个开箱即用的现代个人主页 / 导航首页。基于 Next.js 15（App Router）+ TypeScript + Tailwind CSS + Prisma（SQLite）构建，内置后台管理系统，支持 Docker 一键部署，并在推送代码时自动构建镜像、打包发布语义化版本。
 
 ## 功能特性
 
@@ -16,6 +16,7 @@
 
 ### 后台管理（`/admin`）
 
+- 系统更新：检测 GitHub 最新发布、查看更新日志、一键更新（**服务器自建构建**或**拉取发布镜像**两种方式）、版本回滚、数据库快照、更新历史
 - 站点信息、主题与壁纸、音乐设置、社交 / 网站 / 友情链接、天气设置
 - 账号设置（改密强制重新登录）、操作日志审计、外部服务状态监控
 - 玻璃拟态卡片、强调色、艺术字体（18 款中英双语）等视觉配置全部可视化
@@ -23,7 +24,7 @@
 ### 安全设计
 
 - **SSRF 防护**：壁纸 / 音乐代理接口校验协议白名单、私网地址拦截、DNS rebinding 防护、响应体大小限制
-- **登录防护**：bcrypt 加密、按来源 IP 的失败限流（5 次锁定 10 分钟）、时序攻击防护
+- **登录防护**：bcrypt 加密、IP + 账号双维度失败锁定（5 次锁定 5 分钟）、时序攻击防护、TOTP 二次验证
 - **输入校验**：所有 API 入参经 Zod 校验；脚本注入净化（拦截 on* / javascript: / srcdoc）
 - **安全响应头**：CSP / X-Frame-Options / Referrer-Policy 等全站配置
 - **操作审计**：后台关键操作全部记录操作日志（含 IP，敏感字段脱敏）
@@ -35,11 +36,12 @@
 | 框架 | Next.js 15（App Router，standalone 输出） |
 | 语言 | TypeScript（strict） |
 | 样式 | Tailwind CSS 3 + shadcn/ui 组件 |
-| 数据库 | SQLite + Prisma ORM（含 29 个迁移） |
+| 数据库 | SQLite + Prisma ORM（38 个迁移） |
 | 认证 | NextAuth v4（JWT + Credentials） |
 | 校验 | Zod |
-| 测试 | Vitest（184 用例：SSRF / 限流 / 校验 / 组件交互） |
-| CI/CD | GitHub Actions 自动构建打包 + Release |
+| 测试 | Vitest（272 用例：SSRF / 限流 / 校验 / 组件交互） |
+| 更新 | 网页触发 + 宿主机执行（GitHub Release 检测 / 更新 / 回滚 / 数据库快照） |
+| CI/CD | GitHub Actions 自动构建 + 语义化发版 + GHCR 镜像发布 |
 
 ## 快速开始
 
@@ -89,32 +91,48 @@ docker compose --env-file .env.deploy up -d --build
 | `NEXTAUTH_SECRET` | ✅ | NextAuth 签名密钥（`openssl rand -base64 32` 生成） |
 | `NEXTAUTH_URL` | ✅ | 应用对外访问地址（反代 / 域名时必须设置） |
 | `SEED_ADMIN_PASSWORD` | — | 默认管理员密码（≥8 位）；留空则 seed 时随机生成并打印到日志 |
+| `APP_VERSION` | — | 当前发布版本（由更新流程自动注入）；缺省回退为构建内置的 package.json 版本 |
 
 > ⚠️ 首次登录后台后请立即在「账号设置」修改默认账号密码。
 
-## 自动打包发版
+## 自动发版
 
-每次 push 到 `master` 分支，GitHub Actions 自动执行：安装依赖 → 数据库迁移 → 生产构建 → 打包 standalone 产物 → 创建 GitHub Release。
+每次 push 到 `master` 分支，GitHub Actions 自动执行：语义化版本递增 → 依赖安装 → 数据库迁移 → 生产构建 → 打包产物 → 推送 GHCR 镜像 → 创建 GitHub Release。
 
-- **版本号**：`home-年-月-日-时间`（如 `home-2026-8-26-01:19:01`），按中国时区（Asia/Shanghai）生成，便于按时间识别
-- **产物**：Next.js standalone 目录 + Prisma（schema/migrations/seed）+ Dockerfile / compose / 部署脚本 / env 模板，打包为 tar.gz 上传至 Release
-- **Release Notes**：自动生成（版本、日期、变更列表、上一版本 CHANGELOG 对比链接）
+- **版本号**：语义化版本 `0.0.1 → 0.0.2 → 0.0.3 …`，每次基于已发布的最大版本自动 `patch+1`，首次发布 `0.0.1`
+- **发布时间**：中国时区（Asia/Shanghai），记录在 GitHub Release 标题与说明中（如 `home-lb 0.0.1 · 2026-09-05 15:30 (UTC+8)`）
+- **产物**：
+  - **Docker 镜像**：推送至 `ghcr.io/sxlb/home-lb-c:<版本>` 及 `:latest`，供服务器「拉取镜像」更新模式使用
+  - **standalone 包**：Next.js 产物 + Prisma（schema/migrations/seed）+ Dockerfile / compose / 部署脚本 / env 模板，打包为 tar.gz 上传至 Release
+- **Release Notes**：自动生成（版本、中国时间、变更列表、上一版本 CHANGELOG 对比链接）
+
+## 系统更新 / 回滚
+
+后台「系统更新」面板负责检测与执行，宿主机定时器实现真正的部署动作：
+
+- **检测**：通过 GitHub Releases API 发现最新语义化版本，10 分钟缓存防限流
+- **更新方式**（每次操作可选其一）：
+  - **服务器自建构建**：宿主机 `git checkout` 到目标 tag，本地 `docker push` 构建镜像，依赖服务器算力
+  - **拉取发布镜像**：直接从 GHCR 拉取 `:<版本>` 镜像并以 `--no-build` 重启，速度快、服务器零构建压力
+- **安全机制**：更新 / 回滚前自动备份数据库；`flock` + 每分钟 cron 防止并发执行；结果回写面板并落操作日志
+- **回滚**：支持恢复到历史版本（代码 + 数据库快照一并回退）
 
 ## 项目结构
 
 ```
 ├── app/                  # 路由与页面（App Router）
-│   ├── api/              # API 路由（认证/配置/壁纸/音乐/天气/统计等）
+│   ├── api/              # API 路由（认证/配置/壁纸/音乐/天气/统计/更新等）
 │   ├── admin/            # 后台管理
 │   ├── page.tsx          # 首页
 │   └── hooks.ts          # 首页数据准备（服务端）
 ├── components/           # 组件（壁纸/时钟/音乐/特效/后台面板等）
-├── lib/                  # 核心逻辑（auth/ssrf/validation/server/壁纸缓存）
+├── lib/                  # 核心逻辑（auth/ssrf/validation/server/version/update）
 ├── prisma/               # Schema、迁移、seed
 ├── public/fonts/         # 自托管艺术字体
-├── tests/                # Vitest 测试（184 用例）
-├── .github/workflows/    # 自动构建打包发布
-└── deploy.sh / deploy.ps1 / Dockerfile / docker-compose.yml
+├── tests/                # Vitest 测试（272 用例）
+├── scripts/              # 宿主机更新/回滚执行器与通道安装脚本
+├── .github/workflows/    # 自动构建、语义化发版、GHCR 镜像发布
+└── deploy.sh / deploy.ps1 / Dockerfile / docker-compose*.yml
 ```
 
 ## 许可

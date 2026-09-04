@@ -10,14 +10,22 @@
 import datetime
 import os
 import pathlib
+import re
 import subprocess
 
 ROOT = pathlib.Path(os.environ.get("GITHUB_WORKSPACE", "."))
 VERSION = os.environ["VERSION"]
-# Git tag 不允许冒号，CHANGELOG 对比链接使用无冒号的 TAG（由 workflow 传入）
+# 中国时区（Asia/Shanghai）发布时间：如 "2026-09-05 15:30"；缺省降级为构建机 UTC 日期
+CN_TIME = os.environ.get("CN_TIME", "")
+DATE = CN_TIME or datetime.date.today().strftime("%Y-%m-%d")
+# Git tag 不使用冒号（Windows 下载兼容）；语义化 tag 天然无冒号，此处与 VERSION 一致
 TAG = os.environ.get("TAG", VERSION)
 REPO = os.environ.get("REPO", "sxlb/home-lb-c")
-DATE = datetime.date.today().strftime("%Y-%m-%d")
+
+
+def semver_key(tag: str):
+    parts = re.sub(r"^v", "", tag).split(".")
+    return tuple(int(p) for p in parts[:3])
 
 
 def git(*args: str) -> str:
@@ -27,9 +35,10 @@ def git(*args: str) -> str:
 
 
 def main() -> None:
-    # 上一版本 tag（按创建时间倒序取最新）
-    tags = [t for t in git("tag", "--sort=-creatordate").splitlines() if t]
-    prev = tags[0] if tags else ""
+    # 上一版本 tag：从已有标签中取最大的语义化版本（0.0.1 / v0.0.1）
+    all_tags = [t for t in git("tag", "-l").splitlines() if t]
+    semver_tags = [t for t in all_tags if re.match(r"^v?\d+\.\d+\.\d+$", t)]
+    prev = max(semver_tags, key=semver_key) if semver_tags else ""
 
     # 变更列表（去掉 commit hash，保留提交信息；无历史时兜底）
     log_range = f"{prev}..HEAD" if prev and prev != TAG else "HEAD"

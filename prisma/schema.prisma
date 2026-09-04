@@ -194,3 +194,19 @@ model ImageAsset {
 
   @@index([mimeType])
 }
+
+model UpdateRecord {
+  id          Int      @id @default(autoincrement())
+  version     String   // 目标版本（更新/回滚目标，如 v1.2.0）
+  action      String   // update / rollback
+  method      String   @default("build") // build=服务器自建构建 / image=拉取发布镜像
+  fromVersion String   @default("") // 变更前版本
+  status      String   @default("pending") // pending / running / success / failed
+  message     String   @default("") // 结果说明（成功/失败原因）
+  description String   @default("") // 更新日志 / 发布说明
+  triggeredBy String   @default("") // 操作者
+  createdAt   DateTime @default(now())
+  finishedAt  DateTime?
+
+  @@index([createdAt])
+}

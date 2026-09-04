@@ -1,0 +1,8 @@
+services:
+  home-lb:
+    # 镜像更新模式：直接使用已发布到 GHCR 的镜像，跳过服务器本地构建。
+    # 更新时由 update-watch.sh 解析出方法后，用以下命令拉取并重启：
+    #   docker compose --env-file .env.deploy -f docker-compose.yml -f docker-compose.image.yml pull
+    #   docker compose --env-file .env.deploy -f docker-compose.yml -f docker-compose.image.yml up --no-build -d
+    # IMAGE_TAG 为 GitHub 发布的 tag（如 home-2026-8-26-01-19-01 / latest）。
+    image: ${GHCR_IMAGE:-ghcr.io/sxlb/home-lb-c}:${IMAGE_TAG:-latest}
