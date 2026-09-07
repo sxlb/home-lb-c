@@ -53,6 +53,7 @@ export async function generateMetadata(): Promise<import("next").Metadata> {
 
 // ── 数据准备：默认值、头像解析、字体映射等逻辑已抽取到 hooks.ts ──
 import { getHomeData } from "./hooks";
+import { CURRENT_VERSION } from "@/lib/version";
 
 export default async function Home() {
   const profile = await getProfile();
@@ -182,7 +183,7 @@ export default async function Home() {
         </section>
 
         {/* 页脚：版权信息 */}
-        <FooterLazy siteName={d.nickname} siteUrl={d.siteUrl} siteIcp={d.siteIcp} siteMps={d.siteMps} siteStart={d.siteStart} showStats={d.showStats} siteFooterHtml={d.siteFooterHtml} />
+        <FooterLazy siteName={d.nickname} siteUrl={d.siteUrl} siteIcp={d.siteIcp} siteMps={d.siteMps} siteStart={d.siteStart} showStats={d.showStats} siteFooterHtml={d.siteFooterHtml} appVersion={CURRENT_VERSION} />
         </main>
       </MusicProviderLazy>
     </ThemeProvider>

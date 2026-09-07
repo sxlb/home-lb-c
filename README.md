@@ -112,7 +112,7 @@ docker compose --env-file .env.deploy up -d --build
 
 - **检测**：通过 GitHub Releases API 发现最新语义化版本，10 分钟缓存防限流
 - **更新方式**（每次操作可选其一）：
-  - **服务器自建构建**：宿主机 `git checkout` 到目标 tag，本地 `docker push` 构建镜像，依赖服务器算力
+  - **服务器自建构建**：宿主机 `git checkout` 到目标 tag，本地 `docker build`、`compose up` 构建镜像，依赖服务器算力
   - **拉取发布镜像**：直接从 GHCR 拉取 `:<版本>` 镜像并以 `--no-build` 重启，速度快、服务器零构建压力
 - **安全机制**：更新 / 回滚前自动备份数据库；`flock` + 每分钟 cron 防止并发执行；结果回写面板并落操作日志
 - **回滚**：支持恢复到历史版本（代码 + 数据库快照一并回退）

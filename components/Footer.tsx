@@ -12,6 +12,8 @@ interface Props {
   showStats?: boolean;
   /** 页脚自定义 HTML（管理员可信内容，显示在版权行上方） */
   siteFooterHtml?: string;
+  /** 当前应用版本（由服务端 CURRENT_VERSION 传入，供后台更新后核验） */
+  appVersion?: string;
 }
 
 interface StatsData {
@@ -121,6 +123,7 @@ export default function Footer({
   siteStart = "",
   showStats = false,
   siteFooterHtml = "",
+  appVersion = "",
 }: Props) {
   const year = new Date().getFullYear();
   const url = siteUrl.trim();
@@ -206,6 +209,7 @@ export default function Footer({
             ) : (
               <span>{siteName}</span>
             )}
+            {appVersion && <span className="text-white/25"> · v{appVersion.trim()}</span>}
           </span>
         </div>
       </div>

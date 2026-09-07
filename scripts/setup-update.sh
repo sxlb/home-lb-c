@@ -59,7 +59,8 @@ if [ ! -f "$VERSION_FILE" ]; then
   # 与运行中应用报告的版本（package.json）对齐；无 node 时回退 git tag
   VER=""
   if command -v node >/dev/null 2>&1; then
-    VER="v$(node -p "require('$REPO_DIR/package.json').version" 2>/dev/null || node -p "require('./package.json').version")"
+    # 去掉 v 前缀，与 git tag / 应用 CURRENT_VERSION 的语义化版本保持一致
+    VER="$( (node -p "require('$REPO_DIR/package.json').version" 2>/dev/null || node -p "require('./package.json').version") | sed 's/^v//i' )"
   fi
   [ -n "$VER" ] || VER="$(git describe --tags --abbrev=0 2>/dev/null || echo 'v0.0.0')"
   AT="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
