@@ -19,8 +19,8 @@ import dynamic from "next/dynamic";
 
 const LoadingScreen = dynamic(() => import("@/components/LoadingScreen").then((m) => m.LoadingScreen), { ssr: true });
 const SeasonalEffect = dynamic(() => import("@/components/SeasonalEffect"));
-// 公告条：非首屏必需，延迟加载减小首屏 JS
-const AnnouncementBar = dynamic(() => import("@/components/AnnouncementBar"), { ssr: true });
+// 公告居中弹窗（非首屏必需，延迟加载减小首屏 JS）
+const AnnouncementNotification = dynamic(() => import("@/components/AnnouncementNotification"), { ssr: true });
 // 页脚懒加载：桌面端页脚在视口外，延迟加载减小首屏 JS
 const FooterLazy = dynamic(() => import("@/components/Footer"), {
   ssr: true,
@@ -74,6 +74,14 @@ export default async function Home() {
         <FaviconUpdater icon={d.siteIcon} />
         <ScriptInjector scripts={[d.headScript]} deferScripts={[d.analyticsScript]} />
 
+        {/* 站点通知居中弹窗（欢迎 + 公告合并展示，fixed 定位，独立于页面流） */}
+        <AnnouncementNotification
+          welcomeEnabled={d.welcomeEnabled}
+          siteName={d.nickname}
+          welcomeMessages={d.welcomeMessages}
+          welcomeIndex={d.welcomeIndex}
+        />
+
         {/* 全屏加载动画：首屏必需，保持预加载（ssr:true） */}
         <LoadingScreen enabled={d.loadingScreen} siteName={d.nickname} />
 
@@ -82,10 +90,7 @@ export default async function Home() {
           consoleEgg={d.consoleEgg}
           dynamicTitle={d.dynamicTitle}
           topProgressBar={d.topProgressBar}
-          welcomeEnabled={d.welcomeEnabled}
           siteName={d.nickname}
-          welcomeMessages={d.welcomeMessages}
-          welcomeIndex={d.welcomeIndex}
         />
 
         {/* SSR 阶段已解析壁纸直链：浏览器在 HTML 解析时即开始下载背景图（与 JS 并行），消除首屏等待 */}
@@ -100,10 +105,6 @@ export default async function Home() {
         <CustomFont enabled={d.customFontEnabled} family={d.customFontFamily} scope={d.customFontScope} />
 
         <section className="relative z-10 flex w-full flex-1 flex-col items-center">
-          {/* 站点公告：顶部展示当前有效公告（置顶优先） */}
-          <div className="mt-4 flex w-full justify-center px-5 md:mt-6 md:px-4">
-            <AnnouncementBar />
-          </div>
           <div className="mx-auto flex w-full max-w-6xl flex-col items-center gap-5 px-5 pt-4 pb-20 md:my-auto md:items-start md:px-6 md:pb-0 md:pt-0 lg:gap-8">
             {/* 双栏：各自自然高度、整体垂直居中（对齐全站 .all align-items:center）；
                 左栏 translateY(20px) 下移，复刻参考站左低右高的错位张力 */}

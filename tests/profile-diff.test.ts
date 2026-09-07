@@ -36,4 +36,16 @@ describe("diffProfile（敏感字段脱敏）", () => {
     expect(detail).not.toContain("SECRET_TX");
     expect(detail).toContain("已配置");
   });
+
+  it("analyticsScript / headScript / siteFooterHtml 完整脚本全文不入日志，仅记已配置/未配置", () => {
+    const script = "<script>console.log('TRACKING_SECRET')</script>";
+    const { summary, detail } = diffProfile(
+      { analyticsScript: "", headScript: "", siteFooterHtml: "", nickname: "a" },
+      { analyticsScript: script, headScript: script, siteFooterHtml: script, nickname: "a" }
+    );
+    expect(summary).toContain("analyticsScript");
+    expect(detail).not.toContain("TRACKING_SECRET");
+    expect(detail).not.toContain("<script>");
+    expect(detail).toContain("已配置");
+  });
 });

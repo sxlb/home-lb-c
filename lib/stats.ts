@@ -34,6 +34,36 @@ export function buildDailySeries(
   return series;
 }
 
+/** item 形态：按 (date, hour) 分组的访问计数行 */
+export interface DayHourRow {
+  date: string; // YYYY-MM-DD
+  hour: number; // 东八区小时 0~23
+  count: number;
+}
+
+export const WEEKDAY_LABELS = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"] as const;
+export const WEEKDAY_COUNT = 7;
+export const HOURS_PER_DAY = 24;
+
+/**
+ * 组装一周时段热力图矩阵：7(周一~周日) × 24(小时)，各 (星期, 小时) 求和。
+ * rows 可乱序/多点；日期非法该行跳过。输出每行恒为 24 格。
+ */
+export function buildWeekHours(rows: DayHourRow[]): number[][] {
+  const grid: number[][] = Array.from({ length: WEEKDAY_COUNT }, () =>
+    Array<number>(HOURS_PER_DAY).fill(0)
+  );
+  for (const r of rows) {
+    const day = new Date(`${r.date}T00:00:00Z`);
+    if (Number.isNaN(day.getTime())) continue;
+    const hour = Math.trunc(r.hour);
+    if (hour < 0 || hour >= HOURS_PER_DAY) continue;
+    const weekday = (day.getUTCDay() + 6) % WEEKDAY_COUNT; // 0=周一 … 6=周日
+    grid[weekday][hour] += r.count;
+  }
+  return grid;
+}
+
 /* ==================== 来源构成分桶（深度分析） ==================== */
 export type SourceBucketKey = "direct" | "search" | "social" | "external";
 export const SOURCE_BUCKET_LABEL: Record<SourceBucketKey, string> = {

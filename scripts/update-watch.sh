@@ -153,6 +153,9 @@ if ! mv "$request" "$DEPLOY_DIR/running-${req_id}.json"; then
   fail "认领请求失败（可能已被其它进程认领）"
 fi
 running="$DEPLOY_DIR/running-${req_id}.json"
+# 兜底清理：任一步失败（含 fail/write_result 后 exit）都移除认领文件，
+# 避免残留 running-*.json 永久阻塞同一请求的后续更新/回滚
+trap 'rm -f "$running" 2>/dev/null' EXIT
 
 # 校验动作
 case "$action" in

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { BellRing, X } from "lucide-react";
+import { X } from "lucide-react";
 
 /**
  * ===== 页面装饰/工具类效果组件合集 =====
@@ -340,225 +340,114 @@ export function TopProgressBar({ enabled = true }: TopProgressBarProps) {
   );
 }
 
-/* ==================== 右上角欢迎消息 ==================== */
 
-interface WelcomeNoticeProps {
-  /** 是否启用欢迎通知（后台可配置） */
+/* ==================== 彩蛋隐藏入口面板 ==================== */
+
+interface EggPanelProps {
+  /** 是否启用（复用后台"控制台彩蛋"开关） */
   enabled?: boolean;
-  /** 站点昵称，用于替换欢迎语中的 {siteName} 占位符 */
+  /** 站点名 */
   siteName?: string;
-  /** 欢迎语列表（JSON 字符串数组） */
-  messages?: string;
-  /** 当前生效欢迎语的下标 */
-  index?: number;
 }
 
-/** 解析浏览器名称（navigator.userAgent，本地获取，参考 home 实现） */
-function getBrowserName(): string {
-  if (typeof navigator === "undefined") return "";
-  const ua = navigator.userAgent;
-  if (ua.includes("MicroMessenger")) return "微信内置浏览器";
-  if (ua.includes("Edg/")) return "Edge";
-  if (ua.includes("QQBrowser")) return "QQ 浏览器";
-  if (ua.includes("Firefox/")) return "Firefox";
-  if (ua.includes("Chrome/")) return "Chrome";
-  if (ua.includes("Safari/")) return "Safari";
-  return "";
-}
-
-/** 获取访客 IP 归属地（v4.yinghualuo.cn 返回 location，5s 超时，失败静默返回空） */
-async function fetchVisitorLocation(): Promise<string> {
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 5000);
-    try {
-      const res = await fetch("https://v4.yinghualuo.cn/bejson?format=json", {
-        signal: controller.signal,
-      });
-      if (!res.ok) return "";
-      const data = (await res.json()) as { location?: string };
-      return data.location || "";
-    } finally {
-      clearTimeout(timer);
-    }
-  } catch {
-    if (process.env.NODE_ENV !== "production") {
-      console.warn("[Effects] 访客位置获取失败，无法自动定位天气");
-    }
-    return "";
-  }
-}
+// 触发密钥：快速输入完整单词即弹出彩蛋面板
+const EGG_SECRET = "egg";
+const EGG_TIMEOUT = 1500;
+const EGG_TIPS = [
+  "你发现了隐藏彩蛋 🥚",
+  "彩蛋属于勇于探索的你",
+  "在弹幕时代，隐藏的门总值得一推",
+  "今日好心情浓度 +100%",
+];
 
 /**
- * 页面顶部居中欢迎消息通知
- * - 全端统一：固定定位在页面顶部中央（fixed + z-index 高于普通元素）
- * - 宽度自适应内容，最大不超过 80% 视窗宽度，页面滚动时位置保持不变
- * - 每次刷新页面都会展示（点击页面任意位置关闭，也可点 × 关闭，无自动隐藏）
- * - 欢迎语支持 {siteName} 占位符替换为站点昵称
- * - 通知显示时异步补充访客信息：浏览器 + IP 归属地（参考 home 欢迎通知，失败静默降级）
+ * 彩蛋隐藏入口：页面任意处快速输入密钥（egg）弹出精致居中彩蛋面板。
+ * - 复用后台"控制台彩蛋"开关（consoleEgg），不新增配置；
+ * - Esc / 点遮罩 / 点关闭均可退出；面板为纯展示，无任何交互提交。
+ * 与 DevConsole（F12 控制台 ASCII 彩蛋）互补，构成"键盘彩蛋 + 控制台彩蛋"双入口。
  */
-export function WelcomeNotice({
-  enabled = true,
-  siteName = "",
-  messages = "[]",
-  index = 0,
-}: WelcomeNoticeProps) {
-  const [visible, setVisible] = useState(false);
-  const [removed, setRemoved] = useState(false);
-  const [visitorInfo, setVisitorInfo] = useState("");
+export function EggPanel({ enabled = true, siteName = "" }: EggPanelProps) {
+  const [open, setOpen] = useState(false);
+  const bufferRef = useRef("");
+  const name = siteName || "本站";
 
   useEffect(() => {
     if (!enabled) return;
-
-    let list: string[] = [];
-    try {
-      const parsed = JSON.parse(messages);
-      if (Array.isArray(parsed)) list = parsed;
-    } catch {
-      list = [];
-    }
-    if (list.length === 0) return;
-
-    // 欢迎语越界时回退到最后一句
-    const raw = list[Math.min(Math.max(index, 0), list.length - 1)]?.trim();
-    if (!raw) return;
-
-    // 等待全屏加载动画完全移除后再显示：
-    // 监听 LoadingScreen 广播的 loading-screen-removed 事件（分屏收起动画结束、节点移除后才触发），
-    // 避免通知与加载动画重叠；最少等待 600ms，另设 3s 保底防止信号丢失导致通知不显示
-    let cancelled = false;
-    // 注意：必须用箭头函数包装 tryShow 延迟求值，直接传引用会因 tryShow 仍在 TDZ 抛 ReferenceError
-    const minTimer: ReturnType<typeof setTimeout> = setTimeout(() => tryShow(), 600);
-    let fallbackTimer: ReturnType<typeof setTimeout> | undefined;
-
-    const show = () => {
-      if (cancelled) return;
-      setVisible(true);
-    };
-
-    const onRemoved = () => {
-      if (fallbackTimer) clearTimeout(fallbackTimer);
-      show();
-    };
-
-    const tryShow = () => {
-      // 加载动画已完全移除（或本未启用）：直接展示
-      if (!document.getElementById("loader-wrapper")) {
-        show();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setOpen(false);
         return;
       }
-      // 否则等待全屏加载动画完全移除后再展示，避免与分屏收起动画重叠
-      window.addEventListener("loading-screen-removed", onRemoved, { once: true });
-      fallbackTimer = setTimeout(() => {
-        window.removeEventListener("loading-screen-removed", onRemoved);
-        show();
-      }, 3000);
+      // 在输入框等可编辑元素中不触发，避免打断正常输入
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      // 静默模式：后台开启键盘彩蛋时才收字；仅吃字母/数字，其余按键清空缓冲
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const ch = e.key.toLowerCase();
+      if (!/^[a-z0-9]$/.test(ch)) {
+        bufferRef.current = "";
+        return;
+      }
+      bufferRef.current = (bufferRef.current + ch).slice(-EGG_SECRET.length);
+      if (bufferRef.current === EGG_SECRET) {
+        bufferRef.current = "";
+        setOpen(true);
+        return;
+      }
+      clearTimeout(timer);
+      timer = setTimeout(() => { bufferRef.current = ""; }, EGG_TIMEOUT);
     };
-
+    window.addEventListener("keydown", onKey);
     return () => {
-      cancelled = true;
-      if (minTimer) clearTimeout(minTimer);
-      if (fallbackTimer) clearTimeout(fallbackTimer);
-      window.removeEventListener("loading-screen-removed", onRemoved);
+      window.removeEventListener("keydown", onKey);
+      if (timer) clearTimeout(timer);
     };
-  }, [enabled, messages, index, siteName]);
+  }, [enabled]);
 
-  // 通知显示后：点击页面任意内容即关闭（不再定时自动隐藏）
-  useEffect(() => {
-    if (!visible) return;
-    const handleClick = () => setVisible(false);
-    // 捕获阶段监听，确保页面任意位置的点击都触发关闭
-    document.addEventListener("click", handleClick, true);
-    return () => document.removeEventListener("click", handleClick, true);
-  }, [visible]);
+  if (!enabled || !open) return null;
 
-  // 通知真正显示后再异步补充访客信息（不显示则不发请求）
-  useEffect(() => {
-    if (!visible) return;
-    let cancelled = false;
-    (async () => {
-      const browser = getBrowserName();
-      const location = await fetchVisitorLocation();
-      if (cancelled) return;
-      const parts = [browser, location].filter(Boolean);
-      setVisitorInfo(parts.length > 0 ? `来自 ${parts.join(" · ")}` : "");
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [visible]);
-
-  if (!enabled || removed || !visible) return null;
-
-  let text = "";
-  try {
-    const list = JSON.parse(messages) as string[];
-    const raw = list[Math.min(Math.max(index, 0), list.length - 1)] ?? "";
-    text = raw.replaceAll("{siteName}", siteName || "本站");
-  } catch {
-    return null;
-  }
+  const tip = EGG_TIPS[Math.floor(Math.random() * EGG_TIPS.length)];
 
   return (
-    // 顶部欢迎横幅：作为页面正常流的最上方元素，与下方公告条同区构成"通知栈"（融合、不重叠），
-    // 去掉全屏遮罩与居中弹窗的"割裂感"。点击卡片外任意位置即可关闭（document 捕获监听），
-    // 外层 pointer-events-none 让下方内容正常交互，卡片自身 pointer-events-auto 可点关闭按钮。
-    <div
-      className="pointer-events-none mt-4 flex w-full justify-center px-4"
-      role="status"
-      aria-live="polite"
-    >
-      <div className="animate-notice-center pointer-events-auto relative w-full max-w-[560px]">
-        <div className="relative overflow-hidden rounded-2xl border border-white/20 bg-gradient-to-br from-[#1b2440]/85 via-[#161d33]/82 to-[#101627]/85 shadow-xl shadow-black/40 backdrop-blur-xl">
-          {/* 顶部强调色渐变条（颜色随后台强调色，更宽的光晕） */}
-          <div
-            className="pointer-events-none absolute inset-x-0 top-0 h-[3px]"
-            style={{
-              background:
-                "linear-gradient(90deg, transparent 0%, color-mix(in srgb, var(--accent-color, #7dd3fc) 90%, transparent) 50%, transparent 100%)",
-            }}
-          />
-          {/* 左侧竖条强调线 */}
-          <div
-            className="pointer-events-none absolute inset-y-0 left-0 w-[3px] rounded-l-2xl"
-            style={{
-              background:
-                "linear-gradient(180deg, transparent 8%, color-mix(in srgb, var(--accent-color, #7dd3fc) 80%, transparent) 50%, transparent 92%)",
-            }}
-          />
-
-          <div className="relative flex items-center gap-3 px-5 py-4 md:gap-4 md:px-6">
-            {/* 铃铛图标徽章 */}
-            <span
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
-              style={{
-                backgroundColor: "color-mix(in srgb, var(--accent-color, #7dd3fc) 22%, transparent)",
-                color: "var(--accent-color, #7dd3fc)",
-              }}
-            >
-              <BellRing className="h-5 w-5" />
-            </span>
-
-            <div className="min-w-0 flex-1">
-              <p className="break-words text-[14px] leading-relaxed text-white md:text-[15px]">
-                {text}
-                {visitorInfo && (
-                  <span className="mt-1 block text-[13px] text-white/55">
-                    {visitorInfo}
-                  </span>
-                )}
-              </p>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setRemoved(true)}
-              className="-mr-1 shrink-0 rounded-lg border border-white/10 bg-white/10 p-1.5 text-white/60 transition-all hover:bg-white/20 hover:text-white active:scale-95"
-              aria-label="关闭欢迎消息"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
-          </div>
+    <div className="fixed inset-0 z-[85] flex items-center justify-center p-4" role="dialog" aria-modal="false" aria-label="隐藏彩蛋">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={() => setOpen(false)} aria-hidden />
+      <div
+        className="animate-notice-center relative w-72 overflow-hidden rounded-2xl border border-white/20 bg-gradient-to-br from-[#1b2440]/95 via-[#161d33]/92 to-[#101627]/95 shadow-2xl shadow-black/50 backdrop-blur-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div
+          className="pointer-events-none absolute inset-x-0 top-0 h-[3px]"
+          style={{
+            background:
+              "linear-gradient(90deg, transparent 0%, color-mix(in srgb, var(--accent-color, #7dd3fc) 90%, transparent) 50%, transparent 100%)",
+          }}
+        />
+        <button
+          type="button"
+          onClick={() => setOpen(false)}
+          aria-label="关闭彩蛋"
+          className="absolute right-2.5 top-2.5 z-10 rounded-full p-1 text-white/50 transition hover:bg-white/10 hover:text-white"
+        >
+          <X className="h-4 w-4" />
+        </button>
+        <div className="flex flex-col items-center gap-3 px-5 pb-5 pt-7 text-center">
+          <span className="text-3xl">🥚</span>
+          <h3 className="text-[15px] font-semibold text-white">恭喜触发隐藏彩蛋</h3>
+          <p className="break-words text-[13px] leading-relaxed text-white/70">{tip}</p>
+          {name && (
+            <p className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] text-white/50">
+              来自 {name} 的一点点小心思
+            </p>
+          )}
         </div>
       </div>
     </div>
@@ -576,14 +465,8 @@ interface EffectsProps {
   dynamicTitle?: boolean;
   /** 顶部音乐进度条开关 */
   topProgressBar?: boolean;
-  /** 右上角欢迎消息开关 */
-  welcomeEnabled?: boolean;
   /** 站点昵称 */
   siteName?: string;
-  /** 欢迎语列表（JSON 字符串数组） */
-  welcomeMessages?: string;
-  /** 当前生效欢迎语下标 */
-  welcomeIndex?: number;
 }
 
 /**
@@ -595,23 +478,15 @@ export default function Effects({
   consoleEgg = true,
   dynamicTitle = true,
   topProgressBar = true,
-  welcomeEnabled = true,
   siteName = "",
-  welcomeMessages = "[]",
-  welcomeIndex = 0,
 }: EffectsProps) {
   return (
     <>
       <ClickEffect enabled={clickEffect} />
       <DevConsole enabled={consoleEgg} siteName={siteName} />
+      <EggPanel enabled={consoleEgg} siteName={siteName} />
       <DynamicTitle enabled={dynamicTitle} siteName={siteName} />
       <TopProgressBar enabled={topProgressBar} />
-      <WelcomeNotice
-        enabled={welcomeEnabled}
-        siteName={siteName}
-        messages={welcomeMessages}
-        index={welcomeIndex}
-      />
     </>
   );
 }

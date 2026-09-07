@@ -15,7 +15,7 @@ import type { z, ZodTypeAny } from "zod";
 /* ==================== 日志与响应封装 ==================== */
 
 /** 仅在开发环境输出完整错误；生产环境只输出摘要（可接入 Sentry 等） */
-export function logError(message: string, error?: unknown) {
+function logError(message: string, error?: unknown) {
   if (process.env.NODE_ENV === "development") {
     console.error(message, error);
   } else {
@@ -24,8 +24,8 @@ export function logError(message: string, error?: unknown) {
 }
 
 /** 返回 JSON 响应，默认 200 */
-export function json(data: unknown, init?: number | ResponseInit) {
-  return typeof init === "number" ? NextResponse.json(data, { status: init }) : NextResponse.json(data, init);
+function json(data: unknown, init?: number | ResponseInit): Response {
+  return typeof init === "number" ? NextResponse.json(data, { status: init }) : NextResponse.json(data);
 }
 
 /** 成功响应：200/201 */
@@ -72,7 +72,7 @@ export function formatZodError(zodError: z.ZodError): string {
 /* ==================== 操作日志 ==================== */
 
 /** 操作日志模块类型 */
-export type LogModule =
+type LogModule =
   | "profile"
   | "social-links"
   | "site-links"
@@ -85,7 +85,7 @@ export type LogModule =
   | "media" // 媒体库：上传 / 复制 / 删除
   | "update"; // 系统更新：检查 / 更新 / 回滚
 
-export interface LogInput {
+interface LogInput {
   module: LogModule;
   action: string;
   username: string;
@@ -224,7 +224,15 @@ export function diffLinks(
 // 从 profileSchema 派生字段清单，避免手工维护与 schema 漂移
 const PROFILE_FIELDS = Object.keys(profileSchema.shape);
 // 敏感字段：日志中仅记录"已配置/未配置"，不记录真实值
-const SENSITIVE_PROFILE_FIELDS = new Set(["amapSecretKey", "txWeatherSk"]);
+const SENSITIVE_PROFILE_FIELDS = new Set([
+  "amapSecretKey",
+  "txWeatherSk",
+  // HTML/脚本类长内容（admin 录入）：变更日志只记"已配置/未配置"，
+  // 避免把完整统计代码、head 脚本或页脚 HTML 全文（可达上万字符）写入 operationLog detail
+  "analyticsScript",
+  "headScript",
+  "siteFooterHtml",
+]);
 
 /** 返回实际发生变化（旧值≠新值）的 Profile 字段名列表 */
 export function getChangedProfileFields(
@@ -312,7 +320,7 @@ export function resetRateLimiter(): void {
  * 链接列表路由所需的 Prisma 委托（结构兼容 socialLink / siteLink 两个模型）。
  * 仅声明工厂实际用到的方法，避免依赖具体 Prisma 类型。
  */
-export interface LinkDelegate {
+interface LinkDelegate {
   findMany(args: {
     orderBy: { sort?: "asc" | "desc"; id?: "asc" | "desc" }[];
   }): Promise<LinkItem[]>;

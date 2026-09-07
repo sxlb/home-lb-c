@@ -71,14 +71,17 @@ async function probe(id: string, name: string, desc: string, url: string, method
 
 /** 高德探测：需校验业务返回 status==="1"（HTTP 恒为 200） */
 async function probeAmap(amapKey: string, city: string): Promise<ServiceStatus> {
-  const url = `https://restapi.amap.com/v3/weather/weatherInfo?key=${encodeURIComponent(amapKey)}&city=${encodeURIComponent(city || "210000")}&extensions=base`;
-  const result = await probeFetch(url);
+  const searchParams = new URLSearchParams({ key: amapKey, city: city || "210000", extensions: "base" });
+  const target = `https://restapi.amap.com/v3/weather/weatherInfo?${searchParams.toString()}`;
+  const result = await probeFetch(target);
   const bizOk = result.body && typeof result.body === "object" && (result.body as { status?: string }).status === "1";
+  // 展示用 URL 剥离 key 参数，避免高德签名 Key 随健康响应明文下发/在页面展示
+  const displayUrl = `https://restapi.amap.com/v3/weather/weatherInfo?city=${encodeURIComponent(city || "210000")}&extensions=base`;
   return {
     id: "amap",
     name: "高德地图天气",
     desc: "需在天气设置中配置 Key",
-    url,
+    url: displayUrl,
     status: result.ok && bizOk ? "ok" : "fail",
     latency: result.latency,
     error: result.ok && !bizOk ? "Key 无效或权限不足" : result.status ? `HTTP ${result.status}` : "连接失败或超时",

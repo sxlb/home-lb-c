@@ -266,7 +266,7 @@ export default function UpdatePanel() {
           <div className="rounded-xl border border-border bg-muted/30 p-4">
             <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">当前版本</p>
             <p className="mt-1.5 text-2xl font-semibold tabular-nums tracking-tight">
-              v{data?.currentVersion ?? "?"}
+              {data ? `v${data.currentVersion}` : <span className="text-base font-normal text-muted-foreground">加载中…</span>}
             </p>
             {data?.versions?.updatedAt ? (
               <p className="mt-1 text-xs text-muted-foreground">

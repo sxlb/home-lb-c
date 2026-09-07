@@ -1,4 +1,3 @@
-import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireSession, success, error, internalError } from "@/lib/server";
 import {
@@ -19,7 +18,7 @@ import {
  * 返回当前版本、GitHub 最新发布、是否有新版本、执行状态、更新历史、回滚目标与数据快照。
  * 仅管理员可访问。
  */
-export async function GET(_request: NextRequest) {
+export async function GET() {
   const session = await requireSession();
   if (!session) return error("未授权", 401);
 

@@ -165,53 +165,67 @@ export default function LinkTabs({
     shownSite && shownFriend
       ? `${shownSite} / ${shownFriend}`
       : shownSite || shownFriend || "网站链接";
-  const TitleIcon = isSite ? getIcon(siteIcon) : Users;
-  const useIconfontTitle = isSite && iconfontSymbols.includes(siteIcon);
-
-  // 只展示有数据的 tab；只有一类数据时不显示切换按钮
-  const tabs = [
-    { key: "site", label: "网站", count: siteLinks.length },
-    { key: "friend", label: "友情", count: friendLinks.length },
-  ].filter((t) => t.count > 0);
+  // 「网站」标题图标固定用网站图标（不随当前 tab 变化）；友情标题统一用 Users
+  const siteIsIconfont = iconfontSymbols.includes(siteIcon);
+  const SiteTitleGlyph = getIcon(siteIcon);
 
   return (
     <div className="site-links-container">
-      {/* 标题 + 切换 tab 融合：统一左排为一组（标题居中集群 + 细分隔线 + tab），
-          消除"大标题在左、切换钮在右"的割裂感 */}
-      <div className="mb-5 flex items-center gap-3">
-        <div className="flex min-w-0 items-center gap-2.5">
-          {useIconfontTitle ? (
-            <svg className="h-6 w-6 shrink-0 text-white/90 drop-shadow-[0_2px_6px_rgba(0,0,0,0.5)]" aria-hidden="true" focusable="false">
-              <use href={`#${siteIcon}`} />
-            </svg>
-          ) : (
-            <TitleIcon className="h-6 w-6 shrink-0 text-white/90 drop-shadow-[0_2px_6px_rgba(0,0,0,0.5)]" />
-          )}
-          <span className="truncate text-lg font-bold tracking-wide text-white drop-shadow-[0_2px_10px_rgba(0,0,0,0.55)]">
-            {titleText}
-          </span>
-        </div>
+      {/* 左右两栏分隔：左端「我的网站」、右端「友情链接」，容器中央贯穿竖线形成「从中间分隔」；
+          点击任一标题切换 tab，选中项白色 + 强调色下划线指示；单类数据时只显示该侧 */}
+      <div className="relative mb-5 flex items-center rounded-2xl border border-white/10 bg-white/5 py-2.5 backdrop-blur-sm">
+        {hasSite && (
+          <button
+            type="button"
+            onClick={() => setTab("site")}
+            aria-pressed={tab === "site"}
+            aria-label={`切换至${shownSite || "网站"}`}
+            className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-2 py-1 text-base font-semibold transition-all duration-200 ${
+              tab === "site" ? "text-white" : "text-white/55 hover:text-white/85"
+            } ${tab === "site" && hasFriend ? "underline decoration-[2px] underline-offset-[6px]" : ""}`}
+            style={
+              tab === "site" && hasFriend
+                ? { textDecorationColor: "var(--accent-color, #7dd3fc)" }
+                : undefined
+            }
+          >
+            {siteIsIconfont ? (
+              <svg className="h-5 w-5 shrink-0" aria-hidden="true" focusable="false">
+                <use href={`#${siteIcon}`} />
+              </svg>
+            ) : (
+              <SiteTitleGlyph className="h-5 w-5 shrink-0" />
+            )}
+            {shownSite}
+          </button>
+        )}
 
-        {tabs.length > 1 && (
-          <>
-            <span className="h-5 w-px shrink-0 bg-white/20" aria-hidden />
-            <div className="flex shrink-0 items-center gap-1.5">
-              {tabs.map((t) => (
-                <button
-                  key={t.key}
-                  onClick={() => setTab(t.key as "site" | "friend")}
-                  aria-label={t.label}
-                  className={`rounded-full px-3.5 py-1.5 text-[13px] font-medium transition-all duration-200 ${
-                    tab === t.key
-                      ? "bg-white/90 text-neutral-900"
-                      : "bg-white/10 text-white/70 hover:bg-white/20 hover:text-white"
-                  }`}
-                >
-                  {t.label}
-                </button>
-              ))}
-            </div>
-          </>
+        {/* 中央贯穿分隔线：仅两类都存在时从卡片中间分隔左/右两栏 */}
+        {hasFriend && hasSite && (
+          <span
+            className="absolute inset-y-2 left-1/2 w-px -translate-x-1/2 bg-white/15"
+            aria-hidden
+          />
+        )}
+
+        {hasFriend && (
+          <button
+            type="button"
+            onClick={() => setTab("friend")}
+            aria-pressed={tab === "friend"}
+            aria-label={`切换至${shownFriend || "友情链接"}`}
+            className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-2 py-1 text-base font-semibold transition-all duration-200 ${
+              tab === "friend" ? "text-white" : "text-white/55 hover:text-white/85"
+            } ${tab === "friend" && hasSite ? "underline decoration-[2px] underline-offset-[6px]" : ""}`}
+            style={
+              tab === "friend" && hasSite
+                ? { textDecorationColor: "var(--accent-color, #7dd3fc)" }
+                : undefined
+            }
+          >
+            <Users className="h-5 w-5 shrink-0" />
+            {shownFriend}
+          </button>
         )}
       </div>
 

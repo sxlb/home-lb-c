@@ -415,8 +415,6 @@ export const profileSchema = z.object({
     .default(""),
 });
 
-export type ProfileInput = z.infer<typeof profileSchema>;
-
 // SocialLink 校验 schema
 export const socialLinkSchema = z.object({
   name: z
@@ -455,13 +453,6 @@ export const socialLinkSchema = z.object({
 });
 
 export const socialLinkCreateSchema = socialLinkSchema;
-export const socialLinkUpdateSchema = socialLinkSchema.partial().extend({
-  id: z.number().int().positive(),
-});
-
-export type SocialLinkInput = z.infer<typeof socialLinkSchema>;
-export type SocialLinkCreateInput = z.infer<typeof socialLinkCreateSchema>;
-export type SocialLinkUpdateInput = z.infer<typeof socialLinkUpdateSchema>;
 
 // SiteLink 校验 schema
 export const siteLinkSchema = z.object({
@@ -497,13 +488,6 @@ export const siteLinkSchema = z.object({
 });
 
 export const siteLinkCreateSchema = siteLinkSchema;
-export const siteLinkUpdateSchema = siteLinkSchema.partial().extend({
-  id: z.number().int().positive(),
-});
-
-export type SiteLinkInput = z.infer<typeof siteLinkSchema>;
-export type SiteLinkCreateInput = z.infer<typeof siteLinkCreateSchema>;
-export type SiteLinkUpdateInput = z.infer<typeof siteLinkUpdateSchema>;
 
 // FriendLink 校验 schema
 export const friendLinkSchema = z.object({
@@ -543,13 +527,6 @@ export const friendLinkSchema = z.object({
 });
 
 export const friendLinkCreateSchema = friendLinkSchema;
-export const friendLinkUpdateSchema = friendLinkSchema.partial().extend({
-  id: z.number().int().positive(),
-});
-
-export type FriendLinkInput = z.infer<typeof friendLinkSchema>;
-export type FriendLinkCreateInput = z.infer<typeof friendLinkCreateSchema>;
-export type FriendLinkUpdateInput = z.infer<typeof friendLinkUpdateSchema>;
 
 // 天气设置校验 schema：用于 PUT /api/weather-setting
 // 注：wttr.in 已下线，路由仅使用 amap / tencent / tencent-key；
@@ -605,5 +582,3 @@ export const weatherSettingSchema = z
       path: ["root"],
     }
   );
-
-export type WeatherSettingInput = z.infer<typeof weatherSettingSchema>;

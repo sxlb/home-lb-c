@@ -238,6 +238,8 @@ export default function MediaPanel() {
                   className="relative block w-full cursor-zoom-in bg-muted"
                   aria-label={`预览 ${item.fileName}`}
                 >
+                  {/* 后台内部图像经 /api/uploads|wallpaper 动态路由提供，走 next/image 优化无公开收益且多一层回源风险，故用原生 img */}
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={item.url}
                     alt={item.fileName}
@@ -331,6 +333,8 @@ export default function MediaPanel() {
             >
               <X className="h-5 w-5" />
             </button>
+            {/* 预览大图：object-contain 自适应，内部路由图像，不做 next/image 优化 */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={previewUrl}
               alt="媒体预览"

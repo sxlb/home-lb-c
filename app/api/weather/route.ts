@@ -43,14 +43,21 @@ interface WeatherResult {
 const WEATHER_IP_WINDOW_MS = 60 * 1000;
 const WEATHER_IP_LIMIT = 30;
 const ipRequests = new Map<string, { count: number; firstAt: number }>();
+// ipRequests 硬上限：超过后先清理过期项，仍满则淘汰最旧（首个插入）条目，确保有界
+const IP_REQUESTS_HARD_CAP = 10_000;
 function isIpRateLimited(ip: string): boolean {
   const now = Date.now();
   const rec = ipRequests.get(ip);
   if (!rec || now - rec.firstAt > WEATHER_IP_WINDOW_MS) {
-    // Map 过大时惰性清理过期条目，防止伪造大量 IP 撑爆内存
-    if (ipRequests.size > 10_000) {
+    if (ipRequests.size >= IP_REQUESTS_HARD_CAP) {
       for (const [k, v] of ipRequests) {
         if (now - v.firstAt > WEATHER_IP_WINDOW_MS) ipRequests.delete(k);
+      }
+      // 清理后仍满：淘汰最旧条目，保证严格有界（键按插入序，首个即最旧）
+      while (ipRequests.size >= IP_REQUESTS_HARD_CAP) {
+        const oldest = ipRequests.keys().next().value;
+        if (oldest === undefined) break;
+        ipRequests.delete(oldest);
       }
     }
     ipRequests.set(ip, { count: 1, firstAt: now });
@@ -122,6 +129,7 @@ interface WeatherCacheEntry {
 }
 const weatherCache = new Map<string, WeatherCacheEntry>();
 const WEATHER_CACHE_TTL = 5 * 60 * 1000; // 5 分钟
+const WEATHER_CACHE_HARD_CAP = 200; // 缓存条目硬上限，超出淘汰最旧防御内存 DoS
 
 /** 读取有效缓存 */
 function getWeatherCache(key: string): WeatherResult | null {
@@ -141,11 +149,17 @@ function getStaleWeatherCache(key: string): WeatherResult | null {
 /** 写入缓存 */
 function setWeatherCache(key: string, data: WeatherResult): void {
   weatherCache.set(key, { data, expireAt: Date.now() + WEATHER_CACHE_TTL });
-  // 防止无限增长：缓存项超过 50 个时清理过期项
-  if (weatherCache.size > 50) {
+  // 防止无限增长：未配置固定城市时缓存按访客 IP 区分，攻击者可伪造大量 XFF IP
+  // 制造海量唯一键。先清理过期项，仍超上限则淘汰最旧条目，保证内存严格有界。
+  if (weatherCache.size > WEATHER_CACHE_HARD_CAP) {
     const now = Date.now();
     for (const [k, v] of weatherCache) {
       if (v.expireAt <= now) weatherCache.delete(k);
+    }
+    while (weatherCache.size > WEATHER_CACHE_HARD_CAP) {
+      const oldest = weatherCache.keys().next().value;
+      if (oldest === undefined) break;
+      weatherCache.delete(oldest);
     }
   }
 }

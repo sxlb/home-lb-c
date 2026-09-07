@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { resetRateLimiter } from "@/lib/server";
 
 /** 构造统计上报请求（可携带 UV Cookie） */
@@ -24,6 +24,11 @@ vi.mock("@/lib/db", () => ({
       findUnique: (...args: unknown[]) => mocks.findUnique(...args),
       aggregate: (...args: unknown[]) => mocks.aggregate(...args),
       upsert: (...args: unknown[]) => mocks.upsert(...args),
+    },
+    // POST 明细写入（visitRecord.create）需 mock，否则路由内层 try/catch
+    // 会吞掉 TypeError 并打印大量噪音日志（生产 schema 已含该模型，此仅为测试补齐）
+    visitRecord: {
+      create: vi.fn().mockResolvedValue({}),
     },
   },
 }));
@@ -112,7 +117,7 @@ describe("stats API", () => {
     it("首次访问（无 UV Cookie）：pv 与 uv 均 +1，并签发去重 Cookie", async () => {
       mocks.upsert.mockResolvedValue({});
 
-      const res = await POST(makeRequest());
+      const res = await POST(makeRequest()) as NextResponse;
 
       expect(res.status).toBe(200);
       const [args] = mocks.upsert.mock.calls[0];
@@ -137,7 +142,7 @@ describe("stats API", () => {
     it("老访客（携带 UV Cookie）：仅 pv +1，不再更新 uv", async () => {
       mocks.upsert.mockResolvedValue({});
 
-      const res = await POST(makeRequest("home-lb-uv=1"));
+      const res = await POST(makeRequest("home-lb-uv=1")) as NextResponse;
 
       expect(res.status).toBe(200);
       const [args] = mocks.upsert.mock.calls[0];

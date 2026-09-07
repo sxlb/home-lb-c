@@ -104,14 +104,14 @@ export default function SocialLinks({ initialLinks }: SocialLinksProps) {
               title={link.tip || link.name}
               aria-label={link.tip || link.name}
             >
-              {/* 30px 图标，间距交由容器 row gap 统一控制（左侧紧凑，仅拉近图标间距离） */}
+              {/* 32px 图标，间距交由容器 row gap 统一控制（微调放大，提升辨识度） */}
               <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
                 {useIconfont ? (
-                  <svg className="h-[30px] w-[30px]" aria-hidden="true" focusable="false">
+                  <svg className="h-[32px] w-[32px]" aria-hidden="true" focusable="false">
                     <use href={`#${link.icon}`} />
                   </svg>
                 ) : (
-                  <IconComponent className="h-[30px] w-[30px]" />
+                  <IconComponent className="h-[32px] w-[32px]" />
                 )}
               </span>
             </a>

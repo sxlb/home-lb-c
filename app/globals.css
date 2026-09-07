@@ -343,7 +343,7 @@
     display: flex;
     align-items: center;
     justify-content: flex-start;
-    gap: 0.4rem;
+    gap: 0.7rem;
   }
   /* 窄屏（≤480px）缩小社交图标间距：5 个图标固有宽度（372px）超过可用宽度时会被撑开产生横向溢出 */
   @media (max-width: 480px) {
@@ -351,7 +351,7 @@
       padding: 0 0.6rem;
     }
     .social-link-row {
-      gap: 0.3rem;
+      gap: 0.55rem;
     }
   }
   /* 绝对定位于容器右侧：不参与 flex 流，避免 tip 出现/换长短时把居中图标挤动（修复悬停时卡片向左跳动） */

@@ -121,7 +121,7 @@ export async function restoreBackup(
       };
     });
     return { ok: true, count: result };
-  } catch (e) {
+  } catch {
     return { ok: false, error: "恢复失败：数据库错误" };
   }
 }

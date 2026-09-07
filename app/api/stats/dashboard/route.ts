@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireSession, error, internalError } from "@/lib/server";
-import { buildDailySeries, sourceBucket, SOURCE_BUCKET_LABEL, mondayOf, weekDelta, shiftDate } from "@/lib/stats";
+import { buildDailySeries, buildWeekHours, sourceBucket, SOURCE_BUCKET_LABEL, mondayOf, weekDelta, shiftDate } from "@/lib/stats";
 import { lookupIpRegion, regionLabel } from "@/lib/geo";
 
 export const dynamic = "force-dynamic";
@@ -26,12 +26,16 @@ export async function GET() {
     const today = todayStr();
     const yesterday = shiftDate(today, -1);
     const windowStart = shiftDate(today, -29);
+    // 「当前在线」：最近 10 分钟内有访问的去重 IP 数
+    const onlineSince = new Date(Date.now() - 10 * 60 * 1000);
 
     const [
       todayRow,
       yesterdayRow,
       all,
       recent,
+      onlineRows,
+      heatRows,
       referrers,
       devices,
       oss,
@@ -45,6 +49,18 @@ export async function GET() {
       prisma.visitStat.findMany({
         where: { date: { gte: windowStart } },
         orderBy: { date: "asc" },
+      }),
+      // 当前在线：最近 10 分钟去重 IP
+      prisma.visitRecord.groupBy({
+        by: ["ip"],
+        where: { createdAt: { gte: onlineSince }, ip: { not: "" } },
+        _count: { _all: true },
+      }),
+      // 一周时段热力图素材：近 28 天按 (date, hour) 分组，前端按星期归一
+      prisma.visitRecord.groupBy({
+        by: ["date", "hour"],
+        where: { date: { gte: shiftDate(today, -27) } },
+        _count: { _all: true },
       }),
       // 来源站（last 30 天，仅非空）
       prisma.visitRecord.groupBy({
@@ -95,6 +111,11 @@ export async function GET() {
       recent.map((r) => ({ date: r.date, pv: r.pv, uv: r.uv })),
       30,
       today
+    );
+
+    // 一周时段热力图：7 行（周一~周日）× 24 列（0~23 时），取近 28 天累加
+    const weekHours = buildWeekHours(
+      heatRows.map((r) => ({ date: r.date, hour: r.hour, count: r._count._all }))
     );
 
     // 地域：对窗口内全部去重 IP 做离线库解析并聚合（ip2region，无外部依赖）
@@ -188,6 +209,9 @@ export async function GET() {
       topLinks: topLinks.map((l) => ({ name: l.name, count: l.count, url: l.url })),
       geo,
       weekCompare,
+      // 增强维度
+      onlineNow: onlineRows.length, // 最近 10 分钟去重 IP（当前在线）
+      weekHours, // 7(周一~周日) × 24 时段热力图
       windowStart,
     });
   } catch (e) {

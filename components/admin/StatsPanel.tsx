@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Eye, Users, TrendingUp, TrendingDown, Link2, Focus, CalendarRange } from "lucide-react";
+import { Eye, Users, TrendingUp, TrendingDown, Link2, Focus, CalendarRange, Activity } from "lucide-react";
 import { toast } from "sonner";
 
 interface DailyStat { date: string; pv: number; uv: number }
 interface BarRow { name: string; count: number }
 interface HourPoint { hour: number; count: number }
+type WeekRow = number[]; // 24 格（0~23 时）
 interface TopLink { name: string; count: number; url: string }
 interface GeoData { total: number; unknown: number; regions: { name: string; count: number }[] }
 interface WeekCompare {
@@ -27,6 +28,8 @@ interface DashboardData {
   os: BarRow[];
   browsers: BarRow[];
   hours: HourPoint[];
+  weekHours: WeekRow[]; // 7(周一~周日) × 24
+  onlineNow: number;
   topLinks: TopLink[];
   geo: GeoData;
   weekCompare: WeekCompare;
@@ -60,7 +63,9 @@ function StatCard({ label, value, delta, icon: Icon, accent }: {
 /** 趋势折线图（纯 SVG，hover 显示 tooltip） */
 function TrendChart({ data, label, color }: { data: DailyStat[]; label: string; color: string }) {
   const [hover, setHover] = useState<number | null>(null);
-  const values = data.map((d) => d[label as "pv" | "uv"]);
+  // label 传入的是 "PV"/"UV" 大写，需转小写才匹配 DailyStat 的 pv/uv 字段，否则取值全为 undefined 导致 max=NaN
+  const key = label.toLowerCase() as "pv" | "uv";
+  const values = data.map((d) => Number(d[key]) || 0);
   const max = Math.max(1, ...values);
   const W = 560, H = 140, PAD = 6;
   const stepX = data.length > 1 ? (W - PAD * 2) / (data.length - 1) : 0;
@@ -144,6 +149,46 @@ function HourChart({ data }: { data: HourPoint[] }) {
         ))}
       </div>
       <div className="mt-1 flex justify-between text-[10px] text-muted-foreground">
+        <span>0时</span><span>6时</span><span>12时</span><span>18时</span><span>23时</span>
+      </div>
+    </div>
+  );
+}
+
+/** 一周时段热力图（纯网格，颜色深浅映射访问量，hover 显示 tooltip） */
+const WEEKDAY_LABELS = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
+function WeekHeatmap({ data }: { data: WeekRow[] }) {
+  const max = Math.max(1, ...data.flat());
+  const allZero = max <= 1 && !data.flat().some((v) => v > 0);
+  return (
+    <div className="rounded-xl border bg-card p-4">
+      <h3 className="mb-3 text-sm font-semibold">一周时段热力图（近 28 天）</h3>
+      {allZero ? (
+        <p className="py-4 text-center text-xs text-muted-foreground">暂无访问明细</p>
+      ) : (
+        <div className="flex gap-1.5">
+          {/* 星期标签 */}
+          <div className="flex flex-col justify-between py-[1px] text-[10px] leading-none text-muted-foreground">
+            {WEEKDAY_LABELS.map((d) => (
+              <span key={d} className="h-[18px] leading-[18px]">{d}</span>
+            ))}
+          </div>
+          {/* 24 小时网格 */}
+          <div className="grid flex-1 grid-cols-[repeat(24,minmax(0,1fr))] gap-[3px]">
+            {data.map((row, wd) =>
+              row.map((v, h) => (
+                <div
+                  key={`${wd}-${h}`}
+                  title={`${WEEKDAY_LABELS[wd]} ${h}时 · ${v}次`}
+                  className="aspect-[3/4] w-full rounded-[3px]"
+                  style={{ backgroundColor: v === 0 ? "rgba(128,128,128,0.10)" : `rgba(59,130,246,${(0.18 + (v / max) * 0.82).toFixed(3)})` }}
+                />
+              ))
+            )}
+          </div>
+        </div>
+      )}
+      <div className="mt-2 flex justify-between text-[10px] text-muted-foreground">
         <span>0时</span><span>6时</span><span>12时</span><span>18时</span><span>23时</span>
       </div>
     </div>
@@ -248,9 +293,10 @@ export default function StatsPanel() {
     <Card>
       {/* 页面级标题/描述由 admin/page.tsx 提供，卡内不再重复标题 */}
       <CardContent className="space-y-4">
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
           <StatCard label="今日 PV" value={data?.todayPv ?? 0} delta={deltaPv} icon={Eye} accent="text-blue-500" />
           <StatCard label="今日 UV" value={data?.todayUv ?? 0} delta={deltaUv} icon={Users} accent="text-violet-500" />
+          <StatCard label="当前在线" value={data?.onlineNow ?? 0} icon={Activity} accent="text-rose-500" />
           <StatCard label="累计 PV" value={data?.totalPv ?? 0} icon={Eye} accent="text-emerald-500" />
           <StatCard label="累计 UV" value={data?.totalUv ?? 0} icon={Users} accent="text-amber-500" />
         </div>
@@ -271,6 +317,9 @@ export default function StatsPanel() {
           <HourChart data={data?.hours ?? []} />
           <MiniBars title="设备分布" rows={data?.devices ?? []} empty="暂无访问明细" />
         </div>
+
+        {/* 一周时段热力图（增强维度） */}
+        {data?.weekHours && <WeekHeatmap data={data.weekHours} />}
 
         <div className="grid gap-3 md:grid-cols-2">
           <MiniBars title="操作系统" rows={data?.os ?? []} />
