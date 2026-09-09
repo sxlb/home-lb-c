@@ -90,7 +90,78 @@ interface FetchCache {
 const globalCache: Record<string, FetchCache | undefined> =
   (globalThis as unknown as { __updateReleaseCache?: Record<string, FetchCache> }).__updateReleaseCache ??= {};
 
-const CACHE_TTL_MS = 10 * 60 * 1000; // 10 分钟
+const CACHE_TTL_MS = 10 * 60 * 1000; // 成功结果 10 分钟
+// 错误（超时/网络抖动）短 TTL：临时性问题应快速自愈，避免用户反复点"检查更新"却一直拿到旧错误
+const ERROR_CACHE_TTL_MS = 30 * 1000;
+
+/* ---------------- GitHub API 多源（官方优先，失败降级公共代理）+ 测速选源 ---------------- */
+
+const OFFICIAL_BASE = "https://api.github.com";
+
+/** 默认公共代理镜像（官方不可达时按序降级）。可用环境变量 GITHUB_API_MIRRORS（逗号分隔）覆盖 */
+const DEFAULT_MIRRORS: string[] = [
+  // 实测仅 gh-proxy.com 支持 GitHub Releases JSON API（其余常见镜像只代理文件下载，返回 403）
+  "https://gh-proxy.com/",
+];
+
+const RELEASE_HEADERS = {
+  Accept: "application/vnd.github+json",
+  "X-GitHub-Api-Version": "2022-11-28",
+};
+
+const SPEED_TEST_TIMEOUT_MS = 3000; // 单个候选源测速超时
+const REQUEST_TIMEOUT_MS = 8000; // 真实请求超时
+const SPEED_CACHE_TTL_MS = 60 * 1000; // 测速结果缓存 60s，避免频繁探测触发限流
+
+function configuredMirrors(): string[] {
+  const raw = (process.env.GITHUB_API_MIRRORS || "").trim();
+  if (raw) return raw.split(",").map((s) => s.trim()).filter(Boolean);
+  return DEFAULT_MIRRORS;
+}
+
+/** 由候选源 base 拼接 GH 最新 release 端点：官方直接加路径，代理前缀 + 完整官方 URL */
+function releaseUrl(base: string): string {
+  return `${base}repos/${GITHUB_REPO}/releases/latest`;
+}
+
+/** 测速：探测某源可达性并测其延迟（毫秒）。不可达返回 null */
+async function testSource(base: string): Promise<{ base: string; ms: number } | null> {
+  const started = Date.now();
+  try {
+    // 用真实端点探测——既能测速又能直接拿到数据（若命中则免去二次请求）
+    await fetch(releaseUrl(base), {
+      headers: RELEASE_HEADERS,
+      signal: AbortSignal.timeout(SPEED_TEST_TIMEOUT_MS),
+      cache: "no-store",
+    });
+    return { base, ms: Date.now() - started };
+  } catch {
+    return null; // 超时/网络错误视为不可达
+  }
+}
+
+let speedCacheAt = 0;
+let speedOrder: string[] = [];
+
+/**
+ * 返回候选源顺序：官方始终居首（满足"默认官方优先"）；若官方不可达则跳过，
+ * 其余代理按测速延迟升序排列（结果缓存 60s，避免频繁探测触发限流）。
+ * 全不可达时退化为仅保留官方，让外层请求得到友好错误而非空转。
+ */
+async function orderSources(): Promise<string[]> {
+  if (speedOrder.length && Date.now() - speedCacheAt < SPEED_CACHE_TTL_MS) return speedOrder;
+  const official = await testSource(OFFICIAL_BASE);
+  const mirrorResults = await Promise.all(configuredMirrors().map((m) => testSource(m)));
+  const reachableMirrors = (mirrorResults.filter((r) => r !== null) as { base: string; ms: number }[])
+    .sort((a, b) => a.ms - b.ms)
+    .map((r) => r.base);
+  speedOrder =
+    (official ? [official.base] : []).concat(reachableMirrors).length
+      ? (official ? [official.base] : []).concat(reachableMirrors)
+      : [OFFICIAL_BASE];
+  speedCacheAt = Date.now();
+  return speedOrder;
+}
 
 function mapRelease(raw: Record<string, unknown>): ReleaseInfo {
   const tag = String(raw.tag_name ?? "");
@@ -111,44 +182,61 @@ export interface FetchLatestResult {
 }
 
 /**
- * 获取 GitHub 最新 release。带 10 分钟内存缓存；force=true 时绕过缓存强制刷新。
- * 失败返回 { data:null, error }，不抛异常（让上层把"检测失败"呈现给用户而非崩溃）。
+ * 获取 GitHub 最新 release，官方源优先，失败自动降级到公共代理。
+ * 成功结果带 10 分钟内存缓存，错误结果仅缓存 30 秒（允许快速自愈）；
+ * force=true 时绕过进程级缓存强制刷新（仍复用 60s 测速结果，不重复探测）。
+ * 全部源失败才返回 { data:null, error }（已映射为友好中文提示），不抛异常。
  */
 export async function fetchLatestRelease(force = false): Promise<FetchLatestResult> {
   const cached = globalCache.latest;
-  if (!force && cached && Date.now() - cached.at < CACHE_TTL_MS) {
-    return { data: cached.data, fromCache: true, error: cached.error };
-  }
-
-  try {
-    const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`, {
-      headers: {
-        Accept: "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28",
-      },
-      signal: AbortSignal.timeout(8000),
-      cache: "no-store",
-    });
-
-    if (!res.ok) {
-      // 404 = 仓库还没有 release
-      const error = res.status === 404 ? "暂无已发布的版本" : `GitHub 请求失败（HTTP ${res.status}）`;
-      globalCache.latest = { at: Date.now(), data: null, error };
-      return { data: null, fromCache: false, error };
+  if (cached) {
+    const isError = cached.error !== undefined;
+    const ttl = isError ? ERROR_CACHE_TTL_MS : CACHE_TTL_MS;
+    if (!force && Date.now() - cached.at < ttl) {
+      return { data: cached.data, fromCache: true, error: cached.error };
     }
-
-    const raw = (await res.json()) as Record<string, unknown>;
-    const data = mapRelease(raw);
-    globalCache.latest = { at: Date.now(), data };
-    return { data, fromCache: false };
-  } catch (e) {
-    const error = e instanceof Error ? e.message : "网络错误";
-    globalCache.latest = { at: Date.now(), data: null, error };
-    return { data: null, fromCache: false, error };
   }
+
+  const sources = await orderSources();
+  let lastError: string | undefined;
+
+  for (const base of sources) {
+    try {
+      const res = await fetch(releaseUrl(base), {
+        headers: RELEASE_HEADERS,
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        cache: "no-store",
+      });
+
+      if (!res.ok) {
+        // 404 = 仓库还没有 release（在哪个源都一样，可直接定性返回）
+        if (res.status === 404) {
+          const error = "暂无已发布的版本";
+          globalCache.latest = { at: Date.now(), data: null, error };
+          return { data: null, fromCache: false, error };
+        }
+        lastError = `GitHub 请求失败（HTTP ${res.status}）`;
+        continue; // 本源异常，降级到下一个源
+      }
+
+      const data = mapRelease((await res.json()) as Record<string, unknown>);
+      globalCache.latest = { at: Date.now(), data };
+      return { data, fromCache: false };
+    } catch (e) {
+      // 超时/网络/解析失败：记录友好提示后降级到下一个源
+      const isTimeout =
+        e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError" || /timeout|aborted/i.test(e.message));
+      lastError = isTimeout ? "检测最新版本超时，请稍后重试" : "网络错误，获取最新版本失败，请重试";
+    }
+  }
+
+  globalCache.latest = { at: Date.now(), data: null, error: lastError };
+  return { data: null, fromCache: false, error: lastError };
 }
 
-/** 供测试清空缓存 */
+/** 供测试清空缓存（含测速缓存，保证隔离） */
 export function resetReleaseCache(): void {
   delete globalCache.latest;
+  speedOrder = [];
+  speedCacheAt = 0;
 }

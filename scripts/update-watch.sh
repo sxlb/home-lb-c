@@ -38,6 +38,19 @@ ENV_FILE="${ENV_FILE:-$REPO_DIR/.env.deploy}"
 CONTAINER="home-lb"
 # 镜像更新模式使用的 GHCR 镜像仓库（发布时自动推送）
 GHCR_IMAGE="${GHCR_IMAGE:-ghcr.io/sxlb/home-lb-c}"
+# git fetch 代理：若服务器到 GitHub 连不通，可设 GIT_PROXY_URL 指向 HTTP 代理（如 "http://127.0.0.1:1080"）。
+# 为空则不代理，走默认 git 传输。
+GIT_PROXY_URL="${GIT_PROXY_URL:-}"
+# 镜像仓库前缀替换：GHCR 不通时，可设 IMAGE_MIRROR_PREFIX 指向镜像加速地址，
+# 如 "docker.m.daocloud.io"（推荐不带协议）或 "https://docker.mirror.example.com/"；为空则原样拉取 GHCR。
+IMAGE_MIRROR_PREFIX="${IMAGE_MIRROR_PREFIX:-}"
+# 推导最终拉取仓库：设置镜像前缀时，剥掉可能出现协议与末尾斜杠，仅保留镜像域名，
+# 生成 "<域名>/sxlb/home-lb-c"（docker image 名不允许带协议）。
+PULL_IMAGE="$GHCR_IMAGE"
+if [ -n "$IMAGE_MIRROR_PREFIX" ]; then
+  _mirror_domain="$(printf '%s' "$IMAGE_MIRROR_PREFIX" | sed -E 's#^https?://##; s#/+$##')"
+  PULL_IMAGE="${_mirror_domain}/sxlb/home-lb-c"
+fi
 DEPLOY_DIR="$DATA_DIR/deploy"
 BACKUP_DIR="$DEPLOY_DIR/backups"
 
@@ -175,7 +188,14 @@ log "当前基线版本：$cur，目标版本：$version"
 
 # 1) 拉取远程 tag 并切换到目标版本
 log "拉取远程 tags..."
-git fetch --all --tags --prune >/dev/null 2>&1 || log "警告：git fetch 失败，将使用本地已有 tag"
+if [ -z "$GIT_PROXY_URL" ]; then
+  git fetch --all --tags --prune >/dev/null 2>&1 || log "警告：git fetch 失败，将使用本地已有 tag"
+else
+  # 有专用 GIT 代理时，通过 http.proxy 走代理（临时注入，不落盘到仓库配置）
+  git -c "http.proxy=$GIT_PROXY_URL" -c "https.proxy=$GIT_PROXY_URL" \
+    fetch --all --tags --prune >/dev/null 2>&1 \
+    || log "警告：git fetch（经代理 $GIT_PROXY_URL）失败，将使用本地已有 tag"
+fi
 
 if git rev-parse -q --verify "refs/tags/$version" >/dev/null 2>&1; then
   log "切换到版本 $version"
@@ -200,10 +220,10 @@ fi
 # 5) 重建并启动容器（按更新方式分流：build=本地构建 / image=拉取发布镜像）
 #    无论哪种方式，均注入 APP_VERSION=目标版本，让容器内"当前版本"与发布版本一致。
 if [ "$req_method" = "image" ]; then
-  log "镜像更新模式：拉取 ${GHCR_IMAGE}:${version} 并重启容器..."
-  IMAGE_TAG="$version" APP_VERSION="$version" docker compose --env-file "$ENV_FILE" -f docker-compose.yml -f docker-compose.image.yml pull \
+  log "镜像更新模式：拉取 ${PULL_IMAGE}:${version} 并重启容器..."
+  IMAGE_TAG="$version" GHCR_IMAGE="$PULL_IMAGE" APP_VERSION="$version" docker compose --env-file "$ENV_FILE" -f docker-compose.yml -f docker-compose.image.yml pull \
     || { write_result "$req_id" "$action" "$version" "$req_method" failed "拉取镜像失败，请检查网络与 GHCR 仓库访问权限"; exit 0; }
-  IMAGE_TAG="$version" APP_VERSION="$version" docker compose --env-file "$ENV_FILE" -f docker-compose.yml -f docker-compose.image.yml up --no-build -d \
+  IMAGE_TAG="$version" GHCR_IMAGE="$PULL_IMAGE" APP_VERSION="$version" docker compose --env-file "$ENV_FILE" -f docker-compose.yml -f docker-compose.image.yml up --no-build -d \
     || { write_result "$req_id" "$action" "$version" "$req_method" failed "启动容器失败，请查看 docker compose logs"; exit 0; }
 else
   if [ -f ./deploy.sh ]; then
@@ -216,7 +236,7 @@ fi
 
 # 6) 记录版本历史并写成功结果
 output="已${action}到 $version"
-if [ "$req_method" = "image" ]; then output="${output}（拉取镜像 ${GHCR_IMAGE}:${version}）"; fi
+if [ "$req_method" = "image" ]; then output="${output}（拉取镜像 ${PULL_IMAGE}:${version}）"; fi
 [ "$action" = "rollback" ] && output="${output}（数据库已恢复到 ${version} 快照，若未找到快照则仅切换代码）"
 update_versions "$version" "$action"
 write_result "$req_id" "$action" "$version" "$req_method" success "$output"
