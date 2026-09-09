@@ -40,6 +40,26 @@ export interface FriendLinkRow {
   sort: number;
 }
 
+export interface ProjectRow {
+  id: number;
+  title: string;
+  description: string;
+  url: string;
+  image: string;
+  tags: string;
+  featured: boolean;
+  enabled: boolean;
+  sort: number;
+}
+
+export interface SkillRow {
+  id: number;
+  name: string;
+  level: number;
+  icon: string;
+  sort: number;
+}
+
 // ── 头像相关工具函数 ──────────────────────────────────────────
 
 interface AvatarFallbacks {
@@ -167,6 +187,10 @@ export async function getHomeData(profile: Profile | null): Promise<{
   siteLinks: SiteLinkRow[];
   socialLinks: SocialLinkRow[];
   friendLinks: FriendLinkRow[];
+  /** 已启用的作品（首页「作品集」展示） */
+  projects: ProjectRow[];
+  /** 已启用的技能（首页「技能云」展示，按 sort 排序） */
+  skills: SkillRow[];
   effectType: SeasonEffect;
 }> {
   const rawNickname = profile?.nickname || "无名";
@@ -177,8 +201,8 @@ export async function getHomeData(profile: Profile | null): Promise<{
     avatarBorderColor: profile?.avatarBorderColor || "",
   };
 
-  // 并行执行五个独立的异步操作，缩短 SSR 时间
-  const [avatarResult, wallpaperUrl, siteLinks, socialLinks, friendLinks] = await Promise.all([
+  // 并行执行多个独立的异步操作，缩短 SSR 时间
+  const [avatarResult, wallpaperUrl, siteLinks, socialLinks, friendLinks, projects, skills] = await Promise.all([
     resolveAvatar(avatarPivot),
     resolveWallpaperUrl(profile?.bgApi || ""),
     prisma.siteLink
@@ -190,6 +214,12 @@ export async function getHomeData(profile: Profile | null): Promise<{
     prisma.friendLink
       .findMany({ orderBy: [{ sort: "asc" }, { id: "asc" }] })
       .catch(() => [] as FriendLinkRow[]),
+    prisma.project
+      .findMany({ where: { enabled: true }, orderBy: [{ featured: "desc" }, { sort: "asc" }, { id: "asc" }] })
+      .catch(() => [] as ProjectRow[]),
+    prisma.skill
+      .findMany({ orderBy: [{ sort: "asc" }, { id: "asc" }] })
+      .catch(() => [] as SkillRow[]),
   ]);
 
   const { finalAvatar, avatarShapeClass, avatarStyle } = avatarResult;
@@ -261,6 +291,8 @@ export async function getHomeData(profile: Profile | null): Promise<{
     siteLinks,
     socialLinks,
     friendLinks,
+    projects,
+    skills,
     effectType: getSeasonalEffect(),
   };
 }

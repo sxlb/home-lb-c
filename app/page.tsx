@@ -6,6 +6,8 @@ import Background from "@/components/Background";
 import ClockWeatherCapsule from "@/components/ClockWeatherCapsule";
 import SocialLinks from "@/components/SocialLinks";
 import LinkTabs from "@/components/LinkTabs";
+import CommandPalette from "@/components/CommandPalette";
+import SkillCloud from "@/components/SkillCloud";
 import ThemeProvider from "@/components/ThemeProvider";
 import AuthorCheck from "@/components/AuthorCheck";
 import LogoFontLoader from "@/components/LogoFontLoader";
@@ -67,9 +69,10 @@ export default async function Home() {
         songServer={d.songServer}
         songId={d.songId}
       >
-        {/* 桌面端 main 固定一屏高（md:h-dvh）：section flex-1 填满剩余空间并居中内容，
-            页脚落在视口底部无需滚动；移动端 main 自然高度，页脚在内容后滚动出现 */}
-        <main className="relative flex min-h-dvh w-full flex-col text-white md:h-dvh">
+        {/* 桌面端 main 最小一屏高（md:min-h-dvh）：内容不足一屏时仍整体垂直居中，页脚贴底；
+            内容超高（如并入技能云后）自然增长而非裁切，仅超高部分滚动。
+            移动端 main 自然高度，页脚在内容后滚动出现 */}
+        <main className="relative flex min-h-dvh w-full flex-col text-white">
         <AuthorCheck />
         <FaviconUpdater icon={d.siteIcon} />
         <ScriptInjector scripts={[d.headScript]} deferScripts={[d.analyticsScript]} />
@@ -80,6 +83,14 @@ export default async function Home() {
           siteName={d.nickname}
           welcomeMessages={d.welcomeMessages}
           welcomeIndex={d.welcomeIndex}
+        />
+
+        {/* 命令面板：Ctrl/Cmd+K 或 「/」唤起，搜索网站/友链快捷跳转 */}
+        <CommandPalette
+          siteLinks={d.siteLinks}
+          friendLinks={d.friendLinks}
+          siteTitle={d.siteLinksTitle}
+          friendTitle={d.friendLinksTitle}
         />
 
         {/* 全屏加载动画：首屏必需，保持预加载（ssr:true） */}
@@ -133,6 +144,9 @@ export default async function Home() {
                   </h1>
                 </div>
 
+                {/* 社交链接 */}
+                <SocialLinks initialLinks={d.socialLinks} />
+
                 {/* 简介卡片 */}
                 <div className="card-glass card-info mt-6 flex max-w-[500px] w-full items-start justify-between gap-4 p-5">
                   <Quote className="mt-0.5 h-[20px] w-[20px] shrink-0 rotate-180 text-white/50" />
@@ -140,8 +154,10 @@ export default async function Home() {
                   <Quote className="mt-0.5 h-[20px] w-[20px] shrink-0 text-white/50" />
                 </div>
 
-                {/* 社交链接 */}
-                <SocialLinks initialLinks={d.socialLinks} />
+                {/* 技能云：并列于左栏简介下方，拉大与简介的间距 */}
+                <div className="mt-8 w-full max-w-[500px]">
+                  <SkillCloud skills={d.skills} />
+                </div>
               </div>
 
               {/* 右侧区域：功能区 + 链接 */}
@@ -166,14 +182,14 @@ export default async function Home() {
                   </div>
                 </div>
 
-                {/* 导航链接：网站 + 友情，tab 切换，统一网站卡样式 */}
-                {(d.siteLinks.length > 0 || d.friendLinks.length > 0) && (
+                {/* 导航卡：我的网站 / 我的友链 / 我的作品 多 tab 切换，共用同一容器；无数据的 tab 自动隐藏 */}
+                {(d.siteLinks.length > 0 || d.friendLinks.length > 0 || d.projects.length > 0) && (
                   <div className="card-glass card-list w-full rounded-2xl p-5 lg:p-6">
                     <LinkTabs
                       siteLinks={d.siteLinks.map((l) => ({ ...l, icon: l.icon ?? "" }))}
                       friendLinks={d.friendLinks}
+                      projects={d.projects}
                       siteTitle={d.siteLinksTitle}
-                      siteIcon={d.siteLinksIcon}
                       friendTitle={d.friendLinksTitle}
                     />
                   </div>

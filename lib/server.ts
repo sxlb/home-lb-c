@@ -83,7 +83,10 @@ type LogModule =
   | "announcements"
   | "logs" // 操作日志自身：导出 / 清理审计
   | "media" // 媒体库：上传 / 复制 / 删除
-  | "update"; // 系统更新：检查 / 更新 / 回滚
+  | "update" // 系统更新：检查 / 更新 / 回滚
+  | "projects" // 作品集：批量保存
+  | "skills" // 技能云：批量保存
+  | "articles"; // 随笔/文章：增删改
 
 interface LogInput {
   module: LogModule;

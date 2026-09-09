@@ -288,6 +288,21 @@ export function TopProgressBar({ enabled = true }: TopProgressBarProps) {
     return () => window.removeEventListener("music-progress", onProgress);
   }, [enabled]);
 
+  // 拖拽兜底：若鼠标按住后在进度条之外松开（onMouseUp 不触发），
+  // 通过全局 mouseup 复位拖拽态，避免进度被误判为持续拖动
+  useEffect(() => {
+    if (!enabled) return;
+    const endDrag = () => {
+      draggingRef.current = false;
+    };
+    window.addEventListener("mouseup", endDrag);
+    window.addEventListener("pointerup", endDrag);
+    return () => {
+      window.removeEventListener("mouseup", endDrag);
+      window.removeEventListener("pointerup", endDrag);
+    };
+  }, [enabled]);
+
   const seekTo = (clientX: number, barRect: DOMRect) => {
     if (!duration) return;
     const ratio = Math.min(1, Math.max(0, (clientX - barRect.left) / barRect.width));

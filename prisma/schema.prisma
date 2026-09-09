@@ -117,6 +117,49 @@ model FriendLink {
   updatedAt   DateTime @updatedAt
 }
 
+// 作品/项目集（首页展示，后台可管理；封面图可复用 ImageAsset 或外链）
+model Project {
+  id          Int      @id @default(autoincrement())
+  title       String
+  description String   @default("")
+  url         String   @default("") // 项目链接（空则不跳转）
+  image       String   @default("") // 封面图（媒体库相对路径或 http 外链）
+  tags        String   @default("") // 逗号分隔标签
+  featured    Boolean  @default(false) // 是否置顶/加亮展示
+  enabled     Boolean  @default(true)
+  sort        Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// 技能（技能云展示）
+model Skill {
+  id        Int      @id @default(autoincrement())
+  name      String
+  level     Int      @default(0) // 熟练度 0-100（0 且无图标时作标签展示）
+  icon      String   @default("") // lucide/iconfont 图标名（空则纯文字标签）
+  sort      Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// 随笔/文章（前台 /articles 列表 + /articles/[slug] 阅读页，后台可管理）
+model Article {
+  id          Int      @id @default(autoincrement())
+  title       String
+  slug        String   @unique // URL 友好标识（前台路由用）
+  content     String   @default("") // Markdown 正文
+  excerpt     String   @default("") // 摘要（空则自动截取正文）
+  cover       String   @default("") // 封面图（媒体库相对路径或 http 外链）
+  tags        String   @default("") // 逗号分隔标签
+  published   Boolean  @default(false) // 是否公开发布
+  pinned      Boolean  @default(false) // 是否置顶
+  viewCount   Int      @default(0) // 阅读量
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  publishedAt DateTime @default(now()) // 发布时间（用于排序与社交卡片）
+}
+
 model OperationLog {
   id        Int      @id @default(autoincrement())
   module    String

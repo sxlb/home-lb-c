@@ -1,7 +1,6 @@
 // 注意：此文件是 Docker 容器启动时直接运行的 CommonJS 脚本（对应 eslint 豁免项）。
 const { PrismaClient } = require("@prisma/client");
 const bcrypt = require("bcryptjs");
-const crypto = require("node:crypto");
 
 const prisma = new PrismaClient();
 
@@ -84,7 +83,7 @@ async function main() {
         where: { id: existingUser.id },
         data: { mustChangePassword: IS_DEFAULT_PASSWORD },
       });
-    } catch (e) {
+    } catch {
       // 旧库可能尚无该列（未跑完迁移），忽略即可
       console.log("[seed] skip mustChangePassword sync（旧库尚无该列）");
     }

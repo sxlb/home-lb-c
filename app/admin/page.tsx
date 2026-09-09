@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, lazy, Suspense, memo } from "react";
 import { useRouter } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { Loader2 } from "lucide-react";
+import { loadProfile } from "@/components/admin/profileShared";
 import {
   User,
   Settings,
@@ -27,20 +29,30 @@ import {
   Images,
   Link2,
   Rocket,
+  FolderGit2,
+  Sparkles,
+  Newspaper,
 } from "lucide-react";
-import ProfilePanel from "@/components/admin/ProfilePanel";
-import LinksManager from "@/components/admin/LinksManager";
-import AccountPanel from "@/components/admin/AccountPanel";
-import OperationLogPanel from "@/components/admin/OperationLogPanel";
-import MediaPanel from "@/components/admin/MediaPanel";
-import WeatherPanel from "@/components/admin/WeatherPanel";
-import HealthPanel from "@/components/admin/HealthPanel";
-import ThemePanel from "@/components/admin/ThemePanel";
-import MusicPanel from "@/components/admin/MusicPanel";
-import DataPanel from "@/components/admin/DataPanel";
-import StatsPanel from "@/components/admin/StatsPanel";
-import AnnouncementPanel from "@/components/admin/AnnouncementPanel";
-import UpdatePanel from "@/components/admin/UpdatePanel";
+
+// 面板组件懒加载：每个面板拆成独立 chunk，进入对应 tab 时才按需加载，
+// 避免后台首屏一次性打包全部 16 个面板及其重依赖（图表/Markdown 编辑器等）。
+// 后台固定 4 列等宽，面板间仅切换不销毁，加载一次后保持挂载，避免重复请求。
+const ProfilePanel = lazy(() => import("@/components/admin/ProfilePanel"));
+const LinksManager = lazy(() => import("@/components/admin/LinksManager"));
+const AccountPanel = lazy(() => import("@/components/admin/AccountPanel"));
+const OperationLogPanel = lazy(() => import("@/components/admin/OperationLogPanel"));
+const MediaPanel = lazy(() => import("@/components/admin/MediaPanel"));
+const WeatherPanel = lazy(() => import("@/components/admin/WeatherPanel"));
+const HealthPanel = lazy(() => import("@/components/admin/HealthPanel"));
+const ThemePanel = lazy(() => import("@/components/admin/ThemePanel"));
+const MusicPanel = lazy(() => import("@/components/admin/MusicPanel"));
+const DataPanel = lazy(() => import("@/components/admin/DataPanel"));
+const StatsPanel = lazy(() => import("@/components/admin/StatsPanel"));
+const AnnouncementPanel = lazy(() => import("@/components/admin/AnnouncementPanel"));
+const UpdatePanel = lazy(() => import("@/components/admin/UpdatePanel"));
+const ProjectsPanel = lazy(() => import("@/components/admin/ProjectsPanel"));
+const SkillsPanel = lazy(() => import("@/components/admin/SkillsPanel"));
+const ArticlesPanel = lazy(() => import("@/components/admin/ArticlesPanel"));
 
 type TabId =
   | "profile"
@@ -55,7 +67,10 @@ type TabId =
   | "data"
   | "stats"
   | "media"
-  | "update";
+  | "update"
+  | "projects"
+  | "skills"
+  | "articles";
 
 interface TabItem {
   id: TabId;
@@ -78,6 +93,9 @@ const NAV_GROUPS: NavGroup[] = [
       { id: "profile", label: "站点信息", icon: User, description: "设置个人主页的基本资料与展示信息" },
       { id: "announcements", label: "站点公告", icon: Megaphone, description: "发布/编辑公告，前台上方展示" },
       { id: "links", label: "链接管理", icon: Link2, description: "集中管理社交、网站与友情链接" },
+      { id: "projects", label: "作品集", icon: FolderGit2, description: "管理展示的作品项目（含封面与置顶）" },
+      { id: "skills", label: "技能云", icon: Sparkles, description: "管理技能标签与熟练度" },
+      { id: "articles", label: "随笔/文章", icon: Newspaper, description: "撰写与管理随笔文章（前台 /articles 阅读）" },
     ],
   },
   {
@@ -113,6 +131,70 @@ const NAV_GROUPS: NavGroup[] = [
 // 扁平化 TABS 用于兼容现有逻辑
 const TABS: TabItem[] = NAV_GROUPS.flatMap((g) => g.items);
 
+// 侧边栏导航项：模块级 memo 组件，避免在 AdminPage 内联定义导致每次渲染重建组件类型
+const NavItem = memo(function NavItem({
+  tab,
+  active,
+  onSelect,
+}: {
+  tab: TabItem;
+  active: boolean;
+  onSelect: (id: TabId) => void;
+}) {
+  const Icon = tab.icon;
+  return (
+    <button
+      onClick={() => onSelect(tab.id)}
+      className={`group relative flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-all duration-200 ease-out ${
+        active
+          ? "bg-primary/10 text-primary font-semibold"
+          : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+      }`}
+    >
+      {/* 激活态左侧竖线指示器 */}
+      <span
+        className={`absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r-full bg-primary transition-all duration-200 ${
+          active ? "opacity-100" : "opacity-0 group-hover:opacity-40"
+        }`}
+      />
+      <Icon
+        className={`h-4 w-4 shrink-0 transition-transform duration-200 ${
+          active ? "scale-110" : "group-hover:scale-105"
+        }`}
+      />
+      <span className="truncate">{tab.label}</span>
+    </button>
+  );
+});
+
+// 侧边栏品牌区：模块级组件（避免每次渲染重建类型），接收 username 与 compact 控制紧凑布局
+function BrandHeader({ username, compact = false }: { username: string; compact?: boolean }) {
+  return (
+    <div className="relative overflow-hidden">
+      {/* 顶部渐变装饰条 */}
+      <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-primary via-violet-500 to-fuchsia-500" />
+      <div
+        className={`relative flex items-center gap-3 border-b px-5 ${
+          compact ? "py-4" : "px-6 py-5"
+        }`}
+      >
+        {/* 品牌 Logo */}
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-violet-600 text-white shadow-md shadow-primary/20">
+          <LayoutDashboard className="h-5 w-5" />
+        </div>
+        <div className="min-w-0">
+          <h1 className="truncate text-sm font-semibold tracking-tight">
+            个人主页后台
+          </h1>
+          <p className="mt-0.5 truncate text-xs text-muted-foreground">
+            {username}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -123,17 +205,23 @@ export default function AdminPage() {
   const [hideDefaultWarning, setHideDefaultWarning] = useState(false);
   // 站点首页地址（用于「打开主页 / 复制主页地址」，来源为站点信息配置，缺省回退到当前源）
   const [siteUrl, setSiteUrl] = useState("");
+  // 已访问过的面板 tab 集合：首次进入后保持挂载（CSS 隐藏未激活者），
+  // 切换回来时保留表单输入/滚动/数据等全部状态，避免重复请求与重渲染
+  const [mountedTabs, setMountedTabs] = useState<Set<TabId>>(new Set());
 
   // 切换分类：桌面端直接切换；移动端切换后关闭抽屉
-  function selectTab(id: TabId) {
+  // 目标 tab 首次被选中即标记为已挂载，此后切换回来不再重载
+  // 用 useCallback 稳定引用，配合 memo 的 NavItem 避免侧边栏整组重渲染
+  const selectTab = useCallback((id: TabId) => {
     setActiveTab(id);
+    setMountedTabs((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
     setMobileNavOpen(false);
-  }
+  }, []);
 
   useEffect(() => {
+    // 复用 profileShared 的 loadProfile：与默认面板共享 inflight 去重，避免重复 GET /api/profile
     let cancelled = false;
-    fetch("/api/profile")
-      .then((r) => (r.ok ? r.json() : null))
+    loadProfile()
       .then((d) => {
         if (!cancelled && d?.siteUrl) setSiteUrl(d.siteUrl);
       })
@@ -163,6 +251,12 @@ export default function AdminPage() {
     document.title = "后台管理 · 个人主页";
   }, []);
 
+  // 初始激活的 profile 面板标记为已挂载
+  useEffect(() => {
+    setMountedTabs((prev) => (prev.has(activeTab) ? prev : new Set(prev).add(activeTab)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   if (status === "loading") {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -178,61 +272,8 @@ export default function AdminPage() {
   const username = session?.user?.name || "管理员";
   const currentTab = TABS.find((t) => t.id === activeTab);
 
-  // 侧边栏导航项组件（桌面端 + 移动端共用样式逻辑）
-  const NavItem = ({ tab }: { tab: TabItem }) => {
-    const Icon = tab.icon;
-    const active = activeTab === tab.id;
-    return (
-      <button
-        key={tab.id}
-        onClick={() => selectTab(tab.id)}
-        className={`group relative flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-all duration-200 ease-out ${
-          active
-            ? "bg-primary/10 text-primary font-semibold"
-            : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
-        }`}
-      >
-        {/* 激活态左侧竖线指示器 */}
-        <span
-          className={`absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r-full bg-primary transition-all duration-200 ${
-            active ? "opacity-100" : "opacity-0 group-hover:opacity-40"
-          }`}
-        />
-        <Icon
-          className={`h-4 w-4 shrink-0 transition-transform duration-200 ${
-            active ? "scale-110" : "group-hover:scale-105"
-          }`}
-        />
-        <span className="truncate">{tab.label}</span>
-      </button>
-    );
-  };
-
-  // 侧边栏品牌区组件
-  const BrandHeader = ({ compact = false }: { compact?: boolean }) => (
-    <div className="relative overflow-hidden">
-      {/* 顶部渐变装饰条 */}
-      <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-primary via-violet-500 to-fuchsia-500" />
-      <div
-        className={`relative flex items-center gap-3 border-b px-5 ${
-          compact ? "py-4" : "px-6 py-5"
-        }`}
-      >
-        {/* 品牌 Logo */}
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-violet-600 text-white shadow-md shadow-primary/20">
-          <LayoutDashboard className="h-5 w-5" />
-        </div>
-        <div className="min-w-0">
-          <h1 className="truncate text-sm font-semibold tracking-tight">
-            个人主页后台
-          </h1>
-          <p className="mt-0.5 truncate text-xs text-muted-foreground">
-            {username}
-          </p>
-        </div>
-      </div>
-    </div>
-  );
+  // 侧边栏品牌区组件（模块级，避免每次渲染重建类型）
+  // 接收 username 与 compact 控制紧凑布局
 
   return (
     <main className="admin min-h-screen bg-background">
@@ -240,7 +281,7 @@ export default function AdminPage() {
       <div className="flex min-h-screen flex-col md:flex-row">
         {/* ===== 桌面端：左侧固定侧边导航 ===== */}
         <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r bg-card/70 backdrop-blur-sm md:flex">
-          <BrandHeader />
+          <BrandHeader username={username} />
 
           <nav className="flex-1 space-y-5 overflow-y-auto px-3 py-4">
             {NAV_GROUPS.map((group) => {
@@ -257,7 +298,7 @@ export default function AdminPage() {
                   {/* 分组下的导航项 */}
                   <div className="space-y-0.5">
                     {group.items.map((tab) => (
-                      <NavItem key={tab.id} tab={tab} />
+                      <NavItem key={tab.id} tab={tab} active={activeTab === tab.id} onSelect={selectTab} />
                     ))}
                   </div>
                 </div>
@@ -330,7 +371,7 @@ export default function AdminPage() {
         >
           <div className="flex h-full flex-col border-r bg-card">
             <div className="flex items-center justify-between">
-              <BrandHeader compact />
+              <BrandHeader username={username} compact />
               <button
                 onClick={() => setMobileNavOpen(false)}
                 aria-label="关闭菜单"
@@ -353,7 +394,7 @@ export default function AdminPage() {
                     </div>
                     <div className="space-y-0.5">
                       {group.items.map((tab) => (
-                        <NavItem key={tab.id} tab={tab} />
+                        <NavItem key={tab.id} tab={tab} active={activeTab === tab.id} onSelect={selectTab} />
                       ))}
                     </div>
                   </div>
@@ -439,21 +480,98 @@ export default function AdminPage() {
               </div>
             )}
 
-            {/* 内容面板 */}
+            {/* 内容面板：已访问过的面板全部保持挂载，未激活的用 CSS 隐藏。
+                首次进入某面板时经 Suspense 按需加载其 chunk；此后切换回来状态/滚动/输入全部保留，零重载 */}
             <div className="transition-opacity duration-300">
-              {activeTab === "profile" && <ProfilePanel />}
-              {activeTab === "theme" && <ThemePanel />}
-              {activeTab === "music" && <MusicPanel />}
-              {activeTab === "links" && <LinksManager />}
-              {activeTab === "weather" && <WeatherPanel />}
-              {activeTab === "announcements" && <AnnouncementPanel />}
-              {activeTab === "account" && <AccountPanel />}
-              {activeTab === "logs" && <OperationLogPanel />}
-              {activeTab === "health" && <HealthPanel />}
-              {activeTab === "data" && <DataPanel />}
-              {activeTab === "stats" && <StatsPanel />}
-              {activeTab === "media" && <MediaPanel />}
-              {activeTab === "update" && <UpdatePanel />}
+              <Suspense
+                fallback={
+                  <div className="flex h-64 flex-col items-center justify-center gap-3 text-muted-foreground">
+                    <Loader2 className="h-6 w-6 animate-spin" />
+                    <p className="text-sm">正在加载面板...</p>
+                  </div>
+                }
+              >
+                {mountedTabs.has("profile") && (
+                  <div className={activeTab === "profile" ? "" : "hidden"}>
+                    <ProfilePanel />
+                  </div>
+                )}
+                {mountedTabs.has("theme") && (
+                  <div className={activeTab === "theme" ? "" : "hidden"}>
+                    <ThemePanel />
+                  </div>
+                )}
+                {mountedTabs.has("music") && (
+                  <div className={activeTab === "music" ? "" : "hidden"}>
+                    <MusicPanel />
+                  </div>
+                )}
+                {mountedTabs.has("links") && (
+                  <div className={activeTab === "links" ? "" : "hidden"}>
+                    <LinksManager />
+                  </div>
+                )}
+                {mountedTabs.has("weather") && (
+                  <div className={activeTab === "weather" ? "" : "hidden"}>
+                    <WeatherPanel />
+                  </div>
+                )}
+                {mountedTabs.has("announcements") && (
+                  <div className={activeTab === "announcements" ? "" : "hidden"}>
+                    <AnnouncementPanel />
+                  </div>
+                )}
+                {mountedTabs.has("account") && (
+                  <div className={activeTab === "account" ? "" : "hidden"}>
+                    <AccountPanel />
+                  </div>
+                )}
+                {mountedTabs.has("logs") && (
+                  <div className={activeTab === "logs" ? "" : "hidden"}>
+                    <OperationLogPanel />
+                  </div>
+                )}
+                {mountedTabs.has("health") && (
+                  <div className={activeTab === "health" ? "" : "hidden"}>
+                    <HealthPanel />
+                  </div>
+                )}
+                {mountedTabs.has("data") && (
+                  <div className={activeTab === "data" ? "" : "hidden"}>
+                    <DataPanel />
+                  </div>
+                )}
+                {mountedTabs.has("stats") && (
+                  <div className={activeTab === "stats" ? "" : "hidden"}>
+                    <StatsPanel />
+                  </div>
+                )}
+                {mountedTabs.has("media") && (
+                  <div className={activeTab === "media" ? "" : "hidden"}>
+                    <MediaPanel />
+                  </div>
+                )}
+                {mountedTabs.has("update") && (
+                  <div className={activeTab === "update" ? "" : "hidden"}>
+                    <UpdatePanel />
+                  </div>
+                )}
+                {mountedTabs.has("projects") && (
+                  <div className={activeTab === "projects" ? "" : "hidden"}>
+                    <ProjectsPanel />
+                  </div>
+                )}
+                {mountedTabs.has("skills") && (
+                  <div className={activeTab === "skills" ? "" : "hidden"}>
+                    <SkillsPanel />
+                  </div>
+                )}
+                {mountedTabs.has("articles") && (
+                  <div className={activeTab === "articles" ? "" : "hidden"}>
+                    <ArticlesPanel />
+                  </div>
+                )}
+              </Suspense>
             </div>
           </div>
         </div>

@@ -11,9 +11,9 @@ const compat = new FlatCompat({
 });
 
 const eslintConfig = [
-  // 忽略构建产物与自动生成文件
+  // 忽略构建产物与自动生成文件、参考站源码副本（.ref-home 仅作设计参照，不参与检查）
   {
-    ignores: [".next/**", "next-env.d.ts", "tsconfig.tsbuildinfo"],
+    ignores: [".next/**", "next-env.d.ts", "tsconfig.tsbuildinfo", ".ref-home/**"],
   },
   // Next.js 核心规则（含 React/TS 规则，对应 next lint 的 Strict 模式）
   ...compat.extends("next/core-web-vitals", "next/typescript"),

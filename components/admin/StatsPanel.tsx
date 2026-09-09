@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Eye, Users, TrendingUp, TrendingDown, Link2, Focus, CalendarRange, Activity } from "lucide-react";
+import { Eye, Users, TrendingUp, TrendingDown, Link2, Focus, CalendarRange, Activity, Download } from "lucide-react";
 import { toast } from "sonner";
 
 interface DailyStat { date: string; pv: number; uv: number }
@@ -349,7 +349,99 @@ export default function StatsPanel() {
             </ul>
           )}
         </div>
+
+        {/* 访客地域省份 TOP + 导出（省级聚合，IP 离线解析） */}
+        <GeoRankCard />
       </CardContent>
     </Card>
+  );
+}
+
+/* ==================== 访客地域省份 TOP + 导出 ==================== */
+
+interface GeoPoint {
+  region: string;
+  visits: number;
+  ips: number;
+}
+interface GeoResp { list: GeoPoint[]; totalVisits: number; sampled: number }
+
+const GEO_RANGES = [
+  { key: 0, label: "全部" },
+  { key: 7, label: "近 7 天" },
+  { key: 30, label: "近 30 天" },
+  { key: 90, label: "近 90 天" },
+];
+
+/** 访客地域（省/国家）TOP 排行：支持时间范围切换与 CSV 导出 */
+function GeoRankCard() {
+  const [days, setDays] = useState(0);
+  const [data, setData] = useState<GeoResp | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    fetch(`/api/stats/geo${days ? `?days=${days}` : ""}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: GeoResp | null) => { if (!cancelled) { setData(d); setLoading(false); } })
+      .catch(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [days]);
+
+  const total = data?.totalVisits ?? 0;
+  const max = data?.list[0]?.visits ?? 1;
+
+  return (
+    <div className="rounded-xl border bg-card p-4">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h3 className="flex items-center gap-1.5 text-sm font-semibold"><Focus className="h-4 w-4" />访客地域省份 TOP</h3>
+        <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-0.5 overflow-hidden rounded-lg border">
+            {GEO_RANGES.map((r) => (
+              <button key={r.key} onClick={() => setDays(r.key)}
+                className={`px-2 py-1 text-xs transition-colors ${days === r.key ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"}`}>
+                {r.label}
+              </button>
+            ))}
+          </div>
+          {/* 导出 CSV */}
+          <a
+            href={`/api/stats/geo?export=csv${days ? `&days=${days}` : ""}`}
+            className="inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted"
+            title="导出 CSV"
+          >
+            <Download className="h-3.5 w-3.5" />导出
+          </a>
+        </div>
+      </div>
+
+      {loading ? (
+        <p className="py-6 text-center text-xs text-muted-foreground">加载中…</p>
+      ) : !data || data.list.length === 0 ? (
+        <p className="py-6 text-center text-xs text-muted-foreground">暂无地域数据（IP 离线解析）</p>
+      ) : (
+        <ul className="grid gap-2 sm:grid-cols-2">
+          {data.list.map((g, i) => (
+            <li key={g.region} className="rounded-lg border px-3 py-2">
+              <div className="flex items-center justify-between gap-2 text-sm">
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <span className="text-[11px] font-semibold text-muted-foreground tabular-nums">{i + 1}</span>
+                  <span className="truncate font-medium">{g.region}</span>
+                </span>
+                <span className="shrink-0 tabular-nums text-muted-foreground">{g.visits}</span>
+              </div>
+              {/* 占比进度条 */}
+              <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted">
+                <div className="h-full rounded-full bg-primary/70" style={{ width: `${(g.visits / (max || 1)) * 100}%` }} />
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      {!loading && data && data.sampled > 0 && (
+        <p className="mt-2 text-[11px] text-muted-foreground">基于最近 {data.sampled} 个活跃 IP 聚合，共 {total} 次访问</p>
+      )}
+    </div>
   );
 }

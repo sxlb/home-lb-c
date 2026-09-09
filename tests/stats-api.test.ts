@@ -39,6 +39,10 @@ const { GET, POST } = await import("@/app/api/stats/route");
 describe("stats API", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // POST 在写库后还会查一次今日记录与累计（响应携带统计结果），
+    // 这里给默认值，避免未覆盖的 mock 返回 undefined 导致 `.then((s)=>s._sum)` 报错
+    mocks.findUnique.mockResolvedValue(null);
+    mocks.aggregate.mockResolvedValue({ _sum: { pv: 0, uv: 0 } });
     // 清空 IP 限流状态，避免用例间互相影响
     resetRateLimiter();
   });

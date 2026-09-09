@@ -29,6 +29,8 @@
     "next-auth": "^4.24.15",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
     "sonner": "^2.0.7",
     "tailwind-merge": "^2.5.4",
     "tailwindcss-animate": "^1.0.7",

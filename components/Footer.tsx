@@ -151,9 +151,9 @@ export default function Footer({
     return () => window.removeEventListener("load", handler);
   }, []);
 
-  // 统计数据：上报本次访问（PV）并读取展示
+  // 统计数据：上报本次访问（PV）并一次请求拿回统计结果用于展示
   // （原 SiteStats 组件功能已合并至此，保证统计记录与显示不分离）
-  // UV 去重由服务端 Cookie 判定，客户端仅上报一次 PV
+  // UV 去重由服务端 Cookie 判定；POST 响应即含统计结果，无需再单独发 GET
   useEffect(() => {
     let cancelled = false;
 
@@ -161,17 +161,13 @@ export default function Footer({
       method: "POST",
       cache: "no-store",
       signal: AbortSignal.timeout(8000),
-    }).catch(() => {
-      /* 上报失败不影响页面 */
-    });
-
-    fetch("/api/stats", { cache: "no-store", signal: AbortSignal.timeout(8000) })
+    })
       .then((r) => (r.ok ? r.json() : null))
       .then((json) => {
-        if (!cancelled && json) setStats(json as StatsData);
+        if (!cancelled && json?.ok) setStats(json as StatsData);
       })
       .catch(() => {
-        /* 忽略 */
+        /* 上报失败不影响页面 */
       });
 
     return () => {

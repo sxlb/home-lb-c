@@ -88,7 +88,17 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    const res = NextResponse.json({ ok: true });
+    // 上报成功后即返回统计结果，前端一次请求完成「记录 + 展示」，减少一次往返
+    const todayRow = await prisma.visitStat.findUnique({ where: { date: today } });
+    const all = await prisma.visitStat.aggregate({ _sum: { pv: true, uv: true } });
+
+    const res = NextResponse.json({
+      ok: true,
+      todayPv: todayRow?.pv ?? 0,
+      todayUv: todayRow?.uv ?? 0,
+      totalPv: all._sum.pv ?? 0,
+      totalUv: all._sum.uv ?? 0,
+    });
     if (isNew) {
       res.cookies.set(UV_COOKIE, "1", {
         httpOnly: true,

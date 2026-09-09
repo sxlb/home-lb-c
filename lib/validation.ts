@@ -528,6 +528,59 @@ export const friendLinkSchema = z.object({
 
 export const friendLinkCreateSchema = friendLinkSchema;
 
+// 作品/项目校验 schema（url/image 允许 http 外链或媒体库相对路径 /api/uploads/...）
+const mediaOrUrl = (msg: string) =>
+  z.string().max(2048, msg).refine(
+    (v) => v === "" || /^(https?:\/\/|\/api\/uploads\/)/.test(v),
+    "须为 http(s):// 外链或以 /api/uploads/ 开头的媒体路径"
+  );
+
+export const projectSchema = z.object({
+  title: z.string().trim().min(1, "标题不能为空").max(128, "标题最长 128 字符"),
+  description: z.string().max(500, "描述最长 500 字符").optional().default(""),
+  url: mediaOrUrl("链接过长").optional().default(""),
+  image: mediaOrUrl("封面图地址过长").optional().default(""),
+  tags: z.string().max(200, "标签过长").optional().default(""),
+  featured: z.boolean().optional().default(false),
+  enabled: z.boolean().optional().default(true),
+  sort: z.number().int().min(0).max(9999).optional().default(0),
+});
+
+export const projectBatchSchema = z.array(projectSchema.extend({ id: z.number().int().positive().optional() }));
+
+// 技能校验 schema
+export const skillSchema = z.object({
+  name: z.string().trim().min(1, "技能名不能为空").max(32, "技能名最长 32 字符"),
+  level: z.number().int().min(0).max(100).optional().default(0),
+  icon: z
+    .string()
+    .trim()
+    .max(64, "图标名最长 64 字符")
+    .refine((v) => v === "" || /^[a-zA-Z0-9:_-]+$/.test(v), "图标名仅支持字母、数字、下划线、连字符")
+    .optional()
+    .default(""),
+  sort: z.number().int().min(0).max(9999).optional().default(0),
+});
+
+export const skillBatchSchema = z.array(skillSchema.extend({ id: z.number().int().positive().optional() }));
+
+// 随笔/文章校验 schema：title/slug 必填，正文可空（初始草稿），封面/摘要/标签可空
+export const articleSchema = z.object({
+  title: z.string().trim().min(1, "标题不能为空").max(128, "标题最长 128 字符"),
+  slug: z
+    .string()
+    .trim()
+    .min(1, "链接标识不能为空")
+    .max(128, "链接标识最长 128 字符")
+    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "链接标识须为小写字母/数字，用连字符分隔（如 my-first-post）"),
+  content: z.string().max(100000, "正文过长").optional().default(""),
+  excerpt: z.string().max(500, "摘要最长 500 字符").optional().default(""),
+  cover: mediaOrUrl("封面图地址过长").optional().default(""),
+  tags: z.string().max(200, "标签过长").optional().default(""),
+  published: z.boolean().optional().default(false),
+  pinned: z.boolean().optional().default(false),
+});
+
 // 天气设置校验 schema：用于 PUT /api/weather-setting
 // 注：wttr.in 已下线，路由仅使用 amap / tencent / tencent-key；
 // "wttr" / "uapis" 枚举值仅为兼容历史存量数据保留（保存后仍会继续存储，但不会被执行）

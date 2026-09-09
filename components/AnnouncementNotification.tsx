@@ -36,25 +36,21 @@ function getBrowserName(): string {
   return "";
 }
 
-/** 获取访客 IP 归属地（5s 超时，失败静默返回空） */
+/** 获取访客 IP 归属地（复用后端 ip2region 离线库；5s 超时，失败静默返回空） */
 async function fetchVisitorLocation(): Promise<string> {
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 5000);
     try {
-      const res = await fetch("https://v4.yinghualuo.cn/bejson?format=json", {
-        signal: controller.signal,
-      });
+      const res = await fetch("/api/visitor/location", { signal: controller.signal });
       if (!res.ok) return "";
-      const data = (await res.json()) as { location?: string };
-      return data.location || "";
+      const data = (await res.json()) as { region?: string };
+      return data.region || "";
     } finally {
       clearTimeout(timer);
     }
   } catch {
-    if (process.env.NODE_ENV !== "production") {
-      console.warn("[Effects] 访客位置获取失败，无法自动定位天气");
-    }
+    // 解析失败静默，不影响欢迎弹窗展示
     return "";
   }
 }
@@ -91,29 +87,40 @@ export default function AnnouncementNotification({
     }
   }
 
-  // 加载公告并过滤已读
+  // 有内容时才预取 & 展示（welcomeText 上方已计算；公告加载完会更新 items→hasContent）
+  const hasContent = welcomeText.length > 0 || items.length > 0;
+
+  // 立即并行预取访客信息（浏览器 + IP 归属地）与公告，组件挂载即发起，
+  // 而非等弹窗 visible 后再发——消除展示时的延迟等待
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/announcements/public", { cache: "no-store", signal: AbortSignal.timeout(8000) })
-      .then((r) => (r.ok ? r.json() : []))
-      .then((list: Announcement[]) => {
-        if (cancelled) return;
-        let dismissed: number[] = [];
-        try {
-          dismissed = JSON.parse(localStorage.getItem(DISMISS_KEY) || "[]") as number[];
-        } catch {
-          dismissed = [];
-        }
-        setItems(list.filter((a) => !dismissed.includes(a.id)));
-      })
-      .catch(() => { /* 公告加载失败不影响页面 */ });
+    void (async () => {
+      const [browser, location, ann] = await Promise.all([
+        Promise.resolve(getBrowserName()),
+        fetchVisitorLocation(),
+        // 单独并行拉公告（与访客信息互不阻塞）
+        fetch("/api/announcements/public", { cache: "no-store", signal: AbortSignal.timeout(8000) })
+          .then((r) => (r.ok ? r.json() : []))
+          .catch(() => [] as Announcement[]),
+      ]);
+      if (cancelled) return;
+      let dismissed: number[] = [];
+      try {
+        dismissed = JSON.parse(localStorage.getItem(DISMISS_KEY) || "[]") as number[];
+      } catch {
+        dismissed = [];
+      }
+      setItems(Array.isArray(ann) ? ann.filter((a: Announcement) => !dismissed.includes(a.id)) : []);
+      const parts = [browser, location].filter(Boolean);
+      setVisitorInfo(parts.length > 0 ? `来自 ${parts.join(" · ")}` : "");
+    })();
     return () => {
       cancelled = true;
     };
+    // 仅组件挂载时预取一次；公告/访客信息在切换 site 后会重新挂载，由组件层面保证刷新
   }, []);
 
   // 有欢迎语或公告后，等全屏加载动画完全移除再统一弹出
-  const hasContent = welcomeText.length > 0 || items.length > 0;
   useEffect(() => {
     if (!hasContent) return;
     let cancelled = false;
@@ -132,22 +139,6 @@ export default function AnnouncementNotification({
       window.removeEventListener("loading-screen-removed", show);
     };
   }, [hasContent]);
-
-  // 通知显示后再异步补充访客信息（浏览器 + IP 归属地），不显示则不发请求
-  useEffect(() => {
-    if (!visible || !welcomeText) return;
-    let cancelled = false;
-    (async () => {
-      const browser = getBrowserName();
-      const location = await fetchVisitorLocation();
-      if (cancelled) return;
-      const parts = [browser, location].filter(Boolean);
-      setVisitorInfo(parts.length > 0 ? `来自 ${parts.join(" · ")}` : "");
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [visible, welcomeText]);
 
   if (!visible || (!welcomeText && items.length === 0)) return null;
 
