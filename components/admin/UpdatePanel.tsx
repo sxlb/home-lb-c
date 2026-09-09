@@ -305,7 +305,10 @@ export default function UpdatePanel() {
             ) : latest ? (
               <p className="mt-1.5 text-lg font-semibold text-success">已是最新</p>
             ) : (
-              <p className="mt-1.5 text-lg font-semibold text-muted-foreground">未知</p>
+              <p className="mt-1.5 text-sm font-medium text-muted-foreground">
+                {data?.latestError || "未知"}
+                {data?.latestError ? "，可点击右上角重新检查" : ""}
+              </p>
             )}
           </div>
         </div>

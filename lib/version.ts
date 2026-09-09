@@ -109,9 +109,9 @@ const RELEASE_HEADERS = {
   "X-GitHub-Api-Version": "2022-11-28",
 };
 
-const SPEED_TEST_TIMEOUT_MS = 3000; // 单个候选源测速超时
-const REQUEST_TIMEOUT_MS = 8000; // 真实请求超时
-const SPEED_CACHE_TTL_MS = 60 * 1000; // 测速结果缓存 60s，避免频繁探测触发限流
+const REQUEST_TIMEOUT_MS = 5000; // 单个源单次请求超时
+const MAX_ROUNDS = 2; // 竞速总轮数：首轮失败后短暂间隔重试，抵御服务器出网间歇性丢包
+const ROUND_GAP_MS = 300; // 轮次间间隔
 
 function configuredMirrors(): string[] {
   const raw = (process.env.GITHUB_API_MIRRORS || "").trim();
@@ -124,43 +124,13 @@ function releaseUrl(base: string): string {
   return `${base}repos/${GITHUB_REPO}/releases/latest`;
 }
 
-/** 测速：探测某源可达性并测其延迟（毫秒）。不可达返回 null */
-async function testSource(base: string): Promise<{ base: string; ms: number } | null> {
-  const started = Date.now();
-  try {
-    // 用真实端点探测——既能测速又能直接拿到数据（若命中则免去二次请求）
-    await fetch(releaseUrl(base), {
-      headers: RELEASE_HEADERS,
-      signal: AbortSignal.timeout(SPEED_TEST_TIMEOUT_MS),
-      cache: "no-store",
-    });
-    return { base, ms: Date.now() - started };
-  } catch {
-    return null; // 超时/网络错误视为不可达
-  }
+/** 候选源列表（去重，官方居首）。所有源始终参与检测，不做测速裁减——避免出网波动时误删可用的代理 */
+function candidateSources(): string[] {
+  return Array.from(new Set([OFFICIAL_BASE, ...configuredMirrors()]));
 }
 
-let speedCacheAt = 0;
-let speedOrder: string[] = [];
-
-/**
- * 返回候选源顺序：官方始终居首（满足"默认官方优先"）；若官方不可达则跳过，
- * 其余代理按测速延迟升序排列（结果缓存 60s，避免频繁探测触发限流）。
- * 全不可达时退化为仅保留官方，让外层请求得到友好错误而非空转。
- */
-async function orderSources(): Promise<string[]> {
-  if (speedOrder.length && Date.now() - speedCacheAt < SPEED_CACHE_TTL_MS) return speedOrder;
-  const official = await testSource(OFFICIAL_BASE);
-  const mirrorResults = await Promise.all(configuredMirrors().map((m) => testSource(m)));
-  const reachableMirrors = (mirrorResults.filter((r) => r !== null) as { base: string; ms: number }[])
-    .sort((a, b) => a.ms - b.ms)
-    .map((r) => r.base);
-  speedOrder =
-    (official ? [official.base] : []).concat(reachableMirrors).length
-      ? (official ? [official.base] : []).concat(reachableMirrors)
-      : [OFFICIAL_BASE];
-  speedCacheAt = Date.now();
-  return speedOrder;
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function mapRelease(raw: Record<string, unknown>): ReleaseInfo {
@@ -182,11 +152,80 @@ export interface FetchLatestResult {
 }
 
 /**
- * 获取 GitHub 最新 release，官方源优先，失败自动降级到公共代理。
- * 成功结果带 10 分钟内存缓存，错误结果仅缓存 30 秒（允许快速自愈）；
- * force=true 时绕过进程级缓存强制刷新（仍复用 60s 测速结果，不重复探测）。
- * 全部源失败才返回 { data:null, error }（已映射为友好中文提示），不抛异常。
+ * 获取 GitHub 最新 release：所有候选源并发竞速，取最快成功；一轮全部失败则短暂间隔后整体重试一轮，
+ * 以此抵御服务器出网间歇性丢包（同一源往往 1-2 次内即恢复）。任何时刻都保留全部源，不做测速裁减。
+ * 成功结果带 10 分钟内存缓存，错误结果仅缓存 30 秒（允许快速自愈）；force=true 绕过进程级缓存。
+ * 全部源均失败才返回 { data:null, error }（已映射为友好中文提示），不抛异常。
  */
+
+type ProbeResult =
+  | { kind: "ok"; data: ReleaseInfo }
+  | { kind: "http"; status: number }
+  | { kind: "timeout" }
+  | { kind: "net" }
+  | { kind: "noRelease" };
+
+const TIMEOUT_RE = /timeout|aborted/i;
+
+/** 单源单次探测：成功返回 release，否则返回定性错误（不做重试，重试在轮次层统一处理） */
+async function probe(base: string): Promise<ProbeResult> {
+  try {
+    const res = await fetch(releaseUrl(base), {
+      headers: RELEASE_HEADERS,
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      cache: "no-store",
+    });
+    if (res.ok) {
+      try {
+        return { kind: "ok", data: mapRelease((await res.json()) as Record<string, unknown>) };
+      } catch {
+        return { kind: "net" }; // 响应体解析失败
+      }
+    }
+    return { kind: "http", status: res.status };
+  } catch (e) {
+    const timeout =
+      e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError" || TIMEOUT_RE.test(e.message));
+    return { kind: timeout ? "timeout" : "net" };
+  }
+}
+
+/** 汇总一轮全部失败结果，定性最贴切的失败原因（noRelease > timeout > http > net） */
+function classify(results: ProbeResult[]): ProbeResult {
+  if (results.some((r) => r.kind === "noRelease") || results.some((r) => r.kind === "http" && r.status === 404)) {
+    return { kind: "noRelease" };
+  }
+  if (results.some((r) => r.kind === "timeout")) return { kind: "timeout" };
+  const http = results.find((r) => r.kind === "http");
+  if (http) return http;
+  return { kind: "net" };
+}
+
+/** 一轮竞速：并发探测全部候选源，首个成功即返回（快源无需等慢源），全失败则汇总定性原因 */
+async function raceOnce(sources: string[]): Promise<ProbeResult> {
+  return new Promise<ProbeResult>((resolve) => {
+    let settled = false;
+    let failed = 0;
+    const results = new Array<ProbeResult>(sources.length);
+    sources.forEach((base, i) => {
+      probe(base).then((r) => {
+        if (settled) return;
+        if (r.kind === "ok") {
+          settled = true;
+          resolve(r);
+          return;
+        }
+        results[i] = r;
+        failed++;
+        if (failed === sources.length) {
+          settled = true;
+          resolve(classify(results));
+        }
+      });
+    });
+  });
+}
+
 export async function fetchLatestRelease(force = false): Promise<FetchLatestResult> {
   const cached = globalCache.latest;
   if (cached) {
@@ -197,46 +236,31 @@ export async function fetchLatestRelease(force = false): Promise<FetchLatestResu
     }
   }
 
-  const sources = await orderSources();
-  let lastError: string | undefined;
+  const sources = candidateSources();
+  let last: ProbeResult | undefined;
 
-  for (const base of sources) {
-    try {
-      const res = await fetch(releaseUrl(base), {
-        headers: RELEASE_HEADERS,
-        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-        cache: "no-store",
-      });
-
-      if (!res.ok) {
-        // 404 = 仓库还没有 release（在哪个源都一样，可直接定性返回）
-        if (res.status === 404) {
-          const error = "暂无已发布的版本";
-          globalCache.latest = { at: Date.now(), data: null, error };
-          return { data: null, fromCache: false, error };
-        }
-        lastError = `GitHub 请求失败（HTTP ${res.status}）`;
-        continue; // 本源异常，降级到下一个源
-      }
-
-      const data = mapRelease((await res.json()) as Record<string, unknown>);
-      globalCache.latest = { at: Date.now(), data };
-      return { data, fromCache: false };
-    } catch (e) {
-      // 超时/网络/解析失败：记录友好提示后降级到下一个源
-      const isTimeout =
-        e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError" || /timeout|aborted/i.test(e.message));
-      lastError = isTimeout ? "检测最新版本超时，请稍后重试" : "网络错误，获取最新版本失败，请重试";
+  for (let round = 0; round < MAX_ROUNDS; round++) {
+    const res = await raceOnce(sources);
+    if (res.kind === "ok") {
+      globalCache.latest = { at: Date.now(), data: res.data };
+      return { data: res.data, fromCache: false };
     }
+    if (res.kind === "noRelease") {
+      const message = "暂无已发布的版本";
+      globalCache.latest = { at: Date.now(), data: null, error: message };
+      return { data: null, fromCache: false, error: message };
+    }
+    last = res;
+    if (round < MAX_ROUNDS - 1) await sleep(ROUND_GAP_MS);
   }
 
-  globalCache.latest = { at: Date.now(), data: null, error: lastError };
-  return { data: null, fromCache: false, error: lastError };
+  const message =
+    last?.kind === "timeout" ? "检测最新版本超时，请稍后重试" : "网络错误，获取最新版本失败，请重试";
+  globalCache.latest = { at: Date.now(), data: null, error: message };
+  return { data: null, fromCache: false, error: message };
 }
 
-/** 供测试清空缓存（含测速缓存，保证隔离） */
+/** 供测试清空缓存，保证隔离 */
 export function resetReleaseCache(): void {
   delete globalCache.latest;
-  speedOrder = [];
-  speedCacheAt = 0;
 }
