@@ -24,6 +24,19 @@ const baloo2 = localFont({ src: [{ path: "../public/fonts/nowar-rounded/Baloo2-V
 export const metadata: Metadata = {
   title: "个人主页",
   description: "极简个人主页",
+  applicationName: "home-lb 个人主页",
+  creator: "home-lb",
+  robots: { index: true, follow: true },
+  formatDetection: { email: false, address: false, telephone: false },
+  // 具体 OpenGraph / Twitter 卡片由各页面（首页 generateMetadata）基于后台配置填充
+  openGraph: {
+    type: "website",
+    locale: "zh_CN",
+    siteName: "home-lb 个人主页",
+    title: "个人主页",
+    description: "极简个人主页",
+  },
+  twitter: { card: "summary_large_image", title: "个人主页", description: "极简个人主页" },
 };
 
 export default function RootLayout({

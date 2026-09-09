@@ -40,16 +40,56 @@ const getProfile = cache(async () => {
   }
 });
 
-/** 动态 SEO 元信息：后台配置的标题/描述/关键词（ISR 60s 缓存） */
+/** 动态 SEO 元信息：后台配置的标题/描述/关键词/站点地址（ISR 60s 缓存） */
 export async function generateMetadata(): Promise<import("next").Metadata> {
   const profile = await getProfile();
-  const siteTitle = profile?.siteTitle?.trim();
-  const siteDescription = profile?.siteDescription?.trim();
+  const siteTitle = profile?.siteTitle?.trim() || "个人主页";
+  const siteDescription = profile?.siteDescription?.trim() || "极简个人主页";
   const siteKeywords = profile?.siteKeywords?.trim();
+  const siteUrl = profile?.siteUrl?.trim().replace(/\/+$/, "");
+  // 头像可能为空、相对上传路径或外链：仅当可拼出完整 URL 时才作为 OG 图片，避免产出损坏的分享卡片
+  let ogImage;
+  const avatar = profile?.avatar?.trim() || "";
+  if (avatar) {
+    const absoluteAvatar = /^https?:\/\//i.test(avatar)
+      ? avatar
+      : siteUrl && avatar.startsWith("/")
+      ? `${siteUrl}${avatar}`
+      : "";
+    if (absoluteAvatar) ogImage = { url: absoluteAvatar, width: 512, height: 512, alt: siteTitle };
+  }
+  // siteUrl 必须为合法 http(s) 才注入 metadataBase/canonical，避免后台误填非法地址让整页抛错
+  let metadataBase: URL | undefined;
+  if (siteUrl) {
+    try {
+      const u = new URL(siteUrl);
+      if (u.protocol === "http:" || u.protocol === "https:") metadataBase = u;
+    } catch {
+      metadataBase = undefined;
+    }
+  }
   return {
-    title: siteTitle || "个人主页",
-    description: siteDescription || "极简个人主页",
-    ...(siteKeywords ? { keywords: siteKeywords.split(/[,，]/).map((s) => s.trim()).filter(Boolean) } : {}),
+    title: siteTitle,
+    description: siteDescription,
+    ...(siteKeywords
+      ? { keywords: siteKeywords.split(/[,，]/).map((s) => s.trim()).filter(Boolean) }
+      : {}),
+    ...(metadataBase ? { metadataBase, alternates: { canonical: metadataBase.origin + metadataBase.pathname } } : {}),
+    openGraph: {
+      type: "website",
+      siteName: siteTitle,
+      url: siteUrl || undefined,
+      title: siteTitle,
+      description: siteDescription,
+      locale: "zh_CN",
+      ...(ogImage ? { images: [ogImage] } : {}),
+    },
+    twitter: {
+      card: ogImage ? "summary_large_image" : "summary",
+      title: siteTitle,
+      description: siteDescription,
+      ...(ogImage ? { images: [ogImage] } : {}),
+    },
   };
 }
 
