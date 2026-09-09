@@ -177,7 +177,7 @@ export default function LinkTabs({
   return (
     <div className="site-links-container">
       {/* tab 条：仅渲染有数据的 tab，多个 tab 等分并贯穿竖线分隔；选中项白色 + 强调色下划线 */}
-      <div className="relative mb-4 flex items-center rounded-2xl border border-white/10 bg-white/5 py-1.5 backdrop-blur-sm">
+      <div className="relative mb-3 flex items-center rounded-2xl border border-white/10 bg-white/5 py-1.5 backdrop-blur-sm">
         {availableTabs.map((t, i) => (
           <FragmentTabBtn
             key={t.key}
@@ -198,11 +198,11 @@ export default function LinkTabs({
         tabIndex={0}
         className="select-none outline-none focus-visible:ring-2 focus-visible:ring-white/30"
       >
-        <div key={currentPage} className="animate-fade-in grid grid-cols-3 gap-5">
+        <div key={currentPage} className="animate-fade-in grid grid-cols-3 gap-4">
           {Array.from({ length: PAGE_SIZE }, (_, i) => {
             const item = pages[currentPage][i];
             if (!item) {
-              return <div key={`link-ph-${i}`} className="h-[100px]" aria-hidden />;
+              return <div key={`link-ph-${i}`} className="h-[var(--nav-cell,100px)]" aria-hidden />;
             }
 
             // 作品卡：封面 + 精选角标 + 标题 + 描述 + 标签，外链可点击
@@ -210,7 +210,7 @@ export default function LinkTabs({
               const p = item as unknown as ProjectRow;
               const tags = p.tags.split(/[,，]/).map((t) => t.trim()).filter(Boolean).slice(0, 4);
               const card = (
-                <div className="card-btn flex h-[100px] w-full flex-col justify-center gap-1 px-3 text-center">
+                <div className="card-btn flex h-[var(--nav-cell,100px)] w-full flex-col justify-center gap-1 px-3 text-center">
                   {p.featured && (
                     <span className="absolute right-2 top-2 text-amber-300">
                       <Star className="h-3.5 w-3.5 fill-current" />
@@ -266,7 +266,7 @@ export default function LinkTabs({
               <button
                 key={link.id}
                 onClick={() => handleLinkClick(link)}
-                className="card-btn flex h-[100px] w-full flex-row items-center justify-center gap-2"
+                className="card-btn flex h-[var(--nav-cell,100px)] w-full flex-row items-center justify-center gap-2"
                 title={link.name}
               >
                 {isImg ? (
@@ -299,7 +299,7 @@ export default function LinkTabs({
 
       {/* 翻页按钮：左右箭头 + 分页指示点。
           容器恒定渲染以保持各 tab 容器等高，切换时卡片区不跳动；控件仅在多页时显示 */}
-      <div className="mt-5 flex min-h-8 items-center justify-center gap-4 lg:mt-6" aria-hidden={pages.length <= 1}>
+      <div className="mt-4 flex min-h-8 items-center justify-center gap-4 lg:mt-5" aria-hidden={pages.length <= 1}>
         {pages.length > 1 && <button
             onClick={() => setPage((p) => Math.max(p - 1, 0))}
             disabled={currentPage === 0}

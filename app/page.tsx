@@ -162,8 +162,8 @@ export default async function Home() {
 
               {/* 右侧区域：功能区 + 链接 */}
               <div className="flex w-full flex-col gap-5 md:w-1/2 md:max-w-[500px] lg:gap-7">
-                {/* 功能卡片组：一言 + 时钟天气（lg 起才并排，避免 md 下时钟卡过窄导致时间溢出） */}
-                <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 lg:gap-6">
+                {/* 功能卡片组：一言 + 时钟天气（≥880px 起并排以适配矮视口单屏；更窄时堆叠避免时钟过窄） */}
+                <div className="grid grid-cols-1 gap-4 min-[880px]:grid-cols-2 min-[880px]:gap-5 lg:gap-6">
                   {/* 一言 / 音乐控制面板（hover 或"打开音乐"按钮切换，对齐 home） */}
                   <div>
                     <MusicCardLazy hitokotoType={d.hitokotoType} />

@@ -573,6 +573,21 @@
   transition:
     transform 0.3s 1s ease-out,
     visibility 0.3s 1s ease-out;
+  /*
+    兜底：加载遮罩的移除依赖客户端 JS（useEffect 监听 background-ready + 7s 安全兜底）。
+    若首载时 JS chunk 被中断/失败导致 hydration 未完成，JS 移除逻辑永远不执行，
+    遮罩会永久盖住页面（内容实际已在 SSR HTML 中）。此处用纯 CSS 延迟 5s 强制淡出，
+    保证无论 JS 是否就绪，遮罩都绝不会阻塞内容。正常路径下 React 约 2s 即移除节点，
+    二者不冲突。
+  */
+  animation: loader-auto-hide 0s linear 5s forwards;
+}
+@keyframes loader-auto-hide {
+  to {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
 }
 #loader-wrapper .loader {
   position: absolute;
@@ -820,3 +835,19 @@
   font-weight: 600;
 }
 .article-body del { color: rgba(255, 255, 255, 0.4); }
+
+/* ===== 首屏单屏适配（参考 sxlb.xyz：任意窗口下内容不滚动全部可见） ===== */
+/* 导航卡格子高度默认 100px，矮视口下收紧，保证双栏+页脚落在一屏内 */
+.site-links-container {
+  --nav-cell: 100px;
+}
+@media (max-height: 760px) {
+  .site-links-container {
+    --nav-cell: 86px;
+  }
+  /* 收紧页脚纵向占位 */
+  footer {
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+}

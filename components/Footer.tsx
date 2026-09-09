@@ -181,8 +181,8 @@ export default function Footer({
   // 非固定页脚：位于主内容之后（文档流），滚动到页面底部时自然出现，不遮挡内容；
   // mt-6 保证与上方主内容的间距，正常浏览时页脚不在视口内
   return (
-    <footer className="z-10 mt-6 w-full border-t border-white/5 bg-black/15 py-3.5 text-center text-sm text-white/50 backdrop-blur-md">
-      <div className="mx-auto max-w-4xl flex flex-col items-center justify-center gap-y-1 px-4">
+    <footer className="z-10 mt-4 w-full border-t border-white/5 bg-black/15 py-2.5 text-center text-sm text-white/50 backdrop-blur-md">
+      <div className="mx-auto max-w-4xl flex flex-wrap items-center justify-center gap-x-3 gap-y-0.5 px-4">
         {groups.map((group) => (
           <span key={group.key} className="inline-flex items-center gap-x-2 text-center text-xs md:text-sm">
             {group.node}
@@ -194,8 +194,8 @@ export default function Footer({
             dangerouslySetInnerHTML={{ __html: footerHtml }}
           />
         )}
-        {/* Copyright 独立一行，靠右下角（优化透明度与扫光效果） */}
-        <div className="mt-1.5 text-right text-[11px] text-white/35 md:text-xs">
+        {/* Copyright 随页脚同行排布 */}
+        <div className="text-[11px] text-white/35 md:text-xs">
           <span className="shine-text">
             Copyright © {year}{" "}
             {url ? (
