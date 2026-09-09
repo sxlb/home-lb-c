@@ -96,25 +96,30 @@ const CACHE_TTL_MS = 10 * 60 * 1000; // 成功结果 10 分钟
 // 错误（超时/网络抖动）短 TTL：临时性问题应快速自愈，避免用户反复点"检查更新"却一直拿到旧错误
 const ERROR_CACHE_TTL_MS = 30 * 1000;
 
-/* ---------------- 宿主机版本缓存（权威来源） ---------------- */
-// 容器内 Node 直连 GitHub 不稳定（api.github.com 稳定超时、gh-proxy.com 间歇失败），
-// 但宿主机网络可靠。故由宿主机 cron（update-watch.sh）轮询 GitHub 写入 latest.json，
-// 容器优先读取该缓存。文件与 prod.db 同数据卷：宿主机 data/deploy/latest.json == 容器 /app/data/deploy/latest.json。
-const HOST_CACHE_FILE = process.env.DEPLOY_DIR
-  ? path.join(process.env.DEPLOY_DIR, "latest.json")
-  : "/app/data/deploy/latest.json";
-const HOST_CACHE_TTL_MS = 10 * 60 * 1000;
+/* ---------------- 版本缓存（持久化，容器与宿主机同卷共享） ---------------- */
+// 版本缓存记录"最近一次成功拉到的最新 GitHub release"，文件与 prod.db 同数据卷：
+// 容器内 /app/data/latest.json == 宿主机 <DATA_DIR>/latest.json（同一 mount）。
+// 刷新来源：
+//   1. 容器"登录后台"时按需刷新（短时去重，见 refreshVersionCacheOnLogin）；
+//   2. 容器"点击检测更新"时强制刷新（force=true）；
+//   3. 宿主机 cron（update-watch.sh）兜底每日刷新一次（宿主机出网更稳）。
+// /app/data 由数据卷映射且容器非 root 用户可写，故文件放在 data/ 下而非 data/deploy/。
+const VERSION_CACHE_FILE = process.env.DATA_DIR
+  ? path.join(process.env.DATA_DIR, "latest.json")
+  : path.join(process.cwd(), "data", "latest.json");
+// 缓存"新鲜"判定阈值：新的定时/登录刷新入口在上次刷新超过该时长后才真正拉取
+const VERSION_CACHE_TTL_MS = 10 * 60 * 1000;
 
-interface HostVersionCache {
+interface VersionCacheDoc {
   timestamp: number;
   data: ReleaseInfo | null;
   error?: string;
 }
 
-/** 读取宿主机写入的版本缓存；文件缺失/损坏/无时间戳时返回 null（不影响网络竞速兜底） */
-async function readHostVersionCache(): Promise<HostVersionCache | null> {
+/** 读取版本缓存；文件缺失/损坏/无时间戳时返回 null（不影响网络竞速兜底） */
+async function readVersionCache(): Promise<VersionCacheDoc | null> {
   try {
-    const parsed = JSON.parse(await fs.readFile(HOST_CACHE_FILE, "utf8")) as {
+    const parsed = JSON.parse(await fs.readFile(VERSION_CACHE_FILE, "utf8")) as {
       timestamp?: number;
       data?: ReleaseInfo | null;
       error?: string;
@@ -259,13 +264,13 @@ async function raceOnce(sources: string[]): Promise<ProbeResult> {
 }
 
 export async function fetchLatestRelease(force = false): Promise<FetchLatestResult> {
-  // 宿主机缓存为权威来源：新鲜即直接采用（并回写进程级缓存，避免后续反复读盘）；
+  // 版本缓存为权威来源：新鲜即直接采用（并回写进程级缓存，避免后续反复读盘）；
   // 文件过期则保留为"末级兜底"，网络竞速全失败时降级返回过期数据，避免 UI 显示"未知"。
-  let staleHost: HostVersionCache | null = null;
+  let staleHost: VersionCacheDoc | null = null;
   if (!force) {
-    const host = await readHostVersionCache();
+    const host = await readVersionCache();
     if (host) {
-      const fresh = Date.now() - host.timestamp < HOST_CACHE_TTL_MS;
+      const fresh = Date.now() - host.timestamp < VERSION_CACHE_TTL_MS;
       if (fresh) {
         globalCache.latest = { at: Date.now(), data: host.data, error: host.error };
         return { data: host.data, fromCache: true, error: host.error };
@@ -314,6 +319,60 @@ export async function fetchLatestRelease(force = false): Promise<FetchLatestResu
   }
   globalCache.latest = { at: Date.now(), data: null, error: message };
   return { data: null, fromCache: false, error: message };
+}
+
+/* ---------------- 版本缓存：按需刷新 / 写入（容器侧） ---------------- */
+
+/** 登录触发刷新的去重窗口：5 分钟内重复登录不重复拉取，避免短时间内多次请求 GitHub */
+const LOGIN_REFRESH_DEDUP_MS = 5 * 60 * 1000;
+
+/** 登录触发：带短时去重的按需刷新（fire-and-forget，内部自消化错误） */
+export async function refreshVersionCacheOnLogin(): Promise<void> {
+  try {
+    await refreshVersionCache({ dedupMs: LOGIN_REFRESH_DEDUP_MS });
+  } catch {
+    // 刷新失败（出网异常/写盘失败）仅影响版本提示，绝不影响登录流程
+  }
+}
+
+/**
+ * 按需刷新版本缓存：
+ * - force=true：无视去重与缓存新鲜度，立即从 GitHub 拉取并写盘（"点击检测更新"入口）。
+ * - 否则：上次刷新距今 < dedupMs 则跳过（"登录后台"入口用，重复登录不重复拉）。
+ * 拉取失败时保留既有缓存文件（不写坏数据），并返回错误说明供 UI 提示。
+ */
+export async function refreshVersionCache(
+  opts: { force?: boolean; dedupMs?: number } = {}
+): Promise<{ refreshed: boolean; data: ReleaseInfo | null; error?: string }> {
+  const cached = await readVersionCache();
+  const now = Date.now();
+  if (!opts.force && cached && now - cached.timestamp < (opts.dedupMs ?? 0)) {
+    return { refreshed: false, data: cached.data, error: cached.error };
+  }
+
+  const res = await fetchLatestRelease(true); // force：绕过进程级缓存，直连 GitHub
+  if (res.data) {
+    await writeVersionCache({
+      timestamp: Date.now(),
+      data: res.data,
+    });
+    return { refreshed: true, data: res.data };
+  }
+  // 拉取失败：保留原有缓存，返回错误，避免用失败态覆盖良好缓存
+  return { refreshed: false, data: cached?.data ?? null, error: res.error || cached?.error };
+}
+
+/** 原子写入版本缓存；目录缺失自动创建。容器对缓存目录无写权限时静默失败（不影响读旧缓存） */
+async function writeVersionCache(doc: { timestamp: number; data: ReleaseInfo | null; error?: string }): Promise<boolean> {
+  try {
+    await fs.mkdir(path.dirname(VERSION_CACHE_FILE), { recursive: true });
+    const tmp = `${VERSION_CACHE_FILE}.tmp`;
+    await fs.writeFile(tmp, JSON.stringify(doc, null, 2));
+    await fs.rename(tmp, VERSION_CACHE_FILE);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** 供测试清空缓存，保证隔离 */

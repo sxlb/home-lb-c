@@ -259,6 +259,11 @@ export const authOptions: NextAuthOptions = {
 
         clearAttempts(rateKey);
         clearAttempts(userKey);
+
+        // 登录成功后按需刷新版本缓存（fire-and-forget，不阻塞登录；短时重复登录自动去重）。
+        // 这样每次进入后台都能拿到较新的"最新版本"提示。
+        void refreshLoginVersionCache();
+
         return {
           id: String(user.id),
           name: user.username,
@@ -296,3 +301,16 @@ export const authOptions: NextAuthOptions = {
 };
 
 export { validateAuthEnv };
+
+/**
+ * 登录成功后触发版本缓存按需刷新（fire-and-forget）。
+ * 懒加载避免 auth 与 version 模块在启动期强耦合；任何异常都不影响登录流程。
+ */
+async function refreshLoginVersionCache(): Promise<void> {
+  try {
+    const { refreshVersionCacheOnLogin } = await import("@/lib/version");
+    await refreshVersionCacheOnLogin();
+  } catch {
+    // 刷新失败（出网/写盘异常）仅影响"检测更新"提示，不影响登录
+  }
+}

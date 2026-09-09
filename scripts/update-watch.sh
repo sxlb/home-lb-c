@@ -145,16 +145,14 @@ write_result() { # id action version method status message
   log "执行结果已写回 → ${vf}"
 }
 
-# ---------- 宿主机版本缓存 refresh ----------
-# 容器内 Node 直连 GitHub 不稳定（api.github.com 稳定超时、gh-proxy.com 间歇失败），
-# 但宿主机网络可靠。故由本脚本（cron 每分钟）定期拉取最新 release 写入 latest.json，
-# 容器优先读取该缓存作为权威来源（见 lib/version.ts）。缓存 10 分钟内自检不重复拉取，
-# 避免频繁请求触发 GitHub API 60 次/小时限流；拉取失败不覆盖已有良好缓存。
+# ---------- 版本缓存 refresh（兜底每日一次） ----------
+# 版本缓存的"权威频率"已迁移到容器侧：登录后台按需刷新（短时去重）+ 手工"检测更新"强制刷新。
+# 宿主机仅保留每日一次的兜底刷新（出网更稳），保证哪怕容器网络不可达，缓存也不会超过约一天陈旧。
 refresh_version_cache() {
-  local cache="$DEPLOY_DIR/latest.json"
-  mkdir -p "$DEPLOY_DIR"
-  # 10 分钟内已刷新则跳过
-  if [ -f "$cache" ] && [ -n "$(find "$cache" -mmin -10 2>/dev/null)" ]; then
+  local cache="$DATA_DIR/latest.json"
+  mkdir -p "$DATA_DIR"
+  # 约 22 小时内已刷新则跳过（每天至多一次）
+  if [ -f "$cache" ] && [ -n "$(find "$cache" -mmin -1320 2>/dev/null)" ]; then
     return 0
   fi
   command -v python3 >/dev/null 2>&1 || return 0
