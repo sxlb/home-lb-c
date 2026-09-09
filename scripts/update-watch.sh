@@ -145,8 +145,58 @@ write_result() { # id action version method status message
   log "执行结果已写回 → ${vf}"
 }
 
+# ---------- 宿主机版本缓存 refresh ----------
+# 容器内 Node 直连 GitHub 不稳定（api.github.com 稳定超时、gh-proxy.com 间歇失败），
+# 但宿主机网络可靠。故由本脚本（cron 每分钟）定期拉取最新 release 写入 latest.json，
+# 容器优先读取该缓存作为权威来源（见 lib/version.ts）。缓存 10 分钟内自检不重复拉取，
+# 避免频繁请求触发 GitHub API 60 次/小时限流；拉取失败不覆盖已有良好缓存。
+refresh_version_cache() {
+  local cache="$DEPLOY_DIR/latest.json"
+  mkdir -p "$DEPLOY_DIR"
+  # 10 分钟内已刷新则跳过
+  if [ -f "$cache" ] && [ -n "$(find "$cache" -mmin -10 2>/dev/null)" ]; then
+    return 0
+  fi
+  command -v python3 >/dev/null 2>&1 || return 0
+  python3 - "$cache" <<'PY'
+import json, os, sys, time, urllib.request
+cache = sys.argv[1]
+def fetch(u):
+    req = urllib.request.Request(u, headers={
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "home-lb-update"})
+    with urllib.request.urlopen(req, timeout=8) as r:
+        return r.read()
+def parse(raw):
+    g = json.loads(raw)
+    tag = str(g.get("tag_name") or "")
+    return {"tag": tag, "version": tag.lstrip("v"), "name": str(g.get("name") or tag),
+            "body": str(g.get("body") or ""), "htmlUrl": str(g.get("html_url") or ""),
+            "publishedAt": str(g.get("published_at") or "")}
+out, err = None, None
+for base in ("https://api.github.com/", "https://gh-proxy.com/https://api.github.com/"):
+    try:
+        out = parse(fetch(base + "repos/sxlb/home-lb-c/releases/latest"))
+        break
+    except Exception as e:
+        err = str(e)
+doc = {"timestamp": int(time.time() * 1000)}
+if out:
+    doc["data"] = out
+else:
+    doc["error"] = "宿主机拉取最新版本失败"
+tmp = cache + ".tmp"
+with open(tmp, "w", encoding="utf-8") as f:
+    json.dump(doc, f, ensure_ascii=False)
+os.replace(tmp, cache)
+PY
+}
+
 # ---------- 认领并执行一次请求 ----------
 request="$DEPLOY_DIR/request.json"
+# 每次调度先维护版本缓存（无请求时也执行），保证容器永远有可读的最新版本缓存
+refresh_version_cache
 [ -f "$request" ] || exit 0   # 无待执行请求，本次调度直接退出
 
 req_id=$(json_get "$request" id)

@@ -1,3 +1,5 @@
+import path from "node:path";
+import { promises as fs } from "node:fs";
 import packageJson from "../package.json";
 
 /**
@@ -93,6 +95,36 @@ const globalCache: Record<string, FetchCache | undefined> =
 const CACHE_TTL_MS = 10 * 60 * 1000; // 成功结果 10 分钟
 // 错误（超时/网络抖动）短 TTL：临时性问题应快速自愈，避免用户反复点"检查更新"却一直拿到旧错误
 const ERROR_CACHE_TTL_MS = 30 * 1000;
+
+/* ---------------- 宿主机版本缓存（权威来源） ---------------- */
+// 容器内 Node 直连 GitHub 不稳定（api.github.com 稳定超时、gh-proxy.com 间歇失败），
+// 但宿主机网络可靠。故由宿主机 cron（update-watch.sh）轮询 GitHub 写入 latest.json，
+// 容器优先读取该缓存。文件与 prod.db 同数据卷：宿主机 data/deploy/latest.json == 容器 /app/data/deploy/latest.json。
+const HOST_CACHE_FILE = process.env.DEPLOY_DIR
+  ? path.join(process.env.DEPLOY_DIR, "latest.json")
+  : "/app/data/deploy/latest.json";
+const HOST_CACHE_TTL_MS = 10 * 60 * 1000;
+
+interface HostVersionCache {
+  timestamp: number;
+  data: ReleaseInfo | null;
+  error?: string;
+}
+
+/** 读取宿主机写入的版本缓存；文件缺失/损坏/无时间戳时返回 null（不影响网络竞速兜底） */
+async function readHostVersionCache(): Promise<HostVersionCache | null> {
+  try {
+    const parsed = JSON.parse(await fs.readFile(HOST_CACHE_FILE, "utf8")) as {
+      timestamp?: number;
+      data?: ReleaseInfo | null;
+      error?: string;
+    };
+    if (!parsed || typeof parsed.timestamp !== "number") return null;
+    return { timestamp: parsed.timestamp, data: parsed.data ?? null, error: parsed.error };
+  } catch {
+    return null;
+  }
+}
 
 /* ---------------- GitHub API 多源（官方优先，失败降级公共代理）+ 测速选源 ---------------- */
 
@@ -227,6 +259,21 @@ async function raceOnce(sources: string[]): Promise<ProbeResult> {
 }
 
 export async function fetchLatestRelease(force = false): Promise<FetchLatestResult> {
+  // 宿主机缓存为权威来源：新鲜即直接采用（并回写进程级缓存，避免后续反复读盘）；
+  // 文件过期则保留为"末级兜底"，网络竞速全失败时降级返回过期数据，避免 UI 显示"未知"。
+  let staleHost: HostVersionCache | null = null;
+  if (!force) {
+    const host = await readHostVersionCache();
+    if (host) {
+      const fresh = Date.now() - host.timestamp < HOST_CACHE_TTL_MS;
+      if (fresh) {
+        globalCache.latest = { at: Date.now(), data: host.data, error: host.error };
+        return { data: host.data, fromCache: true, error: host.error };
+      }
+      staleHost = host;
+    }
+  }
+
   const cached = globalCache.latest;
   if (cached) {
     const isError = cached.error !== undefined;
@@ -254,8 +301,17 @@ export async function fetchLatestRelease(force = false): Promise<FetchLatestResu
     if (round < MAX_ROUNDS - 1) await sleep(ROUND_GAP_MS);
   }
 
+  // 网络全失败：优先降级到宿主机缓存的过期版本数据，其次复用其错误/失败说明
+  if (staleHost?.data) {
+    globalCache.latest = { at: Date.now(), data: staleHost.data };
+    return { data: staleHost.data, fromCache: true };
+  }
   const message =
     last?.kind === "timeout" ? "检测最新版本超时，请稍后重试" : "网络错误，获取最新版本失败，请重试";
+  if (staleHost?.error) {
+    globalCache.latest = { at: Date.now(), data: null, error: staleHost.error };
+    return { data: null, fromCache: true, error: staleHost.error };
+  }
   globalCache.latest = { at: Date.now(), data: null, error: message };
   return { data: null, fromCache: false, error: message };
 }
