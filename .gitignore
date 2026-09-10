@@ -34,3 +34,9 @@ data
 .ref-home/
 home-lb-src.tar.gz
 sxlb-ui-design.svg
+
+# TRAE HTML 分享缓存（工具内部目录，不入库）
+.trae-html-share-packages/
+
+# 临时提交信息文件
+COMMIT_MSG.tmp
