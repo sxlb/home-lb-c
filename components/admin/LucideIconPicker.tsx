@@ -328,12 +328,13 @@ export default function LucideIconPicker({ value, onChange }: Props) {
 
   return (
     <div className="relative">
-      <div className="flex items-center gap-2">
+      <div className="flex min-w-0 items-center gap-2">
         <Button
           type="button"
           variant="outline"
           size="sm"
           onClick={() => setOpen((v) => !v)}
+          className="min-w-0 truncate"
         >
           从 Lucide 选择（{LUCIDE_COMMON_ICONS.length}）
         </Button>
@@ -342,8 +343,9 @@ export default function LucideIconPicker({ value, onChange }: Props) {
         )}
       </div>
 
+      {/* 移动优先：小屏内联全宽；≥sm 改为右对齐浮层（从字段右缘向左展开），避免右列字段顶出视口 */}
       {open && (
-        <div className="absolute left-0 top-full z-50 mt-2 w-80 rounded-lg border bg-background p-3 shadow-lg">
+        <div className="z-50 mt-2 w-full rounded-lg border bg-background p-3 shadow-lg sm:absolute sm:right-0 sm:top-full sm:w-80 sm:max-w-[calc(100vw-2rem)]">
           <div className="mb-2 flex items-center gap-2">
             <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
             <Input

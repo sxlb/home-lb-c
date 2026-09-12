@@ -144,33 +144,31 @@ export default function FriendLinksPanel() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor={`friend-icon-${index}`} className="text-xs font-medium text-muted-foreground">Logo/图标</Label>
-                <div className="flex gap-2">
-                  <div className="flex-1">
-                    <MediaPicker
-                      id={`friend-icon-${index}`}
-                      value={link.icon}
-                      onChange={(v) => updateItem(index, "icon", v)}
-                      placeholder="图标名/URL/random:关键词"
-                    />
-                  </div>
+                <div className="flex items-center justify-between gap-2">
+                  <Label htmlFor={`friend-icon-${index}`} className="text-xs font-medium text-muted-foreground">Logo/图标</Label>
                   {link.url && (
                     <Button
                       type="button"
-                      variant="outline"
+                      variant="ghost"
                       size="sm"
                       onClick={() => {
                         const favicon = getFaviconUrl(link.url);
                         if (favicon) updateItem(index, "icon", favicon);
                       }}
-                      className="h-9 shrink-0 gap-1 self-end"
-                      title="从网站 URL 自动获取 favicon"
+                      className="h-6 shrink-0 gap-1 px-1.5 text-xs text-muted-foreground hover:text-foreground"
+                      title="从网站地址自动获取 favicon"
                     >
-                      <Wand2 className="h-3.5 w-3.5" />
-                      自动获取
+                      <Wand2 className="h-3 w-3" />
+                      从网站获取
                     </Button>
                   )}
                 </div>
+                <MediaPicker
+                  id={`friend-icon-${index}`}
+                  value={link.icon}
+                  onChange={(v) => updateItem(index, "icon", v)}
+                  placeholder="图标名 / 图片URL / random:关键词"
+                />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor={`friend-description-${index}`} className="text-xs font-medium text-muted-foreground">网站描述</Label>

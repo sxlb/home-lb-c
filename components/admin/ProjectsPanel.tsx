@@ -140,7 +140,7 @@ export default function ProjectsPanel() {
             </Button>
 
             <div className="space-y-2.5 pr-8">
-              <div className="grid gap-2.5 sm:grid-cols-[1fr_auto_auto]">
+              <div className="grid gap-2.5 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
                 <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">标题</Label>
                   <Input value={it.title} onChange={(e) => update(i, "title", e.target.value)} placeholder="作品名称" className="h-8 text-sm" />

@@ -164,7 +164,7 @@ export default function ArticlesPanel() {
         />
 
         {/* 列表 + 编辑器 */}
-        <div className="grid gap-3 md:grid-cols-[300px_1fr]">
+        <div className="grid gap-3 md:grid-cols-[300px_minmax(0,1fr)]">
           {/* 文章列表 */}
           <div className="flex flex-col gap-1.5 rounded-xl border bg-muted/20 p-2">
             {list.length === 0 && (

@@ -196,11 +196,11 @@ export default function MediaPicker({
   };
 
   return (
-    <div className="space-y-2">
+    <div className="min-w-0 space-y-2">
       {label && <label htmlFor={id} className="text-xs font-medium text-muted-foreground">{label}</label>}
 
-      {/* 预览 + 手动输入 */}
-      <div className="flex items-center gap-2">
+      {/* 预览 + 手动输入（min-w-0 允许在窄列/移动端收缩，避免撑破父容器） */}
+      <div className="flex min-w-0 items-center gap-2">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded border bg-muted/30">
           <MediaPreview value={value} />
         </div>
@@ -214,33 +214,33 @@ export default function MediaPicker({
             }
           }}
           placeholder={placeholder}
-          className="h-9 flex-1 text-sm"
+          className="h-9 min-w-0 flex-1 text-sm"
         />
       </div>
 
-      {/* Tab 选择器 */}
-      <div className="flex gap-1 rounded-lg border bg-muted/30 p-1">
+      {/* Tab 选择器：窄容器下自动换行（按钮 min-w-max 保证文字不被截断） */}
+      <div className="flex flex-wrap gap-1 rounded-lg border bg-muted/30 p-1">
         {(["url", "iconfont", "lucide", "random", "openverse"] as const).map((t) => (
           <button
             key={t}
             type="button"
             onClick={() => setTab(t)}
-            className={`flex flex-1 items-center justify-center gap-1 rounded-md px-2 py-1 text-xs transition-colors ${
+            className={`flex min-w-max flex-1 items-center justify-center gap-1 whitespace-nowrap rounded-md px-1.5 py-1 text-xs transition-colors ${
               tab === t ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            {t === "url" && <Link className="h-3 w-3" />}
-            {t === "iconfont" && <Sparkles className="h-3 w-3" />}
-            {t === "lucide" && <ImageIcon className="h-3 w-3" />}
-            {t === "random" && <Sparkles className="h-3 w-3" />}
-            {t === "openverse" && <Search className="h-3 w-3" />}
+            {t === "url" && <Link className="h-3 w-3 shrink-0" />}
+            {t === "iconfont" && <Sparkles className="h-3 w-3 shrink-0" />}
+            {t === "lucide" && <ImageIcon className="h-3 w-3 shrink-0" />}
+            {t === "random" && <Sparkles className="h-3 w-3 shrink-0" />}
+            {t === "openverse" && <Search className="h-3 w-3 shrink-0" />}
             {t === "url" ? "URL" : t === "iconfont" ? "图标库" : t === "lucide" ? "Lucide" : t === "random" ? "随机图" : "Openverse"}
           </button>
         ))}
       </div>
 
       {/* Tab 内容 */}
-      <div className="min-h-[60px]">
+      <div className="min-h-[60px] min-w-0">
         {tab === "url" && (
           <p className="text-xs text-muted-foreground">
             直接在上方输入框粘贴图片 URL（支持 http/https）
@@ -280,20 +280,20 @@ export default function MediaPicker({
         )}
         {tab === "openverse" && (
           <div className="space-y-3">
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <Input
                 value={openverseQuery}
                 onChange={(e) => setOpenverseQuery(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleOpenverseSearch()}
                 placeholder="搜索开放版权图片（如 sunset、mountain）"
-                className="h-8 flex-1 text-sm"
+                className="h-8 min-w-0 flex-1 text-sm"
               />
               <Button
                 type="button"
                 size="sm"
                 onClick={handleOpenverseSearch}
                 disabled={openverseLoading}
-                className="h-8 gap-1"
+                className="h-8 shrink-0 gap-1"
               >
                 {openverseLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Search className="h-3 w-3" />}
                 搜索
@@ -304,7 +304,7 @@ export default function MediaPicker({
                 variant="outline"
                 onClick={handleRandomPick}
                 disabled={openverseLoading}
-                className="h-8 gap-1"
+                className="h-8 shrink-0 gap-1"
                 title="按关键词随机挑一张开放版权图片"
               >
                 {openverseLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
@@ -312,7 +312,7 @@ export default function MediaPicker({
               </Button>
             </div>
             {openverseResults.length > 0 && (
-              <div className="grid max-h-[300px] grid-cols-4 gap-2 overflow-y-auto rounded-lg border bg-muted/20 p-2">
+              <div className="grid max-h-[300px] grid-cols-3 gap-2 overflow-y-auto rounded-lg border bg-muted/20 p-2 sm:grid-cols-4">
                 {openverseResults.map((img) => (
                   <button
                     key={img.id}

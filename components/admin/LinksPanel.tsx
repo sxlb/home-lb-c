@@ -350,33 +350,31 @@ function LinkRow({
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor={`link-icon-${index}`} className="text-xs font-medium text-muted-foreground">图标</Label>
-            <div className="flex gap-2">
-              <div className="flex-1">
-                <MediaPicker
-                  id={`link-icon-${index}`}
-                  value={link.icon}
-                  onChange={(v) => onUpdate("icon", v)}
-                  placeholder={iconPlaceholder}
-                />
-              </div>
+            <div className="flex items-center justify-between gap-2">
+              <Label htmlFor={`link-icon-${index}`} className="text-xs font-medium text-muted-foreground">图标</Label>
               {link.url && (
                 <Button
                   type="button"
-                  variant="outline"
+                  variant="ghost"
                   size="sm"
                   onClick={() => {
                     const favicon = getFaviconUrl(link.url);
                     if (favicon) onUpdate("icon", favicon);
                   }}
-                  className="h-9 shrink-0 gap-1 self-end"
-                  title="从网站 URL 自动获取 favicon"
+                  className="h-6 shrink-0 gap-1 px-1.5 text-xs text-muted-foreground hover:text-foreground"
+                  title="从链接地址自动获取 favicon"
                 >
-                  <Wand2 className="h-3.5 w-3.5" />
-                  自动
+                  <Wand2 className="h-3 w-3" />
+                  从网站获取
                 </Button>
               )}
             </div>
+            <MediaPicker
+              id={`link-icon-${index}`}
+              value={link.icon}
+              onChange={(v) => onUpdate("icon", v)}
+              placeholder={iconPlaceholder}
+            />
           </div>
         </div>
         <div className="space-y-1.5">

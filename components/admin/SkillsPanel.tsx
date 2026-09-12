@@ -126,7 +126,7 @@ export default function SkillsPanel() {
               <Trash2 className="h-3.5 w-3.5" />
             </Button>
 
-            <div className="grid gap-2.5 pr-8 sm:grid-cols-[1fr_110px_1fr_70px]">
+            <div className="grid gap-2.5 pr-8 sm:grid-cols-[minmax(0,1fr)_110px_minmax(0,1fr)_70px]">
               <div className="space-y-1">
                 <Label className="text-xs text-muted-foreground">技能名</Label>
                 <Input value={it.name} onChange={(e) => update(i, "name", e.target.value)} placeholder="如 TypeScript" className="h-8 text-sm" />

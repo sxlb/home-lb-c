@@ -218,7 +218,7 @@ function SourceCompose({ rows }: { rows: BarRow[] }) {
               return (
                 <li key={r.name} className="flex items-center gap-2 text-xs">
                   <span className="flex h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: COLORS[i % COLORS.length] }} />
-                  <span className="flex-1">{r.name}</span>
+                  <span className="min-w-0 flex-1 truncate" title={r.name}>{r.name}</span>
                   <span className="tabular-nums">{r.count}</span>
                   <span className="w-11 shrink-0 text-right tabular-nums text-muted-foreground">{pct}%</span>
                 </li>
