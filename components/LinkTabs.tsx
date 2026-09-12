@@ -16,9 +16,10 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import Image from "next/image";
-import type { ProjectRow } from "@/app/hooks";
+import type { ProjectRow, FriendLinkRow } from "@/app/hooks";
 import { useIconfontSymbols } from "./Iconfont";
 import { resolveLucideIcon, isLucideIcon } from "./lucideIconResolver";
+import { resolveIconImageSrc } from "@/lib/iconValue";
 
 // 图标映射表（与并入前的网站链接组件一致）
 const ICON_MAP: Record<string, LucideIcon> = {
@@ -50,7 +51,7 @@ interface LinkTabsProps {
   /** 网站链接（tab「网站」） */
   siteLinks: TabLink[];
   /** 友情链接（tab「友情」） */
-  friendLinks: TabLink[];
+  friendLinks: FriendLinkRow[];
   /** 作品（tab「作品」，已按 enabled/featured/sort 过滤排序） */
   projects: ProjectRow[];
   /** 区域标题「网站」部分（后台可配置） */
@@ -59,8 +60,10 @@ interface LinkTabsProps {
   friendTitle?: string;
 }
 
-// 每页 6 个（3 列 × 2 行），对齐原网站链接轮播布局
+// 网站/友链每页 6 个（3 列 × 2 行），对齐原网站链接轮播布局
 const PAGE_SIZE = 6;
+// 作品每页 2 个，单列展示（一行一个，共 2 行）
+const PROJECT_PAGE_SIZE = 2;
 
 function chunk<T>(arr: T[], size: number): T[][] {
   const result: T[][] = [];
@@ -68,10 +71,6 @@ function chunk<T>(arr: T[], size: number): T[][] {
     result.push(arr.slice(i, i + size));
   }
   return result;
-}
-
-function isImageIcon(icon: string): boolean {
-  return /^https?:\/\//i.test(icon);
 }
 
 export default function LinkTabs({
@@ -143,7 +142,7 @@ export default function LinkTabs({
     window.open(link.url, "_blank", "noopener,noreferrer");
   };
 
-  const pages = isProject ? chunk(projects, PAGE_SIZE) : chunk(active as TabLink[], PAGE_SIZE);
+  const pages = isProject ? chunk(projects, PROJECT_PAGE_SIZE) : isFriend ? chunk(active as TabLink[], PROJECT_PAGE_SIZE) : chunk(active as TabLink[], PAGE_SIZE);
   const currentPage = Math.min(page, pages.length - 1);
   const goTo = (index: number) => setPage(index);
 
@@ -198,35 +197,40 @@ export default function LinkTabs({
         tabIndex={0}
         className="select-none outline-none focus-visible:ring-2 focus-visible:ring-white/30"
       >
-        <div key={currentPage} className="animate-fade-in grid grid-cols-3 gap-4">
-          {Array.from({ length: PAGE_SIZE }, (_, i) => {
+        <div key={currentPage} className={`animate-fade-in grid gap-4 ${isProject || isFriend ? "grid-cols-1" : "grid-cols-3"}`}>
+          {Array.from({ length: isProject || isFriend ? PROJECT_PAGE_SIZE : PAGE_SIZE }, (_, i) => {
             const item = pages[currentPage][i];
             if (!item) {
               return <div key={`link-ph-${i}`} className="h-[var(--nav-cell,100px)]" aria-hidden />;
             }
 
-            // 作品卡：封面 + 精选角标 + 标题 + 描述 + 标签，外链可点击
+            // 作品卡：封面图 + 精选角标 + 标题，外链可点击
             if (isProject) {
               const p = item as unknown as ProjectRow;
-              const tags = p.tags.split(/[,，]/).map((t) => t.trim()).filter(Boolean).slice(0, 4);
+              // 图片来源：random:关键词 随机图 / http(s) 外链 / 媒体库路径
+              const imageUrl = resolveIconImageSrc(p.image, 120);
               const card = (
-                <div className="card-btn flex h-[var(--nav-cell,100px)] w-full flex-col justify-center gap-1 px-3 text-center">
+                <div className="card-btn flex h-[var(--nav-cell,100px)] w-full items-center gap-3 overflow-hidden px-3 text-left">
+                  {imageUrl && (
+                    <Image
+                      src={imageUrl}
+                      alt={p.title}
+                      width={60}
+                      height={60}
+                      className="h-[60px] w-[60px] shrink-0 rounded-lg object-cover"
+                      unoptimized
+                      onError={(e) => { e.currentTarget.style.display = "none"; }}
+                    />
+                  )}
+                  <div className="flex min-w-0 flex-1 flex-col justify-center">
+                    <span className="truncate text-sm font-semibold text-white">{p.title}</span>
+                    {p.description && (
+                      <span className="mt-0.5 truncate text-xs text-white/60">{p.description}</span>
+                    )}
+                  </div>
                   {p.featured && (
                     <span className="absolute right-2 top-2 text-amber-300">
                       <Star className="h-3.5 w-3.5 fill-current" />
-                    </span>
-                  )}
-                  <span className="truncate text-sm font-semibold text-white">{p.title}</span>
-                  {p.description && (
-                    <span className="line-clamp-2 text-xs leading-snug text-white/60">{p.description}</span>
-                  )}
-                  {tags.length > 0 && (
-                    <span className="flex flex-wrap justify-center gap-1">
-                      {tags.map((t, ti) => (
-                        <span key={`${t}-${ti}`} className="rounded bg-white/10 px-1.5 py-0.5 text-[10px] text-white/70">
-                          {t}
-                        </span>
-                      ))}
                     </span>
                   )}
                 </div>
@@ -258,20 +262,63 @@ export default function LinkTabs({
               );
             }
 
+            // 友链卡：图标 + 标题 + 描述，和作品布局一致
+            if (isFriend) {
+              const f = item as FriendLinkRow;
+              const imgSrc = resolveIconImageSrc(f.icon, 120);
+              const useIconfont = !imgSrc && iconfontSymbols.includes(f.icon);
+              const hasIcon = !!f.icon && (!!imgSrc || isLucideIcon(f.icon) || iconfontSymbols.includes(f.icon));
+              const IconComponent = getIcon(f.icon);
+              return (
+                <button
+                  key={f.id}
+                  onClick={() => handleLinkClick(f as unknown as TabLink)}
+                  className="card-btn flex h-[var(--nav-cell,100px)] w-full items-center gap-3 overflow-hidden px-3 text-left"
+                  title={f.name}
+                >
+                  {hasIcon && (
+                    imgSrc ? (
+                      <Image
+                        src={imgSrc}
+                        alt={f.name}
+                        width={60}
+                        height={60}
+                        className="h-[60px] w-[60px] shrink-0 rounded-lg object-cover"
+                        unoptimized
+                        onError={(e) => { e.currentTarget.style.display = "none"; }}
+                      />
+                    ) : useIconfont ? (
+                      <svg className="h-[60px] w-[60px] shrink-0 text-white/80" aria-hidden="true" focusable="false">
+                        <use href={`#${f.icon}`} />
+                      </svg>
+                    ) : (
+                      <IconComponent className="h-[60px] w-[60px] shrink-0 text-white/80" />
+                    )
+                  )}
+                  <div className="flex min-w-0 flex-1 flex-col justify-center">
+                    <span className="truncate text-sm font-semibold text-white">{f.name}</span>
+                    {f.description && (
+                      <span className="mt-0.5 truncate text-xs text-white/60">{f.description}</span>
+                    )}
+                  </div>
+                </button>
+              );
+            }
+
             const link = item as TabLink;
-            const isImg = isImageIcon(link.icon);
-            const IconComponent = isImg ? Globe : getIcon(link.icon);
-            const useIconfont = !isImg && iconfontSymbols.includes(link.icon);
+            const imgSrc = resolveIconImageSrc(link.icon, 52);
+            const IconComponent = getIcon(link.icon);
+            const useIconfont = !imgSrc && iconfontSymbols.includes(link.icon);
             return (
               <button
                 key={link.id}
                 onClick={() => handleLinkClick(link)}
-                className="card-btn flex h-[var(--nav-cell,100px)] w-full flex-row items-center justify-center gap-2"
+                className="card-btn flex h-[var(--nav-cell,100px)] w-full flex-col items-center justify-center gap-1 md:flex-row md:gap-2"
                 title={link.name}
               >
-                {isImg ? (
+                {imgSrc ? (
                   <Image
-                    src={link.icon}
+                    src={imgSrc}
                     alt={link.name}
                     width={26}
                     height={26}
@@ -288,7 +335,7 @@ export default function LinkTabs({
                 ) : (
                   <IconComponent className="h-[26px] w-[26px] shrink-0 text-white/80" />
                 )}
-                <span className="hidden max-w-[7.5rem] truncate text-base font-medium tracking-wide text-white/85 md:inline">
+                <span className="max-w-full truncate text-xs font-medium tracking-wide text-white/85 md:max-w-[7.5rem] md:text-base">
                   {link.name}
                 </span>
               </button>

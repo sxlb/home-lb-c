@@ -5,10 +5,28 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
-import { Plus, Trash2, Loader2, GripVertical, Users } from "lucide-react";
+import { Plus, Trash2, Loader2, GripVertical, Users, Wand2 } from "lucide-react";
 import { useLinkList } from "./useLinkList";
 import { PanelHeader, EmptyState } from "./panel";
 import { LoadingPlaceholder } from "./LinksPanel";
+import MediaPicker from "./MediaPicker";
+
+/** 从 URL 提取域名，用于 Google Favicon API */
+function extractDomain(url: string): string | null {
+  try {
+    const u = new URL(url.startsWith("http") ? url : `https://${url}`);
+    return u.hostname;
+  } catch {
+    return null;
+  }
+}
+
+/** 生成 Google Favicon URL */
+function getFaviconUrl(url: string, size = 64): string | null {
+  const domain = extractDomain(url);
+  if (!domain) return null;
+  return `https://www.google.com/s2/favicons?domain=${domain}&sz=${size}`;
+}
 
 interface FriendLinkItem {
   id?: number;
@@ -126,15 +144,33 @@ export default function FriendLinksPanel() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor={`friend-icon-${index}`} className="text-xs font-medium text-muted-foreground">Logo URL</Label>
-                <Input
-                  id={`friend-icon-${index}`}
-                  name={`friend-icon-${index}`}
-                  value={link.icon}
-                  onChange={(e) => updateItem(index, "icon", e.target.value)}
-                  placeholder="https://example.com/logo.png（可选）"
-                  className="h-8 text-sm"
-                />
+                <Label htmlFor={`friend-icon-${index}`} className="text-xs font-medium text-muted-foreground">Logo/图标</Label>
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <MediaPicker
+                      id={`friend-icon-${index}`}
+                      value={link.icon}
+                      onChange={(v) => updateItem(index, "icon", v)}
+                      placeholder="图标名/URL/random:关键词"
+                    />
+                  </div>
+                  {link.url && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const favicon = getFaviconUrl(link.url);
+                        if (favicon) updateItem(index, "icon", favicon);
+                      }}
+                      className="h-9 shrink-0 gap-1 self-end"
+                      title="从网站 URL 自动获取 favicon"
+                    >
+                      <Wand2 className="h-3.5 w-3.5" />
+                      自动获取
+                    </Button>
+                  )}
+                </div>
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor={`friend-description-${index}`} className="text-xs font-medium text-muted-foreground">网站描述</Label>
@@ -153,6 +189,7 @@ export default function FriendLinksPanel() {
         <Button
           onClick={save}
           disabled={saving}
+          aria-label="保存友情链接"
           className={`w-full gap-1.5 ${dirty ? "ring-2 ring-primary/40" : ""}`}
         >
           {saving ? (
@@ -161,9 +198,9 @@ export default function FriendLinksPanel() {
               保存中...
             </>
           ) : dirty ? (
-            "● 有未保存的更改"
+            "● 友情链接有未保存的更改"
           ) : (
-            "保存链接"
+            "保存友情链接"
           )}
         </Button>
       </CardContent>

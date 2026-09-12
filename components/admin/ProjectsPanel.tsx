@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Plus, Trash2, Loader2, GripVertical, FolderGit2, Star, Eye } from "lucide-react";
 import { toast } from "sonner";
 import { PanelHeader, EmptyState } from "./panel";
+import MediaPicker from "./MediaPicker";
 
 interface ProjectItem {
   id?: number;
@@ -166,8 +167,13 @@ export default function ProjectsPanel() {
                   <Input value={it.url} onChange={(e) => update(i, "url", e.target.value)} placeholder="https://…（可选）" className="h-8 text-sm" />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">封面图</Label>
-                  <Input value={it.image} onChange={(e) => update(i, "image", e.target.value)} placeholder="https://… 或 /api/uploads/…（可选）" className="h-8 text-sm" />
+                  <Label htmlFor={`project-image-${i}`} className="text-xs text-muted-foreground">封面图/图标</Label>
+                  <MediaPicker
+                    id={`project-image-${i}`}
+                    value={it.image}
+                    onChange={(v) => update(i, "image", v)}
+                    placeholder="图标名 / 图片URL / random:关键词"
+                  />
                 </div>
               </div>
               <div className="space-y-1">

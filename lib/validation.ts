@@ -415,6 +415,21 @@ export const profileSchema = z.object({
     .default(""),
 });
 
+// 图标字段公共校验：允许「纯图标名」（lucide:xxx / iconfont symbol）或「媒体值」（外链图片 /
+// 媒体库路径 / 关键词随机图），供社交链接、网站链接、友情链接、技能等 icon 字段共用。
+// 随机图前缀见 lib/iconValue.ts：当前为 random:，旧写法 unsplash: 一并兼容。
+const ICON_NAME_RE = /^[a-zA-Z0-9:_-]+$/;
+const MEDIA_VALUE_RE = /^(https?:\/\/|\/api\/uploads\/|random:|unsplash:)/;
+
+const iconOrMediaValue = (required: boolean) => {
+  const base = z.string().trim().max(2048, "图标值过长");
+  const withMin = required ? base.min(1, "图标不能为空") : base;
+  return withMin.refine(
+    (v) => v === "" || ICON_NAME_RE.test(v) || MEDIA_VALUE_RE.test(v),
+    "须为图标名、http(s) 外链、/api/uploads/ 路径或 random:关键词"
+  );
+};
+
 // SocialLink 校验 schema
 export const socialLinkSchema = z.object({
   name: z
@@ -422,15 +437,7 @@ export const socialLinkSchema = z.object({
     .trim()
     .min(1, "名称不能为空")
     .max(32, "名称最长 32 字符"),
-  icon: z
-    .string()
-    .trim()
-    .min(1, "图标不能为空")
-    .max(64, "图标最长 64 字符")
-    .refine(
-      (v) => /^[a-zA-Z0-9:_-]+$/.test(v),
-      "图标名仅支持字母、数字、下划线、连字符（lucide: 前缀）"
-    ),
+  icon: iconOrMediaValue(true),
   url: z
     .string()
     .max(2048, "链接过长")
@@ -461,15 +468,7 @@ export const siteLinkSchema = z.object({
     .trim()
     .min(1, "名称不能为空")
     .max(32, "名称最长 32 字符"),
-  icon: z
-    .string()
-    .trim()
-    .min(1, "图标不能为空")
-    .max(64, "图标最长 64 字符")
-    .refine(
-      (v) => /^[a-zA-Z0-9:_-]+$/.test(v),
-      "图标名仅支持字母、数字、下划线、连字符（lucide: 前缀）"
-    ),
+  icon: iconOrMediaValue(true),
   url: z
     .string()
     .max(2048, "链接过长")
@@ -503,15 +502,7 @@ export const friendLinkSchema = z.object({
       (v) => /^https?:\/\//.test(v),
       "链接必须以 http:// 或 https:// 开头"
     ),
-  icon: z
-    .string()
-    .max(2048, "Logo URL 过长")
-    .refine(
-      (v) => v === "" || /^https?:\/\//.test(v),
-      "Logo 必须为 http(s):// 开头的 URL"
-    )
-    .optional()
-    .default(""),
+  icon: iconOrMediaValue(false).optional().default(""),
   description: z
     .string()
     .max(200, "描述最长 200 字符")
@@ -535,11 +526,18 @@ const mediaOrUrl = (msg: string) =>
     "须为 http(s):// 外链或以 /api/uploads/ 开头的媒体路径"
   );
 
+// 图片字段：在 mediaOrUrl 基础上额外支持关键词随机图（random: / 旧 unsplash:，后台 MediaPicker 可产出）
+const imageOrMediaValue = (msg: string) =>
+  z.string().max(2048, msg).refine(
+    (v) => v === "" || /^(https?:\/\/|\/api\/uploads\/|random:|unsplash:)/.test(v),
+    "须为 http(s):// 外链、/api/uploads/ 媒体路径或 random:关键词"
+  );
+
 export const projectSchema = z.object({
   title: z.string().trim().min(1, "标题不能为空").max(128, "标题最长 128 字符"),
   description: z.string().max(500, "描述最长 500 字符").optional().default(""),
   url: mediaOrUrl("链接过长").optional().default(""),
-  image: mediaOrUrl("封面图地址过长").optional().default(""),
+  image: imageOrMediaValue("封面图地址过长").optional().default(""),
   tags: z.string().max(200, "标签过长").optional().default(""),
   featured: z.boolean().optional().default(false),
   enabled: z.boolean().optional().default(true),
@@ -552,13 +550,7 @@ export const projectBatchSchema = z.array(projectSchema.extend({ id: z.number().
 export const skillSchema = z.object({
   name: z.string().trim().min(1, "技能名不能为空").max(32, "技能名最长 32 字符"),
   level: z.number().int().min(0).max(100).optional().default(0),
-  icon: z
-    .string()
-    .trim()
-    .max(64, "图标名最长 64 字符")
-    .refine((v) => v === "" || /^[a-zA-Z0-9:_-]+$/.test(v), "图标名仅支持字母、数字、下划线、连字符")
-    .optional()
-    .default(""),
+  icon: iconOrMediaValue(false).optional().default(""),
   sort: z.number().int().min(0).max(9999).optional().default(0),
 });
 
@@ -575,7 +567,7 @@ export const articleSchema = z.object({
     .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "链接标识须为小写字母/数字，用连字符分隔（如 my-first-post）"),
   content: z.string().max(100000, "正文过长").optional().default(""),
   excerpt: z.string().max(500, "摘要最长 500 字符").optional().default(""),
-  cover: mediaOrUrl("封面图地址过长").optional().default(""),
+  cover: imageOrMediaValue("封面图地址过长").optional().default(""),
   tags: z.string().max(200, "标签过长").optional().default(""),
   published: z.boolean().optional().default(false),
   pinned: z.boolean().optional().default(false),

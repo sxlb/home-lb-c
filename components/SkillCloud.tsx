@@ -1,13 +1,50 @@
 "use client";
 
+import Image from "next/image";
 import type { SkillRow } from "@/app/hooks";
-import { resolveLucideIcon, isLucideIcon } from "@/components/lucideIconResolver";
+import { resolveLucideIcon, isLucideIcon, LUCIDE_PREFIX } from "@/components/lucideIconResolver";
+import { useIconfontSymbols } from "@/components/Iconfont";
+import { resolveIconImageSrc } from "@/lib/iconValue";
 
-/** 技能胶囊图标（lucide 名解析，未知则返回 null 以纯标签展示） */
+/** 技能胶囊图标（支持 lucide / iconfont / 网络图片 / 关键词随机图） */
 function SkillIcon({ icon }: { icon: string }) {
-  if (!icon || !isLucideIcon(icon)) return null;
-  const Icon = resolveLucideIcon(icon);
-  return Icon ? <Icon className="h-4 w-4 shrink-0 text-white/70" /> : null;
+  const iconfontSymbols = useIconfontSymbols();
+
+  if (!icon) return null;
+
+  // 图片型：网络图片 URL 或 random:关键词 随机图
+  const imgSrc = resolveIconImageSrc(icon, 32);
+  if (imgSrc) {
+    return (
+      <Image
+        src={imgSrc}
+        alt=""
+        width={16}
+        height={16}
+        className="h-4 w-4 shrink-0 rounded-full object-cover"
+        unoptimized
+        onError={(e) => { e.currentTarget.style.display = "none"; }}
+      />
+    );
+  }
+
+  // lucide 图标：支持 "lucide:xxx" 前缀，也兼容历史数据的裸图标名（如 code）
+  const lucideValue = isLucideIcon(icon) ? icon : `${LUCIDE_PREFIX}${icon}`;
+  const LucideComp = resolveLucideIcon(lucideValue);
+  if (LucideComp) {
+    return <LucideComp className="h-4 w-4 shrink-0 text-white/70" />;
+  }
+
+  // iconfont 图标
+  if (iconfontSymbols.includes(icon)) {
+    return (
+      <svg className="h-4 w-4 shrink-0 text-white/70" aria-hidden="true" focusable="false">
+        <use href={`#${icon}`} />
+      </svg>
+    );
+  }
+
+  return null;
 }
 
 /** 技能云卡片（并入首屏，位于链接导航下方；无数据时不渲染） */

@@ -1,16 +1,18 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Shield, Zap } from "lucide-react";
+import { Shield, Zap, History } from "lucide-react";
 
 /**
- * 项目作者主页链接：页脚版权信息中的作者名固定跳转到这里。
- * 后台站点设置不再提供"页脚作者链接"配置项，如需修改请直接编辑本常量。
+ * 页脚版权信息中的作者名与跳转链接均写死在此：
+ * - 作者名文本固定为 PROJECT_AUTHOR_NAME
+ * - 作者名点击统一跳转到项目作者主页 PROJECT_AUTHOR_URL
+ * 后台站点设置不再提供相关配置项，如需修改请直接编辑以下常量。
  */
+const PROJECT_AUTHOR_NAME = "生性凉薄";
 const PROJECT_AUTHOR_URL = "https://sxlb.xyz";
 
 interface Props {
-  siteName?: string;
   siteIcp?: string;
   siteMps?: string;
   siteStart?: string;
@@ -42,6 +44,21 @@ function getResponseTime(): number {
     }
   } catch { /* silent */ }
   return 0;
+}
+
+/** 页脚统计单项：淡标签 + 高亮数字（tabular-nums 对齐更稳） */
+function Stat({ label, value }: { label: string; value: number }) {
+  return (
+    <span className="inline-flex items-baseline gap-1">
+      <span className="opacity-75">{label}</span>
+      <strong className="font-semibold tabular-nums text-white/90">{value}</strong>
+    </span>
+  );
+}
+
+/** 页脚分隔圆点 */
+function Dot() {
+  return <span className="h-1 w-1 flex-none rounded-full bg-white/20" />;
 }
 
 /** 使用 useMemo 构建页脚分组，避免每次 render 重建 DOM 树 */
@@ -86,12 +103,12 @@ function useFooterGroups(
       groups.push({
         key: "visitors",
         node: (
-          <span className="inline-flex items-center gap-x-2">
-            <span>今日 <strong>{todayPv}</strong></span>
-            <span className="text-white/25">·</span>
-            <span>累计 <strong>{pv}</strong></span>
-            <span className="text-white/25">·</span>
-            <span>访客 <strong>{uv}</strong></span>
+          <span className="inline-flex items-center gap-x-3" title="浏览量=访问次数，独立访客=去重后的用户数">
+            <Stat label="今日浏览量" value={todayPv} />
+            <Dot />
+            <Stat label="累计浏览量" value={pv} />
+            <Dot />
+            <Stat label="独立访客" value={uv} />
           </span>
         ),
       });
@@ -100,20 +117,28 @@ function useFooterGroups(
     // 第 3 组：运行天数 + 速度
     if (days > 0 || loadTime > 0) {
       const parts: React.ReactNode[] = [];
-      if (days > 0) parts.push(<span key="days">已运行 {days} 天</span>);
-      if (loadTime > 0) {
-        if (parts.length > 0) parts.push(<span key="sep-time" className="text-white/25">·</span>);
+      if (days > 0) {
         parts.push(
-          <span key="speed" className="inline-flex items-center gap-1">
-            <Zap className="h-3 w-3" />
-            <span>运行速度</span>
-            {loadTime < 500 ? <span className="text-emerald-400">{loadTime} ms</span> :
-             loadTime < 1000 ? <span className="text-amber-400">{loadTime} ms</span> :
-                               <span className="text-red-400">{loadTime} ms</span>}
+          <span key="days" className="inline-flex items-center gap-1.5">
+            <History className="h-3 w-3 opacity-60" />
+            <span className="opacity-75">已运行</span>
+            <strong className="font-semibold tabular-nums text-white/90">{days} 天</strong>
           </span>,
         );
       }
-      groups.push({ key: "runtime-speed", node: <span className="inline-flex items-center gap-x-2">{parts}</span> });
+      if (loadTime > 0) {
+        if (parts.length > 0) parts.push(<Dot key="sep-time" />);
+        parts.push(
+          <span key="speed" className="inline-flex items-center gap-1.5">
+            <Zap className="h-3 w-3 opacity-60" />
+            <span className="opacity-75">加载耗时</span>
+            <strong className={`font-semibold tabular-nums ${loadTime < 500 ? "text-emerald-400" : loadTime < 1000 ? "text-amber-400" : "text-red-400"}`}>
+              {loadTime} ms
+            </strong>
+          </span>,
+        );
+      }
+      groups.push({ key: "runtime-speed", node: <span className="inline-flex items-center gap-x-3">{parts}</span> });
     }
 
     return groups;
@@ -121,7 +146,6 @@ function useFooterGroups(
 }
 
 export default function Footer({
-  siteName = "无名",
   siteIcp = "",
   siteMps = "",
   siteStart = "",
@@ -184,8 +208,8 @@ export default function Footer({
   // 非固定页脚：位于主内容之后（文档流），滚动到页面底部时自然出现，不遮挡内容；
   // mt-6 保证与上方主内容的间距，正常浏览时页脚不在视口内
   return (
-    <footer className="z-10 mt-4 w-full border-t border-white/5 bg-black/15 py-2.5 text-center text-sm text-white/50 backdrop-blur-md">
-      <div className="mx-auto max-w-4xl flex flex-wrap items-center justify-center gap-x-3 gap-y-0.5 px-4">
+    <footer className="z-10 mt-4 w-full border-t border-white/5 bg-black/15 py-2.5 text-center text-sm text-white/55 backdrop-blur-md">
+      <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-center gap-x-4 gap-y-1 px-4">
         {groups.map((group) => (
           <span key={group.key} className="inline-flex items-center gap-x-2 text-center text-xs md:text-sm">
             {group.node}
@@ -197,14 +221,20 @@ export default function Footer({
             dangerouslySetInnerHTML={{ __html: footerHtml }}
           />
         )}
-        {/* Copyright 随页脚同行排布 */}
-        <div className="text-[11px] text-white/35 md:text-xs">
-          <span className="shine-text">
-            Copyright © {year}{" "}
-            <a href={PROJECT_AUTHOR_URL} target="_blank" rel="noopener noreferrer" className="underline decoration-white/25 underline-offset-2 hover:text-white/70">
-              {siteName}
+        {/* Copyright 随页脚同行排布：作者名高亮为焦点，版本号弱化 */}
+        <div className="mt-0.5 text-[11px] tracking-wide text-white/40 md:text-xs">
+          <span className="shine-text inline-flex items-center gap-x-2">
+            <span>Copyright © {year}</span>
+            <span className="h-0.5 w-0.5 rounded-full bg-white/25" />
+            <a href={PROJECT_AUTHOR_URL} target="_blank" rel="noopener noreferrer" className="font-medium text-white/70 transition-colors hover:text-white">
+              {PROJECT_AUTHOR_NAME}
             </a>
-            {appVersion && <span className="text-white/25"> · v{appVersion.trim()}</span>}
+            {appVersion && (
+              <>
+                <span className="h-0.5 w-0.5 rounded-full bg-white/25" />
+                <span className="tabular-nums text-white/25">v{appVersion.trim()}</span>
+              </>
+            )}
           </span>
         </div>
       </div>

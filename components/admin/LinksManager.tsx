@@ -62,9 +62,10 @@ export default function LinksManager() {
           apiPath="/api/social-links"
           emptyText="暂无社交链接，点击右上角「添加链接」创建"
           successMessage="社交链接保存成功"
+          tabLabel="社交链接"
           showTip
           namePlaceholder="如 GitHub"
-          iconPlaceholder="如 github, mail, twitter"
+          iconPlaceholder="图标名 / 图片URL / random:关键词"
           urlPlaceholder="https://github.com/yourname 或 mailto:xxx"
         />
       )}
@@ -73,8 +74,9 @@ export default function LinksManager() {
           apiPath="/api/site-links"
           emptyText="暂无网站链接，点击右上角「添加链接」创建"
           successMessage="网站链接保存成功"
+          tabLabel="网站链接"
           namePlaceholder="如 博客"
-          iconPlaceholder="如 book-open, cloud, music"
+          iconPlaceholder="图标名 / 图片URL / random:关键词"
           urlPlaceholder="https://blog.example.com"
         />
       )}

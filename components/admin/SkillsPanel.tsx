@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Plus, Trash2, Loader2, GripVertical, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { PanelHeader, EmptyState } from "./panel";
+import MediaPicker from "./MediaPicker";
 
 interface SkillItem {
   id?: number;
@@ -135,8 +136,13 @@ export default function SkillsPanel() {
                 <Input type="number" min={0} max={100} value={it.level} onChange={(e) => update(i, "level", Number(e.target.value))} className="h-8 text-sm" />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">图标名（lucide）</Label>
-                <Input value={it.icon} onChange={(e) => update(i, "icon", e.target.value)} placeholder="如 code, server（可选）" className="h-8 text-sm" />
+                <Label htmlFor={`skill-icon-${i}`} className="text-xs text-muted-foreground">图标</Label>
+                <MediaPicker
+                  id={`skill-icon-${i}`}
+                  value={it.icon}
+                  onChange={(v) => update(i, "icon", v)}
+                  placeholder="图标名 / 图片URL / random:关键词"
+                />
               </div>
               <div className="space-y-1">
                 <Label className="text-xs text-muted-foreground">排序</Label>

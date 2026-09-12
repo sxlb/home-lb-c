@@ -1,16 +1,33 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
-import { Plus, Trash2, Loader2, ChevronUp, ChevronDown, Pencil, Globe } from "lucide-react";
+import { Plus, Trash2, Loader2, ChevronUp, ChevronDown, Pencil, Globe, Wand2 } from "lucide-react";
 import { useLinkList } from "./useLinkList";
 import { PanelHeader, EmptyState } from "./panel";
-import IconfontPicker from "./IconfontPicker";
-import LucideIconPicker from "./LucideIconPicker";
+import MediaPicker from "./MediaPicker";
 import { resolveLucideIcon, isLucideIcon } from "@/components/lucideIconResolver";
+import { resolveIconImageSrc } from "@/lib/iconValue";
+
+/** 从 URL 提取域名，用于 Google Favicon API */
+function extractDomain(url: string): string | null {
+  try {
+    const u = new URL(url.startsWith("http") ? url : `https://${url}`);
+    return u.hostname;
+  } catch {
+    return null;
+  }
+}
+
+/** 生成 Google Favicon URL */
+function getFaviconUrl(url: string, size = 64): string | null {
+  const domain = extractDomain(url);
+  if (!domain) return null;
+  return `https://www.google.com/s2/favicons?domain=${domain}&sz=${size}`;
+}
 
 /** 后台面板通用加载占位（社交/网站链接面板、站点信息、天气等共用） */
 export function LoadingPlaceholder() {
@@ -49,6 +66,8 @@ interface LinksPanelProps {
   iconPlaceholder?: string;
   /** 链接地址输入占位 */
   urlPlaceholder?: string;
+  /** Tab 名称（用于保存按钮 aria-label，便于区分社交/网站链接） */
+  tabLabel?: string;
 }
 
 /** LinkRow 组件 props */
@@ -81,6 +100,7 @@ export default function LinksPanel({
   namePlaceholder = "链接名称",
   iconPlaceholder = "如 github, globe, link",
   urlPlaceholder = "https://example.com",
+  tabLabel,
 }: LinksPanelProps) {
   const emptyItem: LinkItem = {
     name: "",
@@ -186,6 +206,7 @@ export default function LinksPanel({
         <Button
           onClick={handleSave}
           disabled={saving}
+          aria-label={`保存${tabLabel ?? "链接"}`}
           className={`w-full gap-1.5 ${dirty ? "ring-2 ring-primary/40" : ""}`}
         >
           {saving ? (
@@ -194,9 +215,9 @@ export default function LinksPanel({
               保存中...
             </>
           ) : dirty ? (
-            "● 有未保存的更改"
+            `● ${tabLabel ?? "链接"}有未保存的更改`
           ) : (
-            "保存链接"
+            `保存${tabLabel ?? "链接"}`
           )}
         </Button>
       </CardContent>
@@ -330,17 +351,34 @@ function LinkRow({
           </div>
           <div className="space-y-1.5">
             <Label htmlFor={`link-icon-${index}`} className="text-xs font-medium text-muted-foreground">图标</Label>
-            <Input
-              id={`link-icon-${index}`}
-              value={link.icon}
-              onChange={(e) => onUpdate("icon", e.target.value)}
-              placeholder={iconPlaceholder}
-              className="h-8 text-sm"
-            />
+            <div className="flex gap-2">
+              <div className="flex-1">
+                <MediaPicker
+                  id={`link-icon-${index}`}
+                  value={link.icon}
+                  onChange={(v) => onUpdate("icon", v)}
+                  placeholder={iconPlaceholder}
+                />
+              </div>
+              {link.url && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const favicon = getFaviconUrl(link.url);
+                    if (favicon) onUpdate("icon", favicon);
+                  }}
+                  className="h-9 shrink-0 gap-1 self-end"
+                  title="从网站 URL 自动获取 favicon"
+                >
+                  <Wand2 className="h-3.5 w-3.5" />
+                  自动
+                </Button>
+              )}
+            </div>
           </div>
         </div>
-        {/* 图标选择器：Lucide / 图标库 Tab */}
-        <IconPickerTabs value={link.icon} onChange={(name) => onUpdate("icon", name)} />
         <div className="space-y-1.5">
           <Label htmlFor={`link-url-${index}`} className="text-xs font-medium text-muted-foreground">链接地址</Label>
           <Input
@@ -389,14 +427,31 @@ function LinkRow({
 }
 
 /**
- * 链接图标预览：lucide:xxx 走 lucide 组件；icon- 前缀走 iconfont symbol；
- * 其余未知值兜底 Globe。供列表收起态与表单内实时预览使用。
+ * 链接图标预览：支持 lucide:xxx / iconfont / 网络图片 URL / random:关键词 随机图。
+ * 供列表收起态与表单内实时预览使用。
  */
 export function LinkIconPreview({ icon }: { icon: string }) {
-  if (isLucideIcon(icon)) {
-    const Icon = resolveLucideIcon(icon);
-    if (Icon) return <Icon className="h-5 w-5" />;
+  if (!icon) return <Globe className="h-5 w-5" />;
+
+  // 图片型：网络图片 URL 或 random:关键词 随机图
+  const imgSrc = resolveIconImageSrc(icon, 40);
+  if (imgSrc) {
+    return (
+      <img
+        src={imgSrc}
+        alt=""
+        className="h-5 w-5 rounded object-cover"
+        onError={(e) => { e.currentTarget.style.display = "none"; }}
+      />
+    );
   }
+
+  // lucide 图标：支持 "lucide:xxx" 前缀，也兼容历史数据的裸图标名
+  const lucideValue = isLucideIcon(icon) ? icon : `lucide:${icon}`;
+  const LucideComp = resolveLucideIcon(lucideValue);
+  if (LucideComp) return <LucideComp className="h-5 w-5" />;
+
+  // iconfont 图标
   if (icon.startsWith("icon-")) {
     return (
       <svg className="h-5 w-5" aria-hidden>
@@ -404,69 +459,7 @@ export function LinkIconPreview({ icon }: { icon: string }) {
       </svg>
     );
   }
+
   return <Globe className="h-5 w-5" />;
 }
 
-/**
- * 图标选择器 Tab 切换组件：
- * - Lucide 图标 / 图标库 两个 Tab
- * - 每个实例独立维护激活 Tab 状态
- * - Lucide 图标选中值格式：lucide:xxx
- * - 图标库选中值为 symbol 名（如 icon-xxx）
- */
-function IconPickerTabs({
-  value,
-  onChange,
-}: {
-  value: string;
-  onChange: (name: string) => void;
-}) {
-  // 根据当前值自动推断激活的 Tab
-  const getInitialTab = (): "lucide" | "iconfont" => {
-    if (value.startsWith("lucide:")) return "lucide";
-    // iconfont 通常是 icon- 前缀或其他自定义 symbol 名
-    if (value.startsWith("icon-")) return "iconfont";
-    return "lucide";
-  };
-
-  const [activeTab, setActiveTab] = useState<"lucide" | "iconfont">(getInitialTab);
-
-  // value 变化（手动输入或外部修改）时同步激活 tab，避免 UI 状态与值错位
-  useEffect(() => {
-    setActiveTab(getInitialTab());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value]);
-
-  return (
-    <div className="space-y-2">
-      {/* Tab 切换按钮 */}
-      <div className="flex gap-1 rounded-md bg-muted p-0.5 text-xs">
-        <button
-          type="button"
-          onClick={() => setActiveTab("lucide")}
-          className={`flex-1 rounded px-1.5 py-1 transition-colors ${
-            activeTab === "lucide"
-              ? "bg-background text-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          Lucide
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab("iconfont")}
-          className={`flex-1 rounded px-1.5 py-1 transition-colors ${
-            activeTab === "iconfont"
-              ? "bg-background text-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          图标库
-        </button>
-      </div>
-      {/* Tab 内容 */}
-      {activeTab === "lucide" && <LucideIconPicker value={value} onChange={onChange} />}
-      {activeTab === "iconfont" && <IconfontPicker value={value} onChange={onChange} />}
-    </div>
-  );
-}
