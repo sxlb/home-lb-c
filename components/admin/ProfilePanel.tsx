@@ -841,7 +841,8 @@ export default function ProfilePanel() {
                     placeholder="https://your-domain.com"
                   />
                   <p className="text-xs text-muted-foreground">
-                    页脚版权信息中作者名跳转的链接
+                    用于站点 SEO：生成 canonical 链接、网页分享卡片（OpenGraph）地址与站点地图（sitemap）。
+                    页脚版权信息中的作者名固定指向项目作者主页，如需修改请编辑源码。
                   </p>
                 </div>
 

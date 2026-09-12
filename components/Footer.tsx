@@ -3,9 +3,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { Shield, Zap } from "lucide-react";
 
+/**
+ * 项目作者主页链接：页脚版权信息中的作者名固定跳转到这里。
+ * 后台站点设置不再提供"页脚作者链接"配置项，如需修改请直接编辑本常量。
+ */
+const PROJECT_AUTHOR_URL = "https://sxlb.xyz";
+
 interface Props {
   siteName?: string;
-  siteUrl?: string;
   siteIcp?: string;
   siteMps?: string;
   siteStart?: string;
@@ -117,7 +122,6 @@ function useFooterGroups(
 
 export default function Footer({
   siteName = "无名",
-  siteUrl = "",
   siteIcp = "",
   siteMps = "",
   siteStart = "",
@@ -126,7 +130,6 @@ export default function Footer({
   appVersion = "",
 }: Props) {
   const year = new Date().getFullYear();
-  const url = siteUrl.trim();
   const icp = siteIcp.trim();
   const mps = siteMps.trim();
   const footerHtml = siteFooterHtml.trim();
@@ -198,13 +201,9 @@ export default function Footer({
         <div className="text-[11px] text-white/35 md:text-xs">
           <span className="shine-text">
             Copyright © {year}{" "}
-            {url ? (
-              <a href={url} target="_blank" rel="noopener noreferrer" className="underline decoration-white/25 underline-offset-2 hover:text-white/70">
-                {siteName}
-              </a>
-            ) : (
-              <span>{siteName}</span>
-            )}
+            <a href={PROJECT_AUTHOR_URL} target="_blank" rel="noopener noreferrer" className="underline decoration-white/25 underline-offset-2 hover:text-white/70">
+              {siteName}
+            </a>
             {appVersion && <span className="text-white/25"> · v{appVersion.trim()}</span>}
           </span>
         </div>
