@@ -2,6 +2,7 @@ import { NextResponse, NextRequest } from "next/server";
 import { createHash } from "node:crypto";
 import { prisma } from "@/lib/db";
 import { getClientIp } from "@/lib/server";
+import { resolveAmapCityQuery } from "@/lib/weather";
 
 export const dynamic = "force-dynamic";
 
@@ -187,9 +188,18 @@ async function fetchAmapWeather(
         signal: AbortSignal.timeout(8000),
       });
       if (ipRes.ok) {
-        const ipData = (await ipRes.json()) as { status?: string; adcode?: string | string[] };
-        const ad = Array.isArray(ipData.adcode) ? ipData.adcode[0] : ipData.adcode;
-        if (ipData.status === "1" && ad) cityCode = ad;
+        const ipData = (await ipRes.json()) as {
+          status?: string;
+          adcode?: string | string[];
+          city?: string | string[];
+          province?: string | string[];
+        };
+        if (ipData.status === "1") {
+          // 不能直接取 adcode：高德 IP 定位常给出「省级 adcode + 市级名称」，
+          // 用省级 adcode 查天气只会返回省份（页面显示「浙江省」而非「杭州市」）
+          const query = resolveAmapCityQuery(ipData);
+          if (query) cityCode = query;
+        }
       }
     } catch {
       /* 定位失败走下方明确报错 */
@@ -392,7 +402,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(result);
     } catch (e) {
       lastError = e instanceof Error ? e.message : String(e);
-      console.warn(`[weather] 数据源 ${src.name} 获取失败: ${lastError}`);
+      // 密钥类问题给出可照做的提示：腾讯位置服务的 Key 若开启了签名校验，
+      // 必须与成对的 SK 一起填写，任一不符都会返回「签名验证失败」而永远取不到数据
+      const hint = lastError.includes("签名验证失败")
+        ? "（腾讯位置服务 Key 未通过签名校验：请核对后台填写的 Key 与 SK 是否成对）"
+        : "";
+      console.warn(`[weather] 数据源 ${src.name} 获取失败: ${lastError}${hint}`);
     }
   }
 

@@ -1,5 +1,52 @@
 import { describe, it, expect } from "vitest";
-import { getNextTrackIndex, formatTime, normalizeTracks, type PlayMode } from "@/components/useAudioPlayer";
+import {
+  getNextTrackIndex,
+  formatTime,
+  normalizeTracks,
+  resolveMuteToggle,
+  resolveVolumeChange,
+  DEFAULT_VOLUME,
+  type PlayMode,
+} from "@/components/useAudioPlayer";
+
+describe("音量 / 静音交互（静音关不掉的回归）", () => {
+  it("拖动音量条到 >0 即解除静音", () => {
+    expect(resolveVolumeChange(0.4, true)).toEqual({ volume: 0.4, muted: false });
+  });
+
+  it("拖到 0 保持原有静音状态（不因拖动强行改变）", () => {
+    expect(resolveVolumeChange(0, true)).toEqual({ volume: 0, muted: true });
+    expect(resolveVolumeChange(0, false)).toEqual({ volume: 0, muted: false });
+  });
+
+  it("静音态点喇叭即取消静音", () => {
+    expect(resolveMuteToggle({ muted: true, volume: 0.5, lastAudible: 0.5 })).toEqual({
+      muted: false,
+      volume: 0.5,
+    });
+  });
+
+  it("未静音时点喇叭进入静音，音量不变", () => {
+    expect(resolveMuteToggle({ muted: false, volume: 0.5, lastAudible: 0.5 })).toEqual({
+      muted: true,
+      volume: 0.5,
+    });
+  });
+
+  it("音量为 0 时取消静音要恢复到上次的非零音量，否则依旧无声（图标也不变）", () => {
+    expect(resolveMuteToggle({ muted: false, volume: 0, lastAudible: 0.35 })).toEqual({
+      muted: false,
+      volume: 0.35,
+    });
+  });
+
+  it("没有历史非零音量时恢复到默认音量", () => {
+    expect(resolveMuteToggle({ muted: false, volume: 0, lastAudible: 0 })).toEqual({
+      muted: false,
+      volume: DEFAULT_VOLUME,
+    });
+  });
+});
 
 describe("getNextTrackIndex（播放模式下一首计算）", () => {
   it("空歌单一律返回 -1", () => {

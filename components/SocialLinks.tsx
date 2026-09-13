@@ -13,7 +13,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useIconfontSymbols } from "./Iconfont";
-import { resolveLucideIcon, isLucideIcon } from "./lucideIconResolver";
+import { resolveLucideIcon, isLucideIcon, getLucideIconByName } from "./lucideIconResolver";
+import { resolveIconImageSrc } from "@/lib/iconValue";
 
 const ICON_MAP: Record<string, LucideIcon> = {
   github: Github,
@@ -52,9 +53,57 @@ const resolveIcon = (iconName: string): LucideIcon => {
     const LucideIconComp = resolveLucideIcon(iconName);
     if (LucideIconComp) return LucideIconComp;
   }
+  // 其次是裸图标名（历史数据/手填），先按连字符式在白名单里查（如 book-open）
+  const kebab = getLucideIconByName(iconName.trim());
+  if (kebab) return kebab;
   const key = iconName.toLowerCase().replace(/[^a-z]/g, "");
   return ICON_MAP[key] || ICON_MAP[iconName] || ICON_MAP.default;
 };
+
+/**
+ * 单个社交图标。
+ * 渲染优先级：图片类（favicon / 图片直链，后台「从网站获取」写入的就是这类）
+ * → iconfont symbol → lucide/内置图标。
+ * 图片加载失败时回退到内置图标，避免只留一个空白洞（此前图片类值一律被当成
+ * 图标名去查表，查不到就渲染成地球，于是 GitHub/BiliBili 显示的图标是错的）。
+ */
+function SocialIcon({
+  icon,
+  name,
+  iconfontSymbols,
+}: {
+  icon: string;
+  name: string;
+  iconfontSymbols: string[];
+}) {
+  const [imgBroken, setImgBroken] = useState(false);
+  const imgSrc = imgBroken ? null : resolveIconImageSrc(icon, 32);
+
+  if (imgSrc) {
+    return (
+      // 管理员配置的外部图标地址，走原生 img（同 LinkIconPreview / MediaPicker 的做法）
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={imgSrc}
+        alt={name}
+        className="h-[32px] w-[32px] rounded-md object-cover"
+        loading="lazy"
+        onError={() => setImgBroken(true)}
+      />
+    );
+  }
+
+  if (iconfontSymbols.includes(icon)) {
+    return (
+      <svg className="h-[32px] w-[32px]" aria-hidden="true" focusable="false">
+        <use href={`#${icon}`} />
+      </svg>
+    );
+  }
+
+  const IconComponent = resolveIcon(icon);
+  return <IconComponent className="h-[32px] w-[32px]" />;
+}
 
 /**
  * 社交链接容器：纯图标横排（对齐 home .social 布局）
@@ -89,9 +138,6 @@ export default function SocialLinks({ initialLinks }: SocialLinksProps) {
     <div className="social-links-bar">
       <div className="social-link-row flex items-center">
         {sortedLinks.map((link) => {
-          const IconComponent = resolveIcon(link.icon);
-          // 图标渲染优先级：iconfont symbol → lucide
-          const useIconfont = iconfontSymbols.includes(link.icon);
           return (
             <a
               key={link.id}
@@ -106,13 +152,7 @@ export default function SocialLinks({ initialLinks }: SocialLinksProps) {
             >
               {/* 32px 图标，间距交由容器 row gap 统一控制（微调放大，提升辨识度） */}
               <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
-                {useIconfont ? (
-                  <svg className="h-[32px] w-[32px]" aria-hidden="true" focusable="false">
-                    <use href={`#${link.icon}`} />
-                  </svg>
-                ) : (
-                  <IconComponent className="h-[32px] w-[32px]" />
-                )}
+                <SocialIcon icon={link.icon} name={link.name} iconfontSymbols={iconfontSymbols} />
               </span>
             </a>
           );

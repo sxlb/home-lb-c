@@ -73,6 +73,39 @@ interface RawTrack {
 const VOLUME_KEY = "music-player-volume";
 const MUTED_KEY = "music-player-muted";
 
+/** 取消静音时若音量为 0，恢复到的默认音量 */
+export const DEFAULT_VOLUME = 0.7;
+
+/**
+ * 拖动音量条后的下一个状态。
+ * 音量为 0 时图标同样显示为"静音"，若此时只改音量而不解除 muted，
+ * 用户拖满音量条依旧无声 —— 表现为「静音关不掉」，因此音量 > 0 即视为取消静音。
+ */
+export function resolveVolumeChange(
+  volume: number,
+  muted: boolean
+): { volume: number; muted: boolean } {
+  return { volume, muted: volume > 0 ? false : muted };
+}
+
+/**
+ * 点击喇叭后的下一个状态。
+ * 音量为 0 时图标本来就显示为静音态，此时点击的意图必然是"恢复声音"而不是再静音一次，
+ * 因此按"当前是否静音（含音量为 0）"取反；恢复时若音量为 0 一并恢复到上次的非零音量。
+ */
+export function resolveMuteToggle(input: {
+  muted: boolean;
+  volume: number;
+  lastAudible: number;
+}): { volume: number; muted: boolean } {
+  const effectivelyMuted = input.muted || input.volume <= 0;
+  const muted = !effectivelyMuted;
+  if (!muted && input.volume <= 0) {
+    return { muted, volume: input.lastAudible > 0 ? input.lastAudible : DEFAULT_VOLUME };
+  }
+  return { muted, volume: input.volume };
+}
+
 /** 播放模式循环顺序 */
 export const PLAY_MODES: PlayMode[] = ["loop", "single", "shuffle", "order"];
 
@@ -128,7 +161,7 @@ export function useAudioPlayer({
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
   const [playlist, setPlaylist] = useState<Track[]>([]);
   const [playMode, setPlayMode] = useState<PlayMode>("loop");
-  const [volume, setVolume] = useState(0.7);
+  const [volume, setVolume] = useState(DEFAULT_VOLUME);
   const [muted, setMuted] = useState(false);
   const [duration, setDuration] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -187,35 +220,63 @@ export function useAudioPlayer({
   }, [loadPlaylist]);
 
   // ===== 音量 / 静音持久化 =====
+  // 上次的非零音量：音量为 0 时点「取消静音」用它恢复，避免恢复成 0 依旧无声
+  const lastAudibleVolumeRef = useRef(DEFAULT_VOLUME);
   useEffect(() => {
     try {
-      const v = Number(localStorage.getItem(VOLUME_KEY));
-      if (Number.isFinite(v) && v >= 0 && v <= 1) setVolume(v);
+      // 必须先判断 key 是否存在：localStorage 为空时 Number(null) === 0，
+      // 会把首次访问的音量直接设成 0 —— 页面无声、喇叭显示静音态，且点它也不会变。
+      const rawVolume = localStorage.getItem(VOLUME_KEY);
+      if (rawVolume !== null) {
+        const v = Number(rawVolume);
+        if (Number.isFinite(v) && v >= 0 && v <= 1) {
+          setVolume(v);
+          if (v > 0) lastAudibleVolumeRef.current = v;
+        }
+      }
       setMuted(localStorage.getItem(MUTED_KEY) === "1");
     } catch {
       /* 隐私模式等场景忽略 */
     }
   }, []);
 
-  const changeVolume = useCallback((v: number) => {
-    setVolume(v);
+  /** 写入本地存储（隐私模式等场景静默忽略） */
+  const persist = useCallback((key: string, value: string) => {
     try {
-      localStorage.setItem(VOLUME_KEY, String(v));
+      localStorage.setItem(key, value);
     } catch {
       /* 忽略 */
     }
   }, []);
 
-  const toggleMuted = useCallback(() => {
-    setMuted((prev) => {
-      try {
-        localStorage.setItem(MUTED_KEY, prev ? "0" : "1");
-      } catch {
-        /* 忽略 */
+  const changeVolume = useCallback(
+    (v: number) => {
+      if (v > 0) lastAudibleVolumeRef.current = v;
+      const next = resolveVolumeChange(v, muted);
+      setVolume(next.volume);
+      persist(VOLUME_KEY, String(next.volume));
+      // 拖动音量条即解除静音：否则静音态下滑条永远跳回 0，用户无法靠它恢复声音
+      if (next.muted !== muted) {
+        setMuted(next.muted);
+        persist(MUTED_KEY, next.muted ? "1" : "0");
       }
-      return !prev;
+    },
+    [muted, persist]
+  );
+
+  const toggleMuted = useCallback(() => {
+    const next = resolveMuteToggle({
+      muted,
+      volume,
+      lastAudible: lastAudibleVolumeRef.current,
     });
-  }, []);
+    setMuted(next.muted);
+    persist(MUTED_KEY, next.muted ? "1" : "0");
+    if (next.volume !== volume) {
+      setVolume(next.volume);
+      persist(VOLUME_KEY, String(next.volume));
+    }
+  }, [muted, volume, persist]);
 
   // ===== 音频事件处理（事件只绑定一次，逻辑通过 stateRef 读取最新值） =====
   const handlersRef = useRef({
