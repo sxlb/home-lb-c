@@ -104,9 +104,13 @@ const ERROR_CACHE_TTL_MS = 30 * 1000;
 //   2. 容器"点击检测更新"时强制刷新（force=true）；
 //   3. 宿主机 cron（update-watch.sh）兜底每日刷新一次（宿主机出网更稳）。
 // /app/data 由数据卷映射且容器非 root 用户可写，故文件放在 data/ 下而非 data/deploy/。
-const VERSION_CACHE_FILE = process.env.DATA_DIR
-  ? path.join(process.env.DATA_DIR, "latest.json")
-  : path.join(process.cwd(), "data", "latest.json");
+// 路径在「调用时」解析而非模块加载时固化：生产环境 DATA_DIR 恒定，行为完全不变；
+// 但测试可通过 DATA_DIR 指向临时目录来隔离本机 data/latest.json，避免用例依赖机器状态。
+function versionCacheFile(): string {
+  return process.env.DATA_DIR
+    ? path.join(process.env.DATA_DIR, "latest.json")
+    : path.join(process.cwd(), "data", "latest.json");
+}
 // 缓存"新鲜"判定阈值：新的定时/登录刷新入口在上次刷新超过该时长后才真正拉取
 const VERSION_CACHE_TTL_MS = 10 * 60 * 1000;
 
@@ -119,7 +123,7 @@ interface VersionCacheDoc {
 /** 读取版本缓存；文件缺失/损坏/无时间戳时返回 null（不影响网络竞速兜底） */
 async function readVersionCache(): Promise<VersionCacheDoc | null> {
   try {
-    const parsed = JSON.parse(await fs.readFile(VERSION_CACHE_FILE, "utf8")) as {
+    const parsed = JSON.parse(await fs.readFile(versionCacheFile(), "utf8")) as {
       timestamp?: number;
       data?: ReleaseInfo | null;
       error?: string;
@@ -135,13 +139,18 @@ async function readVersionCache(): Promise<VersionCacheDoc | null> {
 
 const OFFICIAL_BASE = "https://api.github.com";
 
-/** 默认公共代理镜像（官方不可达时按序降级）。可用环境变量 GITHUB_API_MIRRORS（逗号分隔）覆盖 */
-const DEFAULT_MIRRORS: string[] = [
-  // ⚠️ base 必须自带上游完整地址：releaseUrl() 会直接在其后拼 "repos/..."，
-  // 因此要写成 https://gh-proxy.com/https://api.github.com/（实测 200），
-  // 而 https://gh-proxy.com/ 会拼出 https://gh-proxy.com/repos/... → 403（Cloudflare Error 1000）。
+/**
+ * 内置公共加速代理（后台「系统更新 → GitHub 加速代理」里会逐个测连通性）。
+ *
+ * ⚠️ base 必须自带上游完整地址：releaseUrl() 会直接在其后拼 "repos/..."，
+ * 因此要写成 https://gh-proxy.com/https://api.github.com/（实测 200），
+ * 而 https://gh-proxy.com/ 会拼出 https://gh-proxy.com/repos/... → 403（Cloudflare Error 1000）。
+ */
+const BUILTIN_MIRRORS: string[] = [
+  "https://edgeone.gh-proxy.com/https://api.github.com/",
+  "https://hk.gh-proxy.com/https://api.github.com/",
   "https://gh-proxy.com/https://api.github.com/",
-  "https://gh.llkk.cc/https://api.github.com/",
+  "https://gh.dpik.top/https://api.github.com/",
 ];
 
 const RELEASE_HEADERS = {
@@ -154,10 +163,83 @@ const MIRROR_TIMEOUT_MS = 10000; // 公共镜像慢得多（实测 3.5s~7s，出
 const MAX_ROUNDS = 2; // 竞速总轮数：首轮失败后短暂间隔重试，抵御服务器出网间歇性丢包
 const ROUND_GAP_MS = 300; // 轮次间间隔
 
-function configuredMirrors(): string[] {
+/** 候选源类别：official=GitHub 官方；builtin=内置代理；env=环境变量指定；custom=后台自定义 */
+export type ProxyScope = "official" | "builtin" | "env" | "custom";
+
+export interface ProxySource {
+  /** 可直接拼接 repos/... 的 base */
+  base: string;
+  scope: ProxyScope;
+}
+
+/**
+ * 把用户/环境变量里填的地址规范成「可拼接 repos/... 的 base」：
+ * - 非 http(s) 或空 → null（视为非法，忽略）
+ * - 已含 api.github.com（直连 API 镜像）→ 仅补结尾斜杠
+ * - 只是代理前缀（如 https://hk.gh-proxy.com）→ 自动补上游 https://api.github.com/
+ */
+export function normalizeMirrorBase(input: string): string | null {
+  const raw = (input || "").trim();
+  if (!raw || !/^https?:\/\//i.test(raw)) return null;
+  const withSlash = raw.endsWith("/") ? raw : `${raw}/`;
+  if (/api\.github\.com/i.test(withSlash)) return withSlash;
+  return `${withSlash}https://api.github.com/`;
+}
+
+/** 代理地址的可读名（取域名，便于后台展示与日志） */
+export function mirrorLabel(base: string): string {
+  try {
+    return new URL(base).host;
+  } catch {
+    return base;
+  }
+}
+
+/** 内置代理：GITHUB_API_MIRRORS 提供时以它为准（运维可整组替换），否则用内置列表 */
+function configuredMirrors(): { bases: string[]; scope: ProxyScope } {
   const raw = (process.env.GITHUB_API_MIRRORS || "").trim();
-  if (raw) return raw.split(",").map((s) => s.trim()).filter(Boolean);
-  return DEFAULT_MIRRORS;
+  if (!raw) return { bases: BUILTIN_MIRRORS, scope: "builtin" };
+  const bases = raw
+    .split(",")
+    .map((s) => normalizeMirrorBase(s))
+    .filter((s): s is string => Boolean(s));
+  return { bases, scope: "env" };
+}
+
+/** 自定义代理持久化文件（与版本缓存同数据卷，容器重启后仍生效；不引入数据库表） */
+function mirrorsFilePath(): string {
+  const dir = process.env.DATA_DIR || path.join(process.cwd(), "data");
+  return path.join(dir, "github-mirrors.json");
+}
+
+/** 读取后台配置的自定义代理（文件缺失/损坏返回空数组，不影响内置兜底） */
+export async function readCustomMirrors(): Promise<string[]> {
+  try {
+    const parsed = JSON.parse(await fs.readFile(mirrorsFilePath(), "utf8")) as { mirrors?: unknown };
+    if (!Array.isArray(parsed?.mirrors)) return [];
+    return parsed.mirrors
+      .map((m) => normalizeMirrorBase(String(m)))
+      .filter((m): m is string => Boolean(m));
+  } catch {
+    return [];
+  }
+}
+
+/** 写入自定义代理（原子写；返回是否成功，失败不影响内置代理继续工作） */
+export async function writeCustomMirrors(list: string[]): Promise<boolean> {
+  const normalized = Array.from(
+    new Set(list.map((m) => normalizeMirrorBase(m)).filter((m): m is string => Boolean(m)))
+  );
+  try {
+    const file = mirrorsFilePath();
+    await fs.mkdir(path.dirname(file), { recursive: true });
+    const tmp = `${file}.tmp`;
+    await fs.writeFile(tmp, JSON.stringify({ mirrors: normalized }, null, 2));
+    await fs.rename(tmp, file);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -169,9 +251,67 @@ function releaseUrl(base: string): string {
   return `${base}repos/${GITHUB_REPO}/releases/latest`;
 }
 
-/** 候选源列表（去重，官方居首）。所有源始终参与检测，不做测速裁减——避免出网波动时误删可用的代理 */
-function candidateSources(): string[] {
-  return Array.from(new Set([OFFICIAL_BASE, ...configuredMirrors()]));
+/** 去重用的归一化键：忽略结尾斜杠差异（https://api.github.com 与 https://api.github.com/ 是同一源） */
+function sourceKey(base: string): string {
+  return base.replace(/\/+$/, "");
+}
+
+/**
+ * 全部候选源（官方居首，去重）。所有源始终参与检测，不做测速裁减——
+ * 避免出网波动时误删可用的代理；后台自定义的代理排在最后并优先生效于同名的内置项。
+ */
+export async function listProxySources(): Promise<ProxySource[]> {
+  const { bases, scope } = configuredMirrors();
+  const custom = await readCustomMirrors();
+  const sources: ProxySource[] = [{ base: OFFICIAL_BASE, scope: "official" }];
+  const seen = new Set<string>([sourceKey(OFFICIAL_BASE)]);
+  for (const base of bases) {
+    if (seen.has(sourceKey(base))) continue;
+    seen.add(sourceKey(base));
+    sources.push({ base, scope });
+  }
+  for (const base of custom) {
+    if (seen.has(sourceKey(base))) continue; // 与内置/官方重复时保留前者，避免同一源被请求两次
+    seen.add(sourceKey(base));
+    sources.push({ base, scope: "custom" });
+  }
+  return sources;
+}
+
+async function candidateSources(): Promise<string[]> {
+  return (await listProxySources()).map((s) => s.base);
+}
+
+/** 单个源的单次连通性测试结果（后台「测试连通性」用） */
+export interface ProxyTestResult {
+  base: string;
+  scope: ProxyScope;
+  label: string;
+  ok: boolean;
+  ms: number;
+  status?: number;
+  reason: string;
+}
+
+/** 测试全部候选源的连通性（并发；官方用更短超时，其余放宽） */
+export async function testProxySources(): Promise<ProxyTestResult[]> {
+  const sources = await listProxySources();
+  return Promise.all(
+    sources.map(async (s, i) => {
+      const t0 = Date.now();
+      const r = await probe(s.base, i === 0 ? OFFICIAL_TIMEOUT_MS : MIRROR_TIMEOUT_MS);
+      const ms = Date.now() - t0;
+      return {
+        base: s.base,
+        scope: s.scope,
+        label: i === 0 ? "api.github.com（官方）" : mirrorLabel(s.base),
+        ok: r.kind === "ok",
+        ms,
+        status: r.kind === "http" ? r.status : undefined,
+        reason: describeResult(r),
+      };
+    })
+  );
 }
 
 function sleep(ms: number): Promise<void> {
@@ -338,7 +478,7 @@ export async function fetchLatestRelease(force = false): Promise<FetchLatestResu
     }
   }
 
-  const sources = candidateSources();
+  const sources = await candidateSources();
   let last: ProbeResult | undefined;
 
   for (let round = 0; round < MAX_ROUNDS; round++) {
@@ -419,10 +559,11 @@ export async function refreshVersionCache(
 /** 原子写入版本缓存；目录缺失自动创建。容器对缓存目录无写权限时静默失败（不影响读旧缓存） */
 async function writeVersionCache(doc: { timestamp: number; data: ReleaseInfo | null; error?: string }): Promise<boolean> {
   try {
-    await fs.mkdir(path.dirname(VERSION_CACHE_FILE), { recursive: true });
-    const tmp = `${VERSION_CACHE_FILE}.tmp`;
+    const file = versionCacheFile();
+    await fs.mkdir(path.dirname(file), { recursive: true });
+    const tmp = `${file}.tmp`;
     await fs.writeFile(tmp, JSON.stringify(doc, null, 2));
-    await fs.rename(tmp, VERSION_CACHE_FILE);
+    await fs.rename(tmp, file);
     return true;
   } catch {
     return false;

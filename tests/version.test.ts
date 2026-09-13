@@ -1,4 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { fetchLatestRelease, resetReleaseCache } from "../lib/version";
 
 const OFFICIAL = "https://api.github.com";
@@ -32,10 +35,23 @@ function mockFetch(opts: { official: SourceResult; proxy: SourceResult }) {
 }
 
 describe("fetchLatestRelease 多源降级", () => {
-  beforeEach(() => resetReleaseCache());
+  // 用例必须与环境隔离：lib/version 会读取宿主机版本缓存（DATA_DIR/latest.json），
+  // 开发/部署机上的真实缓存会被当作"新鲜结果"直接返回，让用例变成依赖机器状态的假失败。
+  // 这里把 DATA_DIR 指向空临时目录（即"无缓存"），并在每个用例前重建。
+  let tmp: string;
+  const savedDataDir = process.env.DATA_DIR;
+
+  beforeEach(() => {
+    resetReleaseCache();
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), "home-lb-version-"));
+    process.env.DATA_DIR = tmp;
+  });
+
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+    if (savedDataDir === undefined) delete process.env.DATA_DIR;
+    else process.env.DATA_DIR = savedDataDir;
   });
 
   it("官方可达时优先走官方并成功", async () => {
@@ -96,4 +112,47 @@ describe("fetchLatestRelease 多源降级", () => {
     expect(r.data).toBeNull();
     expect(r.error).toContain("暂无已发布");
   });
+
+  it("宿主机缓存新鲜时直接采用，不打网络（避免每次进后台都请求 GitHub）", async () => {
+    writeHostCache(Date.now());
+    const { requested } = mockFetch({ official: 200, proxy: 200 });
+    const r = await fetchLatestRelease();
+    expect(r.data?.version).toBe("0.0.7");
+    expect(r.fromCache).toBe(true);
+    expect(requested).toHaveLength(0);
+  });
+
+  it("「检测更新」强制刷新（force）绕过宿主机缓存，仍走网络取真实最新版", async () => {
+    writeHostCache(Date.now());
+    const { requested } = mockFetch({ official: 200, proxy: 200 });
+    const r = await fetchLatestRelease(true);
+    expect(r.data?.version).toBe("0.0.5");
+    expect(requested.length).toBeGreaterThan(0);
+  });
+
+  it("全部源失败时降级到过期的宿主机缓存，避免 UI 显示为未知", async () => {
+    writeHostCache(Date.now() - 60 * 60 * 1000); // 1 小时前 > 10 分钟新鲜阈值
+    mockFetch({ official: "net", proxy: "net" });
+    const r = await fetchLatestRelease();
+    expect(r.data?.version).toBe("0.0.7");
+    expect(r.fromCache).toBe(true);
+  });
 });
+
+/** 写入宿主机版本缓存文件（模拟容器登录/cron 刷新后的结果） */
+function writeHostCache(timestamp: number) {
+  fs.writeFileSync(
+    path.join(process.env.DATA_DIR as string, "latest.json"),
+    JSON.stringify({
+      timestamp,
+      data: {
+        tag: "0.0.7",
+        name: "home-lb 0.0.7",
+        body: "cached",
+        htmlUrl: "https://github.com/sxlb/home-lb-c/releases/tag/0.0.7",
+        publishedAt: "2026-01-02T00:00:00Z",
+        version: "0.0.7",
+      },
+    })
+  );
+}

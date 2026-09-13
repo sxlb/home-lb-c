@@ -19,7 +19,12 @@ import {
   AlertTriangle,
   FileClock,
   Sparkles,
+  Activity,
+  Plus,
+  Trash2,
 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { PanelHeader, EmptyState, SectionBlock } from "./panel";
 
 interface UpdateRecord {
@@ -114,6 +119,38 @@ const METHOD_MAP: Record<UpdateMethod, { label: string; hint: string }> = {
   image: { label: "拉取发布镜像", hint: "直接从镜像仓库拉取已发布的镜像并重启（速度快、服务器零构建压力，需 CI 已推送 GHCR 镜像）" },
 };
 
+/* ---------------- GitHub 加速代理 ---------------- */
+
+type ProxyScope = "official" | "builtin" | "env" | "custom";
+
+interface ProxySourceItem {
+  base: string;
+  scope: ProxyScope;
+}
+
+interface ProxyTestItem {
+  base: string;
+  scope: ProxyScope;
+  label: string;
+  ok: boolean;
+  ms: number;
+  status?: number;
+  reason: string;
+}
+
+interface ProxyData {
+  sources: ProxySourceItem[];
+  custom: string[];
+  results: ProxyTestItem[] | null;
+}
+
+const SCOPE_MAP: Record<ProxyScope, { label: string; className: string }> = {
+  official: { label: "官方", className: "bg-primary/15 text-primary" },
+  builtin: { label: "内置", className: "bg-muted text-muted-foreground" },
+  env: { label: "环境变量", className: "bg-info/15 text-info" },
+  custom: { label: "自定义", className: "bg-success/15 text-success" },
+};
+
 /** 更新/回滚徽章 */
 function ActionBadge({ action }: { action: UpdateRecord["action"] }) {
   const { label, icon: Icon } = ACTION_MAP[action];
@@ -160,6 +197,11 @@ export default function UpdatePanel() {
   const [refreshing, setRefreshing] = useState(false);
   const [submitting, setSubmitting] = useState<string | null>(null);
   const [method, setMethod] = useState<UpdateMethod>("build");
+  // GitHub 加速代理：清单（不发网络请求）+ 主动触发的连通性测试结果 + 自定义输入
+  const [proxies, setProxies] = useState<ProxyData | null>(null);
+  const [testingProxies, setTestingProxies] = useState(false);
+  const [savingProxies, setSavingProxies] = useState(false);
+  const [newMirror, setNewMirror] = useState("");
   const seqRef = useRef(0);
   const mountedRef = useRef(true);
 
@@ -201,6 +243,51 @@ export default function UpdatePanel() {
     const timer = setInterval(() => load(false), 5000);
     return () => clearInterval(timer);
   }, [busy, load]);
+
+  /** 拉取加速代理清单；test=true 时并发测试各源连通性（由「测试连通性」按钮主动触发） */
+  const loadProxies = useCallback(async (test = false) => {
+    if (test) setTestingProxies(true);
+    try {
+      const res = await fetch(`/api/update/proxies${test ? "?test=1" : ""}`, { cache: "no-store" });
+      if (!mountedRef.current) return;
+      if (res.ok) setProxies(await res.json());
+      else if (test) toast.error("测试失败，请稍后重试");
+    } catch {
+      if (mountedRef.current && test) toast.error("网络错误，测试失败");
+    } finally {
+      if (mountedRef.current) setTestingProxies(false);
+    }
+  }, []);
+
+  // 面板打开时只取清单（不打网络），避免每次进后台都去探测一圈
+  useEffect(() => {
+    loadProxies(false);
+  }, [loadProxies]);
+
+  /** 保存自定义代理整组列表（添加/删除都走这里），保存后立即重新测试一次 */
+  async function saveMirrors(next: string[]) {
+    setSavingProxies(true);
+    try {
+      const res = await fetch("/api/update/proxies", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mirrors: next }),
+      });
+      const body = (await res.json().catch(() => ({}))) as { custom?: string[]; invalid?: number };
+      if (!res.ok) {
+        toast.error((body as { error?: string }).error || "保存失败");
+        return;
+      }
+      toast.success("代理已保存");
+      if (body.invalid) toast.warning(`已忽略 ${body.invalid} 个非法地址（需以 http:// 或 https:// 开头）`);
+      setNewMirror("");
+      await loadProxies(true);
+    } catch {
+      toast.error("网络错误，保存失败");
+    } finally {
+      if (mountedRef.current) setSavingProxies(false);
+    }
+  }
 
   async function trigger(action: "update" | "rollback", version?: string, description?: string, useMethod?: UpdateMethod) {
     const key = `${action}:${version || "latest"}`;
@@ -514,6 +601,121 @@ export default function UpdatePanel() {
               hint={rollDone ? "当前已是最早的已记录版本" : "完成一次更新或升级后，这里会记录可回滚的历史版本"}
             />
           )}
+        </SectionBlock>
+
+        {/* GitHub 加速代理 */}
+        <SectionBlock
+          title="GitHub 加速代理"
+          subtitle={`${proxies?.sources.length ?? 0} 个源`}
+          dotClass="bg-info"
+          open={false}
+        >
+          <div className="space-y-4">
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              版本检测与更新会并发请求下面这些源，取最快可用的一个。官方源在部分网络下会超时，此时自动降级到代理；
+              单个代理失效不影响其它源，全部不可用时还会降级使用上一次缓存的版本信息。
+            </p>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={testingProxies}
+                onClick={() => loadProxies(true)}
+                className="gap-1.5"
+              >
+                {testingProxies ? <Loader2 className="h-4 w-4 animate-spin" /> : <Activity className="h-4 w-4" />}
+                {testingProxies ? "测试中..." : "测试连通性"}
+              </Button>
+              <span className="text-xs text-muted-foreground">
+                {proxies?.results
+                  ? "最近一次测试结果：见每项右侧"
+                  : "点击后并发测试各源，最慢的源决定耗时（约数秒）"}
+              </span>
+            </div>
+
+            <div className="space-y-2">
+              {(proxies?.sources ?? []).map((s) => {
+                const r = proxies?.results?.find((x) => x.base === s.base);
+                const scope = SCOPE_MAP[s.scope];
+                return (
+                  <div
+                    key={s.base}
+                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-muted/30 px-4 py-2.5"
+                  >
+                    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+                      <span
+                        className={`inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-xs font-medium ${scope.className}`}
+                      >
+                        {scope.label}
+                      </span>
+                      <span className="truncate font-mono text-xs text-foreground">{s.base}</span>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      {r ? (
+                        r.ok ? (
+                          <span className="inline-flex items-center gap-1 text-xs font-medium text-success">
+                            <CheckCircle2 className="h-3.5 w-3.5" /> 可用 {r.ms}ms
+                          </span>
+                        ) : (
+                          <span
+                            className="inline-flex items-center gap-1 text-xs font-medium text-error"
+                            title={r.status ? `HTTP ${r.status}` : r.reason}
+                          >
+                            <XCircle className="h-3.5 w-3.5" /> 不可用（
+                            {r.status ? `HTTP ${r.status}` : r.reason}）
+                          </span>
+                        )
+                      ) : (
+                        <span className="text-xs text-muted-foreground">未测试</span>
+                      )}
+                      {s.scope === "custom" && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={savingProxies}
+                          onClick={() =>
+                            saveMirrors((proxies?.custom ?? []).filter((m) => m !== s.base))
+                          }
+                          className="h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-error"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" /> 删除
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="space-y-2 rounded-lg border border-border bg-muted/20 p-3">
+              <Label htmlFor="newMirror" className="text-xs font-medium text-muted-foreground">
+                自定义代理
+              </Label>
+              <div className="flex flex-wrap items-center gap-2">
+                <Input
+                  id="newMirror"
+                  value={newMirror}
+                  onChange={(e) => setNewMirror(e.target.value)}
+                  placeholder="如 https://hk.gh-proxy.com"
+                  className="h-9 min-w-0 flex-1 font-mono text-xs"
+                />
+                <Button
+                  size="sm"
+                  disabled={savingProxies || !newMirror.trim()}
+                  onClick={() => saveMirrors([...(proxies?.custom ?? []), newMirror.trim()])}
+                  className="gap-1.5"
+                >
+                  {savingProxies ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                  添加
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                只填代理前缀即可（会<b>自动补全</b>上游地址 https://api.github.com/）；若是直连 API 镜像，
+                请填到以 .../api.github.com/ 结尾。保存后立即对版本检测生效，内置代理始终保留。
+              </p>
+            </div>
+          </div>
         </SectionBlock>
 
         {/* 回滚数据快照 */}
