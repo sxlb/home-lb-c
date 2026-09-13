@@ -12,7 +12,11 @@
  *   - lucide 图标："lucide:图标名"（如 "lucide:github"）
  *   - 网络图片：http(s)://... URL
  *   - 随机图："random:关键词"（如 "random:nature"；旧写法 "unsplash:关键词" 仍兼容识别）
+ *
+ * 注：本组件刻意使用原生 <img> 而非 next/image —— 预览对象是管理员即时输入/第三方搜索返回的
+ * 任意外部 URL，走 next/image 需要远程域名白名单且会把不可信图片经优化器代理，故不使用。
  */
+/* eslint-disable @next/next/no-img-element */
 
 import { useState } from "react";
 import { Input } from "@/components/ui/input";

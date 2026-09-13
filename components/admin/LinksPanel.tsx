@@ -435,6 +435,8 @@ export function LinkIconPreview({ icon }: { icon: string }) {
   const imgSrc = resolveIconImageSrc(icon, 40);
   if (imgSrc) {
     return (
+      // 管理员提供的任意外部图标地址，走原生 img（详见 MediaPicker 顶部说明）
+      // eslint-disable-next-line @next/next/no-img-element
       <img
         src={imgSrc}
         alt=""
