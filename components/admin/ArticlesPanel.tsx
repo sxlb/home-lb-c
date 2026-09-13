@@ -9,7 +9,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Plus, Loader2, FileText, FilePen, Pin, Eye, Trash2, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { PanelHeader, EmptyState } from "./panel";
-import { useRegisterSave } from "./GlobalSave";
+import { useGlobalSaveState, useRegisterSave } from "./GlobalSave";
+import { useEditRevision } from "./useEditRevision";
 
 interface ArticleItem {
   id: number;
@@ -42,6 +43,9 @@ export default function ArticlesPanel() {
   // 因此改了 slug 后 URL 必须仍用旧值，否则会 404「文章不存在」
   const [editingSlug, setEditingSlug] = useState<string | null>(null);
   const disposed = useRef(false);
+  const { markEdited, isStale, currentRevision } = useEditRevision();
+  // 全局保存进行中：提示统一由注册中心汇总，面板内不再重复弹
+  const { saving: globalSaving } = useGlobalSaveState();
 
   const load = async () => {
     setLoading(true);
@@ -68,6 +72,7 @@ export default function ArticlesPanel() {
 
   const set = <K extends keyof ArticleItem>(k: K, v: ArticleItem[K]) => {
     setForm((f) => (f ? { ...f, [k]: v } : f));
+    markEdited();
     setDirty(true);
   };
 
@@ -116,6 +121,8 @@ export default function ArticlesPanel() {
       pinned: form.pinned,
     };
 
+    // 记录提交时刻的修订号：请求往返期间用户仍可能继续编辑
+    const savedRevision = currentRevision();
     setSaving(true);
     try {
       const isEdit = !newMode;
@@ -130,6 +137,12 @@ export default function ArticlesPanel() {
         }
       );
       if (res.ok) {
+        if (isStale(savedRevision)) {
+          // 保存期间又有新改动：保留编辑器与脏标记，等用户再存一次
+          if (!globalSaving) toast.warning("已保存，但保存期间又有新的修改，请再次保存");
+          await load();
+          return true;
+        }
         toast.success(isEdit ? "文章已保存" : "文章已创建");
         await load();
         setDirty(false);
@@ -150,13 +163,14 @@ export default function ArticlesPanel() {
     }
   };
 
-  // 接入全局保存：正在编辑的文章表单也能被底部悬浮按钮保存
+  // 接入全局保存：正在编辑的文章表单也能被底部悬浮按钮保存。
+  // 脏标记由本面板 save() 自行维护，注册中心不会代清。
   useRegisterSave({
     id: "articles",
     label: "随笔",
     dirty,
     save,
-    markClean: () => setDirty(false),
+    revision: currentRevision,
     validate: () => collectErrors(),
   });
 

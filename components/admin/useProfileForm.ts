@@ -10,7 +10,8 @@ import {
   setCachedProfile,
   type ProfileShape,
 } from "./profileShared";
-import { useRegisterSave } from "./GlobalSave";
+import { useGlobalSaveState, useRegisterSave, type SaveOutcome } from "./GlobalSave";
+import { useEditRevision } from "./useEditRevision";
 
 /**
  * 站点配置面板通用表单 Hook：
@@ -35,6 +36,9 @@ export function useProfileForm(
   const formRef = useRef<HTMLFormElement>(null);
   /** 载入时的基线快照：用于计算「本面板改动了哪些字段」 */
   const baselineRef = useRef<ProfileShape | null>(null);
+  const { markEdited, isStale, currentRevision } = useEditRevision();
+  // 全局保存进行中：提示统一由注册中心汇总，面板内不再重复弹
+  const { saving: globalSaving } = useGlobalSaveState();
 
   useEffect(() => {
     let cancelled = false;
@@ -53,22 +57,29 @@ export function useProfileForm(
     };
   }, []);
 
-  const set = useCallback(<K extends keyof ProfileShape,>(key: K, value: ProfileShape[K]) => {
-    setProfile((prev) => ({ ...prev, [key]: value }));
-    setDirty(true);
-  }, []);
+  const set = useCallback(
+    <K extends keyof ProfileShape,>(key: K, value: ProfileShape[K]) => {
+      setProfile((prev) => ({ ...prev, [key]: value }));
+      markEdited();
+      setDirty(true);
+    },
+    [markEdited]
+  );
 
   async function save(): Promise<boolean> {
     setSaving(true);
     try {
       // 以服务端最新配置为基线，只提交本面板改动过的字段：
       // 若直接 PUT 本地整份快照（面板挂载时的旧数据），会把其它面板已经保存的改动覆盖回去
+      const patch = profileFieldPatch(profile, baselineRef.current);
+      // 记录提交时刻的修订号：请求往返期间用户仍可能继续编辑
+      const savedRevision = currentRevision();
       const base = await loadProfile(true);
       if (!base) {
         toast.error("读取站点配置失败，请刷新后重试");
         return false;
       }
-      const payload = { ...base, ...profileFieldPatch(profile, baselineRef.current) } as ProfileShape;
+      const payload = { ...base, ...patch } as ProfileShape;
       const res = await fetch("/api/profile", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -76,9 +87,15 @@ export function useProfileForm(
       });
       if (res.ok) {
         setCachedProfile(payload);
+        // 基线推进到「已落库的内容」，无论期间是否有新改动都成立
+        baselineRef.current = payload;
+        if (isStale(savedRevision)) {
+          // 保存期间又有新改动：保留本地输入与脏标记，等用户再存一次
+          if (!globalSaving) toast.warning("已保存，但保存期间又有新的修改，请再次保存");
+          return true;
+        }
         // 本地状态同步为服务端最终值：既包含本面板改动，也吸收其它面板已保存的字段
         setProfile(payload);
-        baselineRef.current = payload;
         toast.success("保存成功");
         setDirty(false);
         return true;
@@ -94,16 +111,23 @@ export function useProfileForm(
     }
   }
 
+  /** 全局保存合并提交后的收尾：只在「提交期间没有新改动」时才清脏标记 */
+  const applySaveOutcome = ({ revision, payload }: SaveOutcome) => {
+    const saved = payload ?? profile;
+    baselineRef.current = saved;
+    if (isStale(revision)) return; // 期间又有新改动：保留本地输入与脏标记
+    setProfile(saved);
+    setDirty(false);
+  };
+
   // 向全局保存注册：仅上报本面板改动过的字段
   useRegisterSave({
     id,
     label,
     dirty,
     profilePatch: () => profileFieldPatch(profile, baselineRef.current),
-    markClean: () => {
-      baselineRef.current = profile;
-      setDirty(false);
-    },
+    revision: currentRevision,
+    markClean: applySaveOutcome,
     validate: () => validate?.() ?? null,
   });
 

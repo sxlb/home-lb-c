@@ -8,7 +8,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Plus, Trash2, Loader2, GripVertical, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { PanelHeader, EmptyState } from "./panel";
-import { useRegisterSave } from "./GlobalSave";
+import { useGlobalSaveState, useRegisterSave } from "./GlobalSave";
+import { useEditRevision } from "./useEditRevision";
 import MediaPicker from "./MediaPicker";
 
 interface SkillItem {
@@ -32,6 +33,9 @@ export default function SkillsPanel() {
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
   const disposed = useRef(false);
+  const { markEdited, isStale, currentRevision } = useEditRevision();
+  // 全局保存进行中：提示统一由注册中心汇总，面板内不再重复弹
+  const { saving: globalSaving } = useGlobalSaveState();
 
   useEffect(() => {
     disposed.current = false;
@@ -52,14 +56,17 @@ export default function SkillsPanel() {
 
   const addItem = () => {
     setItems((p) => [...p, { ...EMPTY, sort: p.length, clientId: nextClientId() }]);
+    markEdited();
     setDirty(true);
   };
   const removeItem = (i: number) => {
     setItems((p) => p.filter((_, idx) => idx !== i));
+    markEdited();
     setDirty(true);
   };
   const update = <K extends keyof SkillItem>(i: number, k: K, v: SkillItem[K]) => {
     setItems((p) => p.map((it, idx) => (idx === i ? { ...it, [k]: v } : it)));
+    markEdited();
     setDirty(true);
   };
 
@@ -77,6 +84,8 @@ export default function SkillsPanel() {
       return false;
     }
     const valid = items.filter((it) => it.name.trim() !== "");
+    // 记录提交时刻的修订号：请求往返期间用户仍可能继续编辑
+    const savedRevision = currentRevision();
 
     setSaving(true);
     try {
@@ -87,6 +96,11 @@ export default function SkillsPanel() {
       });
       if (res.ok) {
         const data = await res.json();
+        if (isStale(savedRevision)) {
+          // 保存期间又有新改动：保留本地列表（含新改动）与脏标记，别用服务端结果覆盖
+          if (!globalSaving) toast.warning("已保存，但保存期间又有新的修改，请再次保存");
+          return true;
+        }
         setItems(data.list);
         setDirty(false);
         toast.success(`技能保存成功：新增 ${data.createdCount} / 更新 ${data.updatedCount} / 删除 ${data.deletedCount}`);
@@ -103,13 +117,14 @@ export default function SkillsPanel() {
     }
   };
 
-  // 接入全局保存：任一页面改动都能被底部悬浮按钮一并保存
+  // 接入全局保存：任一页面改动都能被底部悬浮按钮一并保存。
+  // 脏标记由本面板 save() 自行维护，注册中心不会代清。
   useRegisterSave({
     id: "skills",
     label: "技能云",
     dirty,
     save,
-    markClean: () => setDirty(false),
+    revision: currentRevision,
     validate: () => collectErrors(),
   });
 

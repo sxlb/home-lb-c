@@ -10,7 +10,8 @@ import { toast } from "sonner";
 import { DEFAULT_WELCOME_MESSAGES, DEFAULT_SITE_TITLE, DEFAULT_SITE_DESCRIPTION, DEFAULT_SITE_KEYWORDS } from "@/lib/validation";
 import { LoadingPlaceholder } from "./LinksPanel";
 import { loadProfile, setCachedProfile, hasCachedProfile, profileFieldPatch } from "./profileShared";
-import { useRegisterSave } from "./GlobalSave";
+import { useGlobalSaveState, useRegisterSave, type SaveOutcome } from "./GlobalSave";
+import { useEditRevision } from "./useEditRevision";
 import GithubUserField from "./GithubUserField";
 import EmailField from "./EmailField";
 import UploadButton from "./UploadButton";
@@ -187,6 +188,9 @@ export default function ProfilePanel() {
   const [githubError, setGithubError] = useState<string | null>(null);
   // 载入时的基线快照：用于向全局保存上报「本面板改动了哪些字段」
   const baselineRef = useRef<Profile | null>(null);
+  const { markEdited, isStale, currentRevision } = useEditRevision();
+  // 全局保存进行中：提示统一由注册中心汇总，面板内不再重复弹
+  const { saving: globalSaving } = useGlobalSaveState();
   const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
@@ -226,12 +230,15 @@ export default function ProfilePanel() {
     try {
       // 以服务端最新配置为基线，只提交本面板改动过的字段：
       // 直接 PUT 本地整份快照会把主题/音乐面板已保存的字段覆盖回旧值
+      const patch = profileFieldPatch(profile, baselineRef.current);
+      // 记录提交时刻的修订号：请求往返期间用户仍可能继续编辑
+      const savedRevision = currentRevision();
       const base = await loadProfile(true);
       if (!base) {
         toast.error("读取站点配置失败，请刷新后重试");
         return;
       }
-      const payload = { ...base, ...profileFieldPatch(profile, baselineRef.current) } as Profile;
+      const payload = { ...base, ...patch } as Profile;
       const res = await fetch("/api/profile", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -239,8 +246,14 @@ export default function ProfilePanel() {
       });
       if (res.ok) {
         setCachedProfile(payload);
-        setProfile(payload);
+        // 基线推进到「已落库的内容」，无论期间是否有新改动都成立
         baselineRef.current = payload;
+        if (isStale(savedRevision)) {
+          // 保存期间又有新改动：保留本地输入与脏标记，等用户再存一次
+          if (!globalSaving) toast.warning("已保存，但保存期间又有新的修改，请再次保存");
+          return;
+        }
+        setProfile(payload);
         toast.success("保存成功");
         setDirty(false);
       } else toast.error("保存失败");
@@ -251,16 +264,23 @@ export default function ProfilePanel() {
     }
   }
 
+  /** 全局保存合并提交后的收尾：只在「提交期间没有新改动」时才清脏标记 */
+  const applySaveOutcome = ({ revision, payload }: SaveOutcome) => {
+    const saved = (payload ?? profile) as Profile;
+    baselineRef.current = saved;
+    if (isStale(revision)) return; // 期间又有新改动：保留本地输入与脏标记
+    setProfile(saved);
+    setDirty(false);
+  };
+
   // 接入全局保存：仅上报本面板改动过的字段，避免与主题/音乐面板互相覆盖
   useRegisterSave({
     id: "profile",
     label: "站点信息",
     dirty,
     profilePatch: () => profileFieldPatch(profile, baselineRef.current),
-    markClean: () => {
-      baselineRef.current = profile;
-      setDirty(false);
-    },
+    revision: currentRevision,
+    markClean: applySaveOutcome,
     validate: () => githubError,
   });
 
@@ -269,9 +289,11 @@ export default function ProfilePanel() {
   }
 
   // TSX 中泛型箭头函数需加尾逗号，避免被解析为 JSX；
-  // 任何字段变更都标记 dirty，驱动右下角悬浮保存按钮浮现
+  // 任何字段变更都标记 dirty（并推进编辑修订号），驱动右下角悬浮保存按钮浮现
   const set = <K extends keyof Profile,>(key: K, value: Profile[K]) => {
-    setProfile({ ...profile, [key]: value });
+    // 用函数式更新：同一事件里连续两次 set 不会因为闭包里的旧值而互相覆盖
+    setProfile((prev) => ({ ...prev, [key]: value }));
+    markEdited();
     setDirty(true);
   };
 

@@ -35,10 +35,44 @@ export interface SaveEntry {
   profilePatch?: () => Record<string, unknown> | null;
   /** 自带 API 的保存逻辑，返回是否成功 */
   save?: () => Promise<boolean>;
-  /** 保存成功后清除脏标记 */
-  markClean?: () => void;
+  /** 当前编辑修订号（见 useEditRevision）：用于判断保存期间是否又有新改动 */
+  revision?: () => number;
+  /**
+   * 保存成功后清除脏标记。
+   * 仅 profile 类面板需要实现：它们的写入由注册中心合并后统一发起，
+   * 自带 API 的面板在自己的 save() 里管理脏标记（避免被注册中心提前清掉）。
+   */
+  markClean?: (outcome: SaveOutcome) => void;
   /** 保存前本地校验；返回文案表示阻止保存 */
   validate?: () => string | null;
+}
+
+/** 一次合并保存的结果，回传给 profile 类面板用于决定基线/脏标记 */
+export interface SaveOutcome {
+  /** 本次提交对应的编辑修订号 */
+  revision: number;
+  /** 实际提交到服务端的完整配置（若无则面板沿用自身表单值作基线） */
+  payload?: ProfileShape;
+}
+
+/**
+ * 汇总一次全局保存的结果（纯函数，便于单测）。
+ * 优先级：失败 > 保存期间又有新改动 > 全部成功。
+ */
+export function summarizeSaveOutcome(
+  failed: string[],
+  stillDirty: string[]
+): { level: "success" | "warning" | "error"; message: string } {
+  if (failed.length > 0) {
+    return { level: "error", message: `以下面板保存失败：${failed.join("、")}` };
+  }
+  if (stillDirty.length > 0) {
+    return {
+      level: "warning",
+      message: `已保存，但${stillDirty.join("、")}在保存期间又有新的修改，请再次保存`,
+    };
+  }
+  return { level: "success", message: "全部修改已保存" };
 }
 
 interface GlobalSaveContextValue {
@@ -91,9 +125,13 @@ export function GlobalSaveProvider({ children }: { children: ReactNode }) {
       // 2) profile 类面板：合并补丁后一次性提交
       const profileEntries = entries.filter((e) => e.profilePatch);
       const merged: Record<string, unknown> = {};
+      // 修订号紧挨着补丁读取：保证「提交内容」与「提交时刻」严格对应，
+      // 之后面板据此判断保存期间是否又有新改动
+      const revisions = new Map<string, number>();
       for (const entry of profileEntries) {
         const patch = entry.profilePatch?.();
         if (patch) Object.assign(merged, patch);
+        revisions.set(entry.id, entry.revision?.() ?? 0);
       }
       if (profileEntries.length > 0) {
         const base = await loadProfile(true);
@@ -113,27 +151,34 @@ export function GlobalSaveProvider({ children }: { children: ReactNode }) {
           return;
         }
         setCachedProfile(payload);
-        profileEntries.forEach((entry) => entry.markClean?.());
+        profileEntries.forEach((entry) =>
+          entry.markClean?.({ revision: revisions.get(entry.id) ?? 0, payload })
+        );
       }
 
-      // 3) 自带 API 的面板：串行保存（SQLite 单写，顺序执行更稳）
+      // 3) 自带 API 的面板：串行保存（SQLite 单写，顺序执行更稳）。
+      //    这里不代它们清脏标记：各自的 save() 会依据「保存期间是否又有新改动」
+      //    自行决定能否清，注册中心提前清除会让用户误以为已保存。
       const failed: string[] = [];
       for (const entry of entries) {
         if (!entry.save) continue;
         try {
           const ok = await entry.save();
-          if (ok) entry.markClean?.();
-          else failed.push(entry.label);
+          if (!ok) failed.push(entry.label);
         } catch {
           failed.push(entry.label);
         }
       }
 
-      if (failed.length > 0) {
-        toast.error(`以下面板保存失败：${failed.join("、")}`);
-      } else {
-        toast.success("全部修改已保存");
-      }
+      // 保存结束后重新读取注册表：拿到各面板最新的脏状态
+      // （保存期间用户继续编辑的面板仍为脏，提示再存一次，而不是谎报「已保存」）
+      const stillDirty = Array.from(entriesRef.current.values())
+        .filter((e) => e.dirty)
+        .map((e) => e.label);
+      const outcome = summarizeSaveOutcome(failed, stillDirty);
+      if (outcome.level === "error") toast.error(outcome.message);
+      else if (outcome.level === "warning") toast.warning(outcome.message);
+      else toast.success(outcome.message);
     } finally {
       setSaving(false);
     }
@@ -182,7 +227,8 @@ export function useRegisterSave(entry: SaveEntry) {
         ? () => latest.current.profilePatch?.() ?? null
         : undefined,
       save: latest.current.save ? () => latest.current.save?.() ?? Promise.resolve(true) : undefined,
-      markClean: () => latest.current.markClean?.(),
+      revision: () => latest.current.revision?.() ?? 0,
+      markClean: (outcome) => latest.current.markClean?.(outcome),
       validate: () => latest.current.validate?.() ?? null,
     });
     return () => unregister(id);

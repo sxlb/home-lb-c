@@ -9,7 +9,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Plus, Trash2, Pencil, ChevronUp, ChevronDown, Pin, Loader2, Megaphone } from "lucide-react";
 import { toast } from "sonner";
 import { PanelHeader, EmptyState } from "./panel";
-import { useRegisterSave } from "./GlobalSave";
+import { useGlobalSaveState, useRegisterSave } from "./GlobalSave";
+import { useEditRevision } from "./useEditRevision";
 
 /** 公告：服务端字段 + 前端本地唯一标识（新增行在保存前使用，服务端不持久化） */
 interface Announcement {
@@ -47,6 +48,9 @@ export default function AnnouncementPanel() {
   // 同一时间只展开一行（-1 表示全部收起）
   const [expandedIndex, setExpandedIndex] = useState(-1);
   const mountedRef = useRef(true);
+  const { markEdited, isStale, currentRevision } = useEditRevision();
+  // 全局保存进行中：提示统一由注册中心汇总，面板内不再重复弹
+  const { saving: globalSaving } = useGlobalSaveState();
 
   useEffect(() => {
     mountedRef.current = true;
@@ -83,12 +87,14 @@ export default function AnnouncementPanel() {
       { title: "", content: "", pinned: false, enabled: true, sort: prev.length, startAt: null, endAt: null, clientId: nextClientId() },
     ]);
     setExpandedIndex(items.length);
+    markEdited();
     setDirty(true);
   };
 
   const removeItem = (index: number) => {
     setItems((prev) => prev.filter((_, i) => i !== index));
     setExpandedIndex(-1);
+    markEdited();
     setDirty(true);
   };
 
@@ -98,6 +104,7 @@ export default function AnnouncementPanel() {
       next[index] = { ...next[index], [field]: value };
       return next;
     });
+    markEdited();
     setDirty(true);
   };
 
@@ -133,6 +140,8 @@ export default function AnnouncementPanel() {
       return false;
     }
 
+    // 记录提交时刻的修订号：请求往返期间用户仍可能继续编辑
+    const savedRevision = currentRevision();
     setSaving(true);
     try {
       const valid = items
@@ -157,6 +166,11 @@ export default function AnnouncementPanel() {
         toast.error(d.error || "保存失败");
         return false;
       }
+      if (isStale(savedRevision)) {
+        // 保存期间又有新改动：保留本地列表（含新改动）与脏标记，别用服务端结果覆盖
+        if (!globalSaving) toast.warning("已保存，但保存期间又有新的修改，请再次保存");
+        return true;
+      }
       toast.success("公告已保存");
       const data = await res.json();
       if (data && Array.isArray(data.list)) setItems(data.list);
@@ -172,13 +186,13 @@ export default function AnnouncementPanel() {
     }
   };
 
-  // 接入全局保存
+  // 接入全局保存。脏标记由本面板 save() 自行维护，注册中心不会代清。
   useRegisterSave({
     id: "announcements",
     label: "公告",
     dirty,
     save,
-    markClean: () => setDirty(false),
+    revision: currentRevision,
     validate: () => collectErrors(),
   });
 

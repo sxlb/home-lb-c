@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { useRegisterSave } from "./GlobalSave";
+import { useGlobalSaveState, useRegisterSave } from "./GlobalSave";
+import { useEditRevision } from "./useEditRevision";
 
 /** 后台链接项公共结构（社交链接 / 网站链接 / 友情链接） */
 interface LinkItem {
@@ -58,6 +59,9 @@ export function useLinkList<T extends LinkItem>(
   const [saving, setSaving] = useState(false);
   // 是否存在未保存的修改：驱动「● 有未保存的更改」提示（统一三个链接面板）
   const [dirty, setDirty] = useState(false);
+  const { markEdited, isStale, currentRevision } = useEditRevision();
+  // 全局保存进行中：提示统一由注册中心汇总，面板内不再重复弹
+  const { saving: globalSaving } = useGlobalSaveState();
 
   /** 拉取服务端列表；失败返回 null（内部已 toast） */
   const fetchList = useCallback(async (): Promise<T[] | null> => {
@@ -92,22 +96,31 @@ export function useLinkList<T extends LinkItem>(
       ...prev,
       { ...emptyItem, sort: prev.length, clientId: nextClientId() } as T,
     ]);
+    markEdited();
     setDirty(true);
-  }, [emptyItem]);
+  }, [emptyItem, markEdited]);
 
-  const removeItem = useCallback((index: number) => {
-    setItems((prev) => prev.filter((_, i) => i !== index));
-    setDirty(true);
-  }, []);
+  const removeItem = useCallback(
+    (index: number) => {
+      setItems((prev) => prev.filter((_, i) => i !== index));
+      markEdited();
+      setDirty(true);
+    },
+    [markEdited]
+  );
 
-  const updateItem = useCallback(<K extends keyof T>(index: number, field: K, value: T[K]) => {
-    setItems((prev) => {
-      const updated = [...prev];
-      updated[index] = { ...updated[index], [field]: value };
-      return updated;
-    });
-    setDirty(true);
-  }, []);
+  const updateItem = useCallback(
+    <K extends keyof T>(index: number, field: K, value: T[K]) => {
+      setItems((prev) => {
+        const updated = [...prev];
+        updated[index] = { ...updated[index], [field]: value };
+        return updated;
+      });
+      markEdited();
+      setDirty(true);
+    },
+    [markEdited]
+  );
 
   /** 本地逐行预校验：定位到具体行，避免整单 400 后无从排查 */
   const collectErrors = useCallback((): string[] => {
@@ -133,16 +146,22 @@ export function useLinkList<T extends LinkItem>(
     setSaving(true);
     try {
       const valid = items.filter((l) => l.name.trim() !== "");
+      // 记录提交时刻的修订号：请求往返期间用户仍可能继续编辑
+      const savedRevision = currentRevision();
       const res = await fetch(apiPath, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(valid),
       });
       if (res.ok) {
+        if (isStale(savedRevision)) {
+          // 保存期间又有新改动：保留本地列表（含新改动）与脏标记，等用户再存一次。
+          // 此时跳过「刷新列表」，否则服务端结果会把刚敲的内容覆盖掉。
+          if (!globalSaving) toast.warning("已保存，但保存期间又有新的修改，请再次保存");
+          return true;
+        }
         toast.success(successMessage);
-        // 以服务端为最终真相重新拉取：既同步 id/sort，又保证本地与库一致。
-        // 注意这里会用服务端结果整体替换本地列表（保存期间的新增输入会被覆盖，属刻意取舍：
-        // 列表是「整表 PUT」语义，保留半成品行反而会与库不一致）
+        // 以服务端为最终真相重新拉取：既同步 id/sort，又保证本地与库一致
         const fresh = await fetchList();
         if (fresh) setItems(fresh);
         else toast.warning("已保存，但刷新列表失败，请手动刷新页面");
@@ -158,9 +177,10 @@ export function useLinkList<T extends LinkItem>(
     } finally {
       setSaving(false);
     }
-  }, [items, apiPath, successMessage, fetchList, collectErrors]);
+  }, [items, apiPath, successMessage, fetchList, collectErrors, currentRevision, isStale, globalSaving]);
 
-  // 向全局保存注册：id 缺省时用 apiPath 派生，保证同一面板稳定唯一
+  // 向全局保存注册：id 缺省时用 apiPath 派生，保证同一面板稳定唯一。
+  // 脏标记由本 hook 的 save() 自行维护，注册中心不会代清。
   const entryId = id ?? `links:${apiPath}`;
   const entryLabel = label ?? successMessage;
   useRegisterSave({
@@ -168,7 +188,7 @@ export function useLinkList<T extends LinkItem>(
     label: entryLabel,
     dirty,
     save,
-    markClean: () => setDirty(false),
+    revision: currentRevision,
     validate: () => {
       const errors = collectErrors();
       return errors.length > 0 ? errors.join("；") : null;
