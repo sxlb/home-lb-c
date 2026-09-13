@@ -9,7 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
 import { DEFAULT_WELCOME_MESSAGES, DEFAULT_SITE_TITLE, DEFAULT_SITE_DESCRIPTION, DEFAULT_SITE_KEYWORDS } from "@/lib/validation";
 import { LoadingPlaceholder } from "./LinksPanel";
-import { loadProfile, setCachedProfile, hasCachedProfile } from "./profileShared";
+import { loadProfile, setCachedProfile, hasCachedProfile, profileFieldPatch } from "./profileShared";
 import { useRegisterSave } from "./GlobalSave";
 import GithubUserField from "./GithubUserField";
 import EmailField from "./EmailField";
@@ -224,14 +224,23 @@ export default function ProfilePanel() {
     }
     setSaving(true);
     try {
+      // 以服务端最新配置为基线，只提交本面板改动过的字段：
+      // 直接 PUT 本地整份快照会把主题/音乐面板已保存的字段覆盖回旧值
+      const base = await loadProfile(true);
+      if (!base) {
+        toast.error("读取站点配置失败，请刷新后重试");
+        return;
+      }
+      const payload = { ...base, ...profileFieldPatch(profile, baselineRef.current) } as Profile;
       const res = await fetch("/api/profile", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(profile),
+        body: JSON.stringify(payload),
       });
       if (res.ok) {
-        setCachedProfile(profile);
-        baselineRef.current = profile;
+        setCachedProfile(payload);
+        setProfile(payload);
+        baselineRef.current = payload;
         toast.success("保存成功");
         setDirty(false);
       } else toast.error("保存失败");
@@ -247,15 +256,7 @@ export default function ProfilePanel() {
     id: "profile",
     label: "站点信息",
     dirty,
-    profilePatch: () => {
-      const baseline = baselineRef.current;
-      if (!baseline) return null;
-      const patch: Record<string, unknown> = {};
-      for (const key of Object.keys(profile) as (keyof Profile)[]) {
-        if (profile[key] !== baseline[key]) patch[key] = profile[key];
-      }
-      return patch;
-    },
+    profilePatch: () => profileFieldPatch(profile, baselineRef.current),
     markClean: () => {
       baselineRef.current = profile;
       setDirty(false);

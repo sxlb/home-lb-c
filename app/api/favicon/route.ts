@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({
         ok: false,
         host,
-        error: `未探测到 ${host} 的可用图标（站点可能未提供 favicon）`,
+        error: `未探测到 ${host} 的可用图标（域名无法解析，或站点未提供 favicon）`,
       });
     }
 

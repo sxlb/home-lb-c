@@ -170,12 +170,18 @@ export function useRegisterSave(entry: SaveEntry) {
 
   useEffect(() => {
     if (!register || !unregister) return;
+    // 只暴露面板**真正提供**的能力：saveAll 以「是否提供 profilePatch」区分
+    // profile 类面板（合并补丁一次性提交）与自带 API 的面板（各自 save）。
+    // 若无条件提供空函数，所有面板都会被当成 profile 面板，导致合并分支提交后
+    // 就把全部面板的脏标记清掉 —— 一旦某个面板的 save() 随后失败，用户会误以为已保存。
     register({
       id,
       label,
       dirty,
-      profilePatch: () => latest.current.profilePatch?.() ?? null,
-      save: () => latest.current.save?.() ?? Promise.resolve(true),
+      profilePatch: latest.current.profilePatch
+        ? () => latest.current.profilePatch?.() ?? null
+        : undefined,
+      save: latest.current.save ? () => latest.current.save?.() ?? Promise.resolve(true) : undefined,
       markClean: () => latest.current.markClean?.(),
       validate: () => latest.current.validate?.() ?? null,
     });

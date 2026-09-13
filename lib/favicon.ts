@@ -50,28 +50,69 @@ export function faviconCandidates(host: string): FaviconCandidate[] {
   ];
 }
 
+/** 最多允许跟随的重定向跳数 */
+const MAX_REDIRECTS = 3;
+/** octet-stream 图标的体积上限：超过视为异常响应，避免把内存打满 */
+const MAX_ICON_BYTES = 512 * 1024;
+const REQUEST_HEADERS = { "User-Agent": "home-lb-favicon/1.0", Accept: "image/*,*/*;q=0.8" };
+
+/**
+ * 带「逐跳 SSRF 校验」的 GET。
+ *
+ * fetch 的 `redirect: "follow"` 会静默跟随 3xx，跳转后的地址不再经过校验 —— 攻击者可用一个
+ * 公网域名 302 到内网/云元数据地址（盲 SSRF）。因此这里手动跟随，每一跳都重新校验。
+ * 校验失败会抛错，由调用方统一捕获。
+ */
+async function fetchWithSafeRedirects(url: string, signal: AbortSignal): Promise<Response | null> {
+  let current = url;
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    await assertPublicHttpUrl(current);
+    const res = await fetch(current, {
+      method: "GET",
+      redirect: "manual",
+      cache: "no-store",
+      signal,
+      headers: REQUEST_HEADERS,
+    });
+    if (res.status < 300 || res.status >= 400) return res;
+    const location = res.headers.get("location");
+    if (!location) return null;
+    current = new URL(location, current).toString();
+  }
+  return null; // 跳转次数超限
+}
+
+/** 统计响应体大小，超过 max 即提前中断，避免异常大响应占满内存 */
+async function readBodySize(res: Response, max: number): Promise<number> {
+  const reader = res.body?.getReader();
+  if (!reader) {
+    const buf = await res.arrayBuffer();
+    return buf.byteLength;
+  }
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value?.byteLength ?? 0;
+    if (total > max) {
+      await reader.cancel().catch(() => {});
+      break;
+    }
+  }
+  return total;
+}
+
 /** 探测单个候选地址是否返回真实图片（带 SSRF 校验与超时） */
 async function isReachable(url: string, timeoutMs: number): Promise<boolean> {
   try {
-    await assertPublicHttpUrl(url);
-  } catch {
-    return false;
-  }
-  try {
-    const res = await fetch(url, {
-      method: "GET",
-      redirect: "follow",
-      cache: "no-store",
-      signal: AbortSignal.timeout(timeoutMs),
-      headers: { "User-Agent": "home-lb-favicon/1.0", Accept: "image/*,*/*;q=0.8" },
-    });
-    if (!res.ok) return false;
+    const res = await fetchWithSafeRedirects(url, AbortSignal.timeout(timeoutMs));
+    if (!res || !res.ok) return false;
     const contentType = (res.headers.get("content-type") || "").toLowerCase();
     if (contentType.startsWith("image/")) return true;
-    // 少数站点以 octet-stream 返回图标：读少量数据确认非空，避免把空响应当成图标
+    // 少数站点以 octet-stream 返回图标：读少量数据确认非空且未超上限
     if (contentType.includes("octet-stream")) {
-      const buf = await res.arrayBuffer();
-      return buf.byteLength > 0;
+      const size = await readBodySize(res, MAX_ICON_BYTES);
+      return size > 0 && size <= MAX_ICON_BYTES;
     }
     // 明确是 HTML（常见于 SPA 把未知路径回落到首页）：视为无效
     return false;

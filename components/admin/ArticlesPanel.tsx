@@ -38,6 +38,9 @@ export default function ArticlesPanel() {
   const [form, setForm] = useState<ArticleItem | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [newMode, setNewMode] = useState(false);
+  // 进入编辑时该文章的原始 slug：PUT 按 URL 里的 slug 定位旧记录，
+  // 因此改了 slug 后 URL 必须仍用旧值，否则会 404「文章不存在」
+  const [editingSlug, setEditingSlug] = useState<string | null>(null);
   const disposed = useRef(false);
 
   const load = async () => {
@@ -71,6 +74,7 @@ export default function ArticlesPanel() {
   const startNew = () => {
     setNewMode(true);
     setSelectedId(null);
+    setEditingSlug(null);
     setForm({ ...EMPTY, id: -1, viewCount: 0 } as ArticleItem);
     setDirty(false);
   };
@@ -78,6 +82,7 @@ export default function ArticlesPanel() {
   const openArticle = (a: ArticleItem) => {
     setNewMode(false);
     setSelectedId(a.id);
+    setEditingSlug(a.slug);
     setForm({ ...a });
     setDirty(false);
   };
@@ -114,17 +119,23 @@ export default function ArticlesPanel() {
     setSaving(true);
     try {
       const isEdit = !newMode;
-      const res = await fetch(isEdit ? `/api/articles/${encodeURIComponent(form.slug)}` : "/api/articles", {
-        method: isEdit ? "PUT" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
+      // 编辑态用「原始 slug」定位记录（后端 PUT 以旧 slug 查记录、用 body 里的新 slug 更新）
+      const targetSlug = editingSlug ?? form.slug.trim();
+      const res = await fetch(
+        isEdit ? `/api/articles/${encodeURIComponent(targetSlug)}` : "/api/articles",
+        {
+          method: isEdit ? "PUT" : "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        }
+      );
       if (res.ok) {
         toast.success(isEdit ? "文章已保存" : "文章已创建");
         await load();
         setDirty(false);
         setNewMode(false);
         setSelectedId(null);
+        setEditingSlug(null);
         setForm(null);
         return true;
       }

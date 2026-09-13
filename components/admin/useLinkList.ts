@@ -140,10 +140,12 @@ export function useLinkList<T extends LinkItem>(
       });
       if (res.ok) {
         toast.success(successMessage);
-        // 以服务端为最终真相重新拉取：既同步 id/sort，又避免旧快照
-        // 覆盖用户在保存期间的新输入（响应返回时 items 已变化）
+        // 以服务端为最终真相重新拉取：既同步 id/sort，又保证本地与库一致。
+        // 注意这里会用服务端结果整体替换本地列表（保存期间的新增输入会被覆盖，属刻意取舍：
+        // 列表是「整表 PUT」语义，保留半成品行反而会与库不一致）
         const fresh = await fetchList();
         if (fresh) setItems(fresh);
+        else toast.warning("已保存，但刷新列表失败，请手动刷新页面");
         setDirty(false);
         return true;
       }

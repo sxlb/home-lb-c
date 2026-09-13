@@ -21,6 +21,16 @@ const SUB_TABS: { id: LinkSubTab; label: string; icon: typeof Share2 }[] = [
 
 export default function LinksManager() {
   const [sub, setSub] = useState<LinkSubTab>("social");
+  // 已访问过的子面板保持挂载（未激活的用 CSS 隐藏）：切子 Tab 不再销毁列表状态，
+  // 否则刚编辑但未保存的链接会被直接丢弃，全局保存也拿不到它们
+  const [mountedSubs, setMountedSubs] = useState<Set<LinkSubTab>>(
+    () => new Set<LinkSubTab>(["social"])
+  );
+
+  const selectSub = (next: LinkSubTab) => {
+    setSub(next);
+    setMountedSubs((prev) => (prev.has(next) ? prev : new Set(prev).add(next)));
+  };
 
   return (
     <div className="space-y-4">
@@ -33,7 +43,7 @@ export default function LinksManager() {
             <button
               key={t.id}
               type="button"
-              onClick={() => setSub(t.id)}
+              onClick={() => selectSub(t.id)}
               className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-2 text-sm transition-all duration-150 ease-out ${
                 active
                   ? "bg-primary text-primary-foreground font-medium shadow-sm"
@@ -57,30 +67,38 @@ export default function LinksManager() {
         </span>
       </div>
 
-      {sub === "social" && (
-        <LinksPanel
-          apiPath="/api/social-links"
-          emptyText="暂无社交链接，点击右上角「添加链接」创建"
-          successMessage="社交链接保存成功"
-          tabLabel="社交链接"
-          showTip
-          namePlaceholder="如 GitHub"
-          iconPlaceholder="图标名 / 图片URL / random:关键词"
-          urlPlaceholder="https://github.com/yourname 或 mailto:xxx"
-        />
+      {mountedSubs.has("social") && (
+        <div className={sub === "social" ? "" : "hidden"}>
+          <LinksPanel
+            apiPath="/api/social-links"
+            emptyText="暂无社交链接，点击右上角「添加链接」创建"
+            successMessage="社交链接保存成功"
+            tabLabel="社交链接"
+            showTip
+            namePlaceholder="如 GitHub"
+            iconPlaceholder="图标名 / 图片URL / random:关键词"
+            urlPlaceholder="https://github.com/yourname 或 mailto:xxx"
+          />
+        </div>
       )}
-      {sub === "site" && (
-        <LinksPanel
-          apiPath="/api/site-links"
-          emptyText="暂无网站链接，点击右上角「添加链接」创建"
-          successMessage="网站链接保存成功"
-          tabLabel="网站链接"
-          namePlaceholder="如 博客"
-          iconPlaceholder="图标名 / 图片URL / random:关键词"
-          urlPlaceholder="https://blog.example.com"
-        />
+      {mountedSubs.has("site") && (
+        <div className={sub === "site" ? "" : "hidden"}>
+          <LinksPanel
+            apiPath="/api/site-links"
+            emptyText="暂无网站链接，点击右上角「添加链接」创建"
+            successMessage="网站链接保存成功"
+            tabLabel="网站链接"
+            namePlaceholder="如 博客"
+            iconPlaceholder="图标名 / 图片URL / random:关键词"
+            urlPlaceholder="https://blog.example.com"
+          />
+        </div>
       )}
-      {sub === "friend" && <FriendLinksPanel />}
+      {mountedSubs.has("friend") && (
+        <div className={sub === "friend" ? "" : "hidden"}>
+          <FriendLinksPanel />
+        </div>
+      )}
     </div>
   );
 }

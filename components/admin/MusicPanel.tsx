@@ -9,7 +9,7 @@ import { useProfileForm } from "./useProfileForm";
 import { SONG_SERVERS, SONG_API_PRESETS, selectClass } from "./profileShared";
 
 export default function MusicPanel() {
-  const { profile, loading, saving, dirty, set, save, formRef } = useProfileForm({ id: "music", label: "音乐设置" });
+  const { profile, loading, saving, set, save } = useProfileForm({ id: "music", label: "音乐设置" });
 
   if (loading) {
     return <LoadingPlaceholder />;
@@ -19,7 +19,7 @@ export default function MusicPanel() {
     <Card>
       {/* 页面级标题头由 admin/page.tsx 提供，卡内不再重复标题 */}
       <CardContent>
-        <form ref={formRef} onSubmit={(e) => { e.preventDefault(); save(); }} className="space-y-3 pb-16">
+        <form onSubmit={(e) => { e.preventDefault(); save(); }} className="space-y-3 pb-16">
           <div className="space-y-5 rounded-lg border border-border bg-card px-5 py-5 shadow-sm">
             <div className="space-y-2">
               <Label htmlFor="songApiPreset">选择 API 源</Label>
@@ -121,18 +121,6 @@ export default function MusicPanel() {
             {saving ? "保存中..." : "保存音乐设置"}
           </Button>
         </form>
-
-        {/* 右下角悬浮保存 */}
-        {dirty && (
-          <button
-            type="button"
-            onClick={() => formRef.current?.requestSubmit()}
-            disabled={saving}
-            className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground shadow-lg shadow-black/40 transition-transform hover:scale-105 active:scale-95 disabled:opacity-60"
-          >
-            {saving ? "保存中..." : "保存"}
-          </button>
-        )}
       </CardContent>
     </Card>
   );

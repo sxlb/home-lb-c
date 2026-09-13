@@ -54,8 +54,21 @@ function RangeField({
   );
 }
 
+/** 颜色字段格式校验：非空须为合法 hex（与后端 zod 一致），返回文案表示不通过 */
+function validateColors(profile: { accentColor: string; avatarBorderColor: string }): string | null {
+  const bad = [profile.accentColor, profile.avatarBorderColor].find(
+    (c) => c.trim() !== "" && !/^#[0-9a-fA-F]{3,8}$/.test(c.trim())
+  );
+  return bad === undefined ? null : `颜色值不合法：${bad}（应为 #RRGGBB 格式）`;
+}
+
 export default function ThemePanel() {
-  const { profile, loading, saving, dirty, set, save, formRef } = useProfileForm({ id: "theme", label: "主题与壁纸" });
+  // validate 注册到全局保存：否则点「保存全部修改」会绕过颜色校验，被服务端 zod 拒绝后整批失败
+  const { profile, loading, saving, set, save } = useProfileForm({
+    id: "theme",
+    label: "主题与壁纸",
+    validate: () => validateColors(profile),
+  });
 
   if (loading) {
     return <LoadingPlaceholder />;
@@ -74,15 +87,12 @@ export default function ThemePanel() {
           />
         </div>
         <form
-          ref={formRef}
           onSubmit={(e) => {
             e.preventDefault();
             // 颜色字段格式校验：非空须为合法 hex（与后端 zod 一致），避免保存非法值
-            const badColor = [profile.accentColor, profile.avatarBorderColor].find(
-              (c) => c.trim() !== "" && !/^#[0-9a-fA-F]{3,8}$/.test(c.trim())
-            );
-            if (badColor !== undefined) {
-              toast.error(`颜色值不合法：${badColor}（应为 #RRGGBB 格式）`);
+            const message = validateColors(profile);
+            if (message) {
+              toast.error(message);
               return;
             }
             save();
@@ -284,18 +294,6 @@ export default function ThemePanel() {
             {saving ? "保存中..." : "保存主题设置"}
           </Button>
         </form>
-
-        {/* 右下角悬浮保存 */}
-        {dirty && (
-          <button
-            type="button"
-            onClick={() => formRef.current?.requestSubmit()}
-            disabled={saving}
-            className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground shadow-lg shadow-black/40 transition-transform hover:scale-105 active:scale-95 disabled:opacity-60"
-          >
-            {saving ? "保存中..." : "保存"}
-          </button>
-        )}
       </CardContent>
     </Card>
   );

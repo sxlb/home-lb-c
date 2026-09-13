@@ -154,6 +154,29 @@ export const rangeClass = "w-full accent-primary admin-range";
 let cachedProfile: ProfileShape | null = null;
 let inflightProfile: Promise<ProfileShape | null> | null = null;
 
+/**
+ * 计算「本面板相对基线改过哪些字段」（仅含真正变化的键）。
+ *
+ * 三个 profile 面板（站点信息/主题/音乐）都读写同一份完整配置：如果各自把本地整份
+ * 快照 PUT 回去，用旧快照就会覆盖别的面板已经保存的字段。因此保存时必须只提交本面板
+ * 改动过的字段，再与服务端最新基线合并后提交。
+ *
+ * @param current 面板当前表单值
+ * @param baseline 面板载入（或上次保存成功）时的值；为 null 表示尚未载入，视为无改动
+ */
+export function profileFieldPatch<T extends object, B extends object>(
+  current: T,
+  baseline: B | null | undefined
+): Record<string, unknown> {
+  if (!baseline) return {};
+  const base = baseline as Record<string, unknown>;
+  const patch: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(current)) {
+    if (value !== base[key]) patch[key] = value;
+  }
+  return patch;
+}
+
 export async function loadProfile(force = false): Promise<ProfileShape | null> {
   if (!force && cachedProfile) return cachedProfile;
   if (!inflightProfile) {

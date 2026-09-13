@@ -102,4 +102,51 @@ describe("probeFavicon（候选源探测策略）", () => {
     expect(requested).toContain(FOURTH.replace(HOST, "sxlb.xyz"));
     expect(requested.every((u) => u.includes("sxlb.xyz"))).toBe(true);
   });
+
+  it("重定向到内网地址时不跟随（防盲 SSRF）", async () => {
+    // SSRF 校验对 127.0.0.1 抛错，模拟 lib/ssrf 的真实行为
+    mocks.assertPublicHttpUrl.mockImplementation(async (u: string) => {
+      if (u.includes("127.0.0.1")) throw new Error("目标地址为内网/保留地址，已拒绝");
+    });
+    const fetchMock = vi.fn(async (url: string | URL | Request) => {
+      const u = String(url);
+      if (u === PRIMARY) {
+        return new Response(null, { status: 302, headers: { location: "http://127.0.0.1/secret" } });
+      }
+      return imageResponse("image/png", 404);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    expect(await probeFavicon(HOST)).toBeNull();
+    // 关键：从未真正请求过内网地址
+    expect(fetchMock.mock.calls.every(([u]) => !String(u).includes("127.0.0.1"))).toBe(true);
+  });
+
+  it("重定向到公网地址时正常跟随（不影响真实图标源）", async () => {
+    const fetchMock = vi.fn(async (url: string | URL | Request) => {
+      const u = String(url);
+      if (u === PRIMARY) {
+        return new Response(null, { status: 302, headers: { location: "https://cdn.example.com/icon.png" } });
+      }
+      if (u === "https://cdn.example.com/icon.png") return imageResponse("image/png");
+      return imageResponse("image/png", 404);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    expect((await probeFavicon(HOST))?.url).toBe(PRIMARY);
+  });
+
+  it("重定向次数超过上限时放弃该候选", async () => {
+    let n = 0;
+    const fetchMock = vi.fn(async () => {
+      n += 1;
+      return new Response(null, {
+        status: 302,
+        headers: { location: `https://loop.example.com/${n}` },
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    expect(await probeFavicon(HOST)).toBeNull();
+  });
 });
