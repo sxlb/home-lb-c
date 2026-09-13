@@ -167,11 +167,11 @@ export default function SkillsPanel() {
             <div className="grid gap-2.5 pr-8 sm:grid-cols-[minmax(0,1fr)_110px_minmax(0,1fr)_70px]">
               <div className="space-y-1">
                 <Label className="text-xs text-muted-foreground">技能名</Label>
-                <Input value={it.name} onChange={(e) => update(i, "name", e.target.value)} placeholder="如 TypeScript" className="h-8 text-sm" />
+                <Input value={it.name} onChange={(e) => update(i, "name", e.target.value)} placeholder="如 TypeScript" className="h-10 sm:h-8" />
               </div>
               <div className="space-y-1">
                 <Label className="text-xs text-muted-foreground">熟练度</Label>
-                <Input type="number" min={0} max={100} value={it.level} onChange={(e) => update(i, "level", Number(e.target.value))} className="h-8 text-sm" />
+                <Input type="number" min={0} max={100} value={it.level} onChange={(e) => update(i, "level", Number(e.target.value))} className="h-10 sm:h-8" />
               </div>
               <div className="space-y-1">
                 <Label htmlFor={`skill-icon-${i}`} className="text-xs text-muted-foreground">图标</Label>
@@ -184,7 +184,7 @@ export default function SkillsPanel() {
               </div>
               <div className="space-y-1">
                 <Label className="text-xs text-muted-foreground">排序</Label>
-                <Input type="number" min={0} value={it.sort} onChange={(e) => update(i, "sort", e.target.value === "" ? 0 : Number(e.target.value))} className="h-8 text-sm" />
+                <Input type="number" min={0} value={it.sort} onChange={(e) => update(i, "sort", e.target.value === "" ? 0 : Number(e.target.value))} className="h-10 sm:h-8" />
               </div>
             </div>
           </div>

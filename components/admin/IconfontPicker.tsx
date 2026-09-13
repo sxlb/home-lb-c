@@ -101,7 +101,7 @@ export default function IconfontPicker({ value, onChange }: Props) {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="搜索图标（如 github）"
-              className="h-8"
+              className="h-10 sm:h-8"
               autoFocus
             />
           </div>

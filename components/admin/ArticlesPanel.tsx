@@ -262,28 +262,28 @@ export default function ArticlesPanel() {
               <div className="grid gap-2.5 sm:grid-cols-2">
                 <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">标题</Label>
-                  <Input value={form.title} onChange={(e) => set("title", e.target.value)} placeholder="文章标题" className="h-8 text-sm" />
+                  <Input value={form.title} onChange={(e) => set("title", e.target.value)} placeholder="文章标题" className="h-10 sm:h-8" />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">链接标识 (slug)</Label>
-                  <Input value={form.slug} onChange={(e) => set("slug", e.target.value)} placeholder="my-first-post（小写字母/数字/-）" className="h-8 text-sm font-mono" />
+                  <Input value={form.slug} onChange={(e) => set("slug", e.target.value)} placeholder="my-first-post（小写字母/数字/-）" className="h-10 sm:h-8 font-mono" />
                 </div>
               </div>
 
               <div className="grid gap-2.5 sm:grid-cols-2">
                 <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">封面图</Label>
-                  <Input value={form.cover} onChange={(e) => set("cover", e.target.value)} placeholder="https://… 或 /api/uploads/…（可选）" className="h-8 text-sm" />
+                  <Input value={form.cover} onChange={(e) => set("cover", e.target.value)} placeholder="https://… 或 /api/uploads/…（可选）" className="h-10 sm:h-8" />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">标签（逗号分隔）</Label>
-                  <Input value={form.tags} onChange={(e) => set("tags", e.target.value)} placeholder="随笔, 技术" className="h-8 text-sm" />
+                  <Input value={form.tags} onChange={(e) => set("tags", e.target.value)} placeholder="随笔, 技术" className="h-10 sm:h-8" />
                 </div>
               </div>
 
               <div className="space-y-1">
                 <Label className="text-xs text-muted-foreground">摘要（留空自动截取正文）</Label>
-                <Input value={form.excerpt} onChange={(e) => set("excerpt", e.target.value)} placeholder="列表页与社交分享展示的简介" className="h-8 text-sm" />
+                <Input value={form.excerpt} onChange={(e) => set("excerpt", e.target.value)} placeholder="列表页与社交分享展示的简介" className="h-10 sm:h-8" />
               </div>
 
               <div className="space-y-1">

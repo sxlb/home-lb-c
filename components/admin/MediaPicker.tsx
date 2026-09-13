@@ -218,18 +218,18 @@ export default function MediaPicker({
             }
           }}
           placeholder={placeholder}
-          className="h-9 min-w-0 flex-1 text-sm"
+          className="h-10 sm:h-9 min-w-0 flex-1"
         />
       </div>
 
-      {/* Tab 选择器：窄容器下自动换行（按钮 min-w-max 保证文字不被截断） */}
-      <div className="flex flex-wrap gap-1 rounded-lg border bg-muted/30 p-1">
+      {/* Tab 选择器：移动端固定成三列（末项不会再被拉伸成整行），≥sm 恢复五项一行 */}
+      <div className="flex flex-wrap gap-1.5 rounded-lg border bg-muted/30 p-1 sm:gap-1">
         {(["url", "iconfont", "lucide", "random", "openverse"] as const).map((t) => (
           <button
             key={t}
             type="button"
             onClick={() => setTab(t)}
-            className={`flex min-w-max flex-1 items-center justify-center gap-1 whitespace-nowrap rounded-md px-1.5 py-1 text-xs transition-colors ${
+            className={`flex basis-[calc((100%-0.75rem)/3)] items-center justify-center gap-1 whitespace-nowrap rounded-md px-1.5 py-2 text-xs transition-colors sm:basis-0 sm:grow sm:py-1 ${
               tab === t ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
             }`}
           >
@@ -274,7 +274,7 @@ export default function MediaPicker({
               value={randomKeyword}
               onChange={(e) => handleRandomKeywordChange(e.target.value)}
               placeholder="输入关键词（如 nature、city、tech）"
-              className="h-8 text-sm"
+              className="h-10 sm:h-8"
             />
             <p className="text-xs text-muted-foreground">
               按关键词从 Flickr 随机取图（loremflickr，无需 Key），每次打开页面可能显示不同图片。
@@ -290,14 +290,14 @@ export default function MediaPicker({
                 onChange={(e) => setOpenverseQuery(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleOpenverseSearch()}
                 placeholder="搜索开放版权图片（如 sunset、mountain）"
-                className="h-8 min-w-0 flex-1 text-sm"
+                className="h-10 sm:h-8 min-w-0 flex-1"
               />
               <Button
                 type="button"
                 size="sm"
                 onClick={handleOpenverseSearch}
                 disabled={openverseLoading}
-                className="h-8 shrink-0 gap-1"
+                className="h-10 shrink-0 gap-1 sm:h-8"
               >
                 {openverseLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Search className="h-3 w-3" />}
                 搜索
@@ -308,7 +308,7 @@ export default function MediaPicker({
                 variant="outline"
                 onClick={handleRandomPick}
                 disabled={openverseLoading}
-                className="h-8 shrink-0 gap-1"
+                className="h-10 shrink-0 gap-1 sm:h-8"
                 title="按关键词随机挑一张开放版权图片"
               >
                 {openverseLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}

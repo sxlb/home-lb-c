@@ -38,7 +38,7 @@ function localToIso(value: string): string | null {
   return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
 
-const inputCls = "h-8 border-input bg-background text-sm focus-visible:ring-ring";
+const inputCls = "h-10 sm:h-8 border-input bg-background focus-visible:ring-ring";
 
 export default function AnnouncementPanel() {
   const [items, setItems] = useState<Announcement[]>([]);

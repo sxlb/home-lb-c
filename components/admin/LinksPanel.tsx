@@ -249,7 +249,7 @@ function LinkRow({
   // 收起态：紧凑预览行
   if (!expanded) {
     return (
-      <div className="group flex items-center gap-3 rounded-xl border bg-card px-3 py-2.5 transition-all hover:border-primary/30 hover:shadow-sm">
+      <div className="group flex items-center gap-2.5 rounded-xl border bg-card px-3 py-3 transition-all hover:border-primary/30 hover:shadow-sm sm:gap-3 sm:py-2.5">
         {/* 图标缩略图 */}
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
           <LinkIconPreview icon={link.icon} />
@@ -269,7 +269,7 @@ function LinkRow({
             type="button"
             onClick={() => onMove(-1)}
             disabled={index === 0}
-            className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30"
+            className="rounded-md p-2 sm:p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30"
             aria-label="上移"
             title="上移"
           >
@@ -279,7 +279,7 @@ function LinkRow({
             type="button"
             onClick={() => onMove(1)}
             disabled={index === total - 1}
-            className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30"
+            className="rounded-md p-2 sm:p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30"
             aria-label="下移"
             title="下移"
           >
@@ -288,7 +288,7 @@ function LinkRow({
           <button
             type="button"
             onClick={onToggle}
-            className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            className="rounded-md p-2 sm:p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             aria-label="编辑"
             title="编辑"
           >
@@ -297,7 +297,7 @@ function LinkRow({
           <button
             type="button"
             onClick={onRemove}
-            className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+            className="rounded-md p-2 sm:p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
             aria-label="删除"
             title="删除"
           >
@@ -323,7 +323,7 @@ function LinkRow({
             type="button"
             onClick={() => onMove(-1)}
             disabled={index === 0}
-            className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-30"
+            className="rounded-md p-2 sm:p-1.5 text-muted-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-30"
             aria-label="上移"
           >
             <ChevronUp className="h-4 w-4" />
@@ -332,7 +332,7 @@ function LinkRow({
             type="button"
             onClick={() => onMove(1)}
             disabled={index === total - 1}
-            className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-30"
+            className="rounded-md p-2 sm:p-1.5 text-muted-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-30"
             aria-label="下移"
           >
             <ChevronDown className="h-4 w-4" />
@@ -349,7 +349,7 @@ function LinkRow({
               value={link.name}
               onChange={(e) => onUpdate("name", e.target.value)}
               placeholder={namePlaceholder}
-              className="h-8 text-sm"
+              className="h-10 sm:h-8"
             />
           </div>
           <div className="space-y-1.5">
@@ -362,7 +362,7 @@ function LinkRow({
                   size="sm"
                   onClick={() => void handleFetchIcon()}
                   disabled={fetchingIcon}
-                  className="h-6 shrink-0 gap-1 px-1.5 text-xs text-muted-foreground hover:text-foreground"
+                  className="h-8 shrink-0 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground sm:h-6 sm:px-1.5"
                   title="从链接地址自动探测网站图标（自动挑选可用的图标源）"
                 >
                   {fetchingIcon ? <Loader2 className="h-3 w-3 animate-spin" /> : <Wand2 className="h-3 w-3" />}
@@ -385,7 +385,7 @@ function LinkRow({
             value={link.url}
             onChange={(e) => onUpdate("url", e.target.value)}
             placeholder={urlPlaceholder}
-            className="h-8 text-sm"
+            className="h-10 sm:h-8"
           />
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
@@ -397,7 +397,7 @@ function LinkRow({
                 value={link.tip ?? ""}
                 onChange={(e) => onUpdate("tip", e.target.value)}
                 placeholder="鼠标悬停时显示的文字"
-                className="h-8 text-sm"
+                className="h-10 sm:h-8"
               />
             </div>
           )}
@@ -410,14 +410,15 @@ function LinkRow({
               step={1}
               value={link.sort}
               onChange={(e) => onUpdate("sort", e.target.value === "" ? 0 : Number(e.target.value))}
-              className="h-8 text-sm"
+              className="h-10 sm:h-8"
             />
           </div>
         </div>
       </div>
 
-      <div className="mt-3 flex justify-end">
-        <Button size="sm" onClick={onToggle}>
+      {/* 完成：移动端全宽（更好点），≥sm 回到右对齐的小按钮 */}
+      <div className="mt-4 flex sm:mt-3 sm:justify-end">
+        <Button size="sm" onClick={onToggle} className="h-10 w-full sm:h-9 sm:w-auto">
           完成
         </Button>
       </div>

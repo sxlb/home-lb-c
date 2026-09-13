@@ -34,7 +34,7 @@ export default function LinksManager() {
 
   return (
     <div className="space-y-4">
-      {/* 内部 Tab 切换（分段控件） */}
+      {/* 内部 Tab 切换（分段控件）：移动端加大点击高度、收窄内边距，避免三项挤在一起 */}
       <div className="flex items-center gap-1 rounded-lg border border-border bg-card p-1 shadow-sm">
         {SUB_TABS.map((t) => {
           const Icon = t.icon;
@@ -44,13 +44,13 @@ export default function LinksManager() {
               key={t.id}
               type="button"
               onClick={() => selectSub(t.id)}
-              className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-2 text-sm transition-all duration-150 ease-out ${
+              className={`flex flex-1 items-center justify-center gap-1 rounded-md px-2 py-2.5 text-xs transition-all duration-150 ease-out sm:gap-1.5 sm:px-3 sm:py-2 sm:text-sm ${
                 active
                   ? "bg-primary text-primary-foreground font-medium shadow-sm"
                   : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
               }`}
             >
-              <Icon className="h-4 w-4" />
+              <Icon className="h-4 w-4 shrink-0" />
               {t.label}
             </button>
           );
@@ -58,7 +58,7 @@ export default function LinksManager() {
       </div>
 
       {/* 当前子 Tab 对应的独立面板 */}
-      <div className="flex items-start justify-center gap-2 text-sm text-muted-foreground">
+      <div className="flex items-start gap-2 px-1 text-xs text-muted-foreground sm:justify-center sm:text-sm">
         <Link2 className="mt-0.5 h-4 w-4 shrink-0" />
         <span>
           {sub === "social" && "管理主页显示的社交入口（GitHub、邮箱等）。"}

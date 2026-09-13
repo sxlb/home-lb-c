@@ -270,7 +270,7 @@ export default function OperationLogPanel() {
           <select
             value={module}
             onChange={(e) => setModule(e.target.value)}
-            className="h-8 rounded-md border border-input bg-background px-2 text-sm"
+            className="h-10 sm:h-8 rounded-md border border-input bg-background px-2 text-base sm:text-sm"
           >
             <option value="">全部模块</option>
             {Object.entries(MODULE_LABEL).map(([key, label]) => (
@@ -282,7 +282,7 @@ export default function OperationLogPanel() {
             onChange={(e) => setKeyword(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && applyFilter()}
             placeholder="搜索操作人或摘要"
-            className="h-8 w-48 rounded-md border border-input bg-background px-3 text-sm"
+            className="h-10 sm:h-8 w-full sm:w-48 rounded-md border border-input bg-background px-3 text-base sm:text-sm"
           />
           <Button size="sm" variant="outline" onClick={applyFilter} className="gap-1.5">
             <RefreshCw className="h-4 w-4" />

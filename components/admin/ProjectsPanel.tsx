@@ -180,11 +180,11 @@ export default function ProjectsPanel() {
               <div className="grid gap-2.5 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
                 <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">标题</Label>
-                  <Input value={it.title} onChange={(e) => update(i, "title", e.target.value)} placeholder="作品名称" className="h-8 text-sm" />
+                  <Input value={it.title} onChange={(e) => update(i, "title", e.target.value)} placeholder="作品名称" className="h-10 sm:h-8" />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">排序</Label>
-                  <Input type="number" min={0} value={it.sort} onChange={(e) => update(i, "sort", e.target.value === "" ? 0 : Number(e.target.value))} className="h-8 w-20 text-sm" />
+                  <Input type="number" min={0} value={it.sort} onChange={(e) => update(i, "sort", e.target.value === "" ? 0 : Number(e.target.value))} className="h-10 sm:h-8 w-20" />
                 </div>
                 {/* 置顶 / 上线开关 */}
                 <div className="flex items-end gap-3 pb-1">
@@ -201,7 +201,7 @@ export default function ProjectsPanel() {
               <div className="grid gap-2.5 sm:grid-cols-2">
                 <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">项目链接</Label>
-                  <Input value={it.url} onChange={(e) => update(i, "url", e.target.value)} placeholder="https://…（可选）" className="h-8 text-sm" />
+                  <Input value={it.url} onChange={(e) => update(i, "url", e.target.value)} placeholder="https://…（可选）" className="h-10 sm:h-8" />
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor={`project-image-${i}`} className="text-xs text-muted-foreground">封面图/图标</Label>
@@ -215,7 +215,7 @@ export default function ProjectsPanel() {
               </div>
               <div className="space-y-1">
                 <Label className="text-xs text-muted-foreground">标签（逗号分隔）</Label>
-                <Input value={it.tags} onChange={(e) => update(i, "tags", e.target.value)} placeholder="Next.js, 全栈, 开源" className="h-8 text-sm" />
+                <Input value={it.tags} onChange={(e) => update(i, "tags", e.target.value)} placeholder="Next.js, 全栈, 开源" className="h-10 sm:h-8" />
               </div>
               <div className="space-y-1">
                 <Label className="text-xs text-muted-foreground">描述</Label>
