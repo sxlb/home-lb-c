@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireSession, success, error, internalError, parseJsonBody, writeOperationLog, getClientIp } from "@/lib/server";
-import { fetchLatestRelease } from "@/lib/version";
+import { fetchLatestRelease, readCachedRelease } from "@/lib/version";
 import {
   execState,
   writeRequest,
@@ -47,12 +47,23 @@ export async function POST(request: NextRequest) {
   try {
     let version = "";
     let description = body.description?.trim() || "";
+    // 目标版本来源：live=本次实时检测；cache=检测失败后降级用宿主机缓存的最近成功结果
+    let versionSource: "live" | "cache" = "live";
 
     if (action === "update") {
       const latest = await fetchLatestRelease(true); // 强制刷新，避免误用旧缓存
-      if (!latest.data) return error(latest.error ? `无法检测到最新版本：${latest.error}` : "暂无可更新版本");
-      version = latest.data.tag;
-      description = description || latest.data.body || "";
+      let release = latest.data;
+      if (!release) {
+        // 实时检测失败（出网抖动 / GitHub 限流）时降级用缓存版本：
+        // 触发更新只需要一个有效的目标 tag，不该因为一次检测失败就把用户卡在「无法检测到最新版本」。
+        release = await readCachedRelease();
+        if (release) versionSource = "cache";
+      }
+      if (!release) {
+        return error(latest.error ? `无法检测到最新版本：${latest.error}` : "暂无可更新版本");
+      }
+      version = release.tag;
+      description = description || release.body || "";
     } else {
       // rollback：校验目标在历史版本列表中
       version = String(body.version || "").trim();
@@ -93,16 +104,17 @@ export async function POST(request: NextRequest) {
 
     // 操作日志
     const methodLabel = method === "image" ? "（拉取镜像）" : "（服务器自建构建）";
+    const sourceLabel = versionSource === "cache" ? "（版本来自缓存，实时检测失败）" : "";
     await writeOperationLog({
       module: "update",
       action,
       username,
-      summary: `${action === "update" ? `触发更新到 ${version}` : `触发回滚到 ${version}`}${methodLabel}`,
+      summary: `${action === "update" ? `触发更新到 ${version}` : `触发回滚到 ${version}`}${methodLabel}${sourceLabel}`,
       detail: description ? `说明：${description}` : "",
       ip: getClientIp(request),
     });
 
-    return success({ ok: true, action, method, version, id });
+    return success({ ok: true, action, method, version, id, versionSource });
   } catch (e) {
     return internalError("触发更新失败", e);
   }

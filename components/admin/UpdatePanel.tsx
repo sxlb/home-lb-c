@@ -213,7 +213,17 @@ export default function UpdatePanel() {
       });
       const body = await res.json().catch(() => ({}));
       if (res.ok) {
-        toast.success(body.action === "rollback" ? `已提交回滚到 ${version}` : "已提交更新，正在执行");
+        const info = body as { action?: string; version?: string; versionSource?: string };
+        if (info.action === "rollback") {
+          toast.success(`已提交回滚到 ${version}`);
+        } else if (info.versionSource === "cache") {
+          // 实时检测最新版本失败，服务端降级用了缓存版本：如实告知，避免用户以为更新的是最新版
+          toast.warning(
+            `已提交更新到 ${info.version ?? "缓存版本"}（实时检测最新版失败，使用的是上次缓存结果）`
+          );
+        } else {
+          toast.success("已提交更新，正在执行");
+        }
         load(false);
       } else {
         toast.error((body as { error?: string }).error || "操作失败，请重试");

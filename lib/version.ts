@@ -137,8 +137,11 @@ const OFFICIAL_BASE = "https://api.github.com";
 
 /** 默认公共代理镜像（官方不可达时按序降级）。可用环境变量 GITHUB_API_MIRRORS（逗号分隔）覆盖 */
 const DEFAULT_MIRRORS: string[] = [
-  // 实测仅 gh-proxy.com 支持 GitHub Releases JSON API（其余常见镜像只代理文件下载，返回 403）
-  "https://gh-proxy.com/",
+  // ⚠️ base 必须自带上游完整地址：releaseUrl() 会直接在其后拼 "repos/..."，
+  // 因此要写成 https://gh-proxy.com/https://api.github.com/（实测 200），
+  // 而 https://gh-proxy.com/ 会拼出 https://gh-proxy.com/repos/... → 403（Cloudflare Error 1000）。
+  "https://gh-proxy.com/https://api.github.com/",
+  "https://gh.llkk.cc/https://api.github.com/",
 ];
 
 const RELEASE_HEADERS = {
@@ -146,7 +149,8 @@ const RELEASE_HEADERS = {
   "X-GitHub-Api-Version": "2022-11-28",
 };
 
-const REQUEST_TIMEOUT_MS = 5000; // 单个源单次请求超时
+const OFFICIAL_TIMEOUT_MS = 5000; // 官方源很快（实测约 0.6s），超时给紧一点
+const MIRROR_TIMEOUT_MS = 8000; // 公共镜像慢得多（实测 3.5s~7s），超时放宽
 const MAX_ROUNDS = 2; // 竞速总轮数：首轮失败后短暂间隔重试，抵御服务器出网间歇性丢包
 const ROUND_GAP_MS = 300; // 轮次间间隔
 
@@ -156,7 +160,11 @@ function configuredMirrors(): string[] {
   return DEFAULT_MIRRORS;
 }
 
-/** 由候选源 base 拼接 GH 最新 release 端点：官方直接加路径，代理前缀 + 完整官方 URL */
+/**
+ * 由候选源 base 拼接 GH 最新 release 端点。
+ * 官方源直接加路径；代理镜像的 base 需自带上游完整地址，例如：
+ *   https://gh-proxy.com/https://api.github.com/  →  https://gh-proxy.com/https://api.github.com/repos/OWNER/REPO/releases/latest
+ */
 function releaseUrl(base: string): string {
   return `${base}repos/${GITHUB_REPO}/releases/latest`;
 }
@@ -205,11 +213,11 @@ type ProbeResult =
 const TIMEOUT_RE = /timeout|aborted/i;
 
 /** 单源单次探测：成功返回 release，否则返回定性错误（不做重试，重试在轮次层统一处理） */
-async function probe(base: string): Promise<ProbeResult> {
+async function probe(base: string, timeoutMs: number): Promise<ProbeResult> {
   try {
     const res = await fetch(releaseUrl(base), {
       headers: RELEASE_HEADERS,
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      signal: AbortSignal.timeout(timeoutMs),
       cache: "no-store",
     });
     if (res.ok) {
@@ -219,6 +227,8 @@ async function probe(base: string): Promise<ProbeResult> {
         return { kind: "net" }; // 响应体解析失败
       }
     }
+    // 没有有效状态码：按连接失败处理，避免把「根本没连上」报成某个 HTTP 状态
+    if (!res.status) return { kind: "net" };
     return { kind: "http", status: res.status };
   } catch (e) {
     const timeout =
@@ -227,25 +237,48 @@ async function probe(base: string): Promise<ProbeResult> {
   }
 }
 
-/** 汇总一轮全部失败结果，定性最贴切的失败原因（noRelease > timeout > http > net） */
+/**
+ * 汇总一轮全部失败结果，定性最贴切的失败原因。
+ * 官方源（results[0]）的失败原因最贴近真实状况 —— 镜像的 4xx/5xx 往往只是代理自身的问题，
+ * 用它去解释失败会把「官方被限流 403」误报成「网络错误」，或反过来掩盖真因。
+ */
 function classify(results: ProbeResult[]): ProbeResult {
-  if (results.some((r) => r.kind === "noRelease") || results.some((r) => r.kind === "http" && r.status === 404)) {
+  if (results.some((r) => r.kind === "noRelease" || (r.kind === "http" && r.status === 404))) {
     return { kind: "noRelease" };
   }
+  const official = results[0];
+  if (official && official.kind !== "ok") return official;
   if (results.some((r) => r.kind === "timeout")) return { kind: "timeout" };
+  if (results.some((r) => r.kind === "net")) return { kind: "net" };
   const http = results.find((r) => r.kind === "http");
-  if (http) return http;
-  return { kind: "net" };
+  return http ?? { kind: "net" };
+}
+
+/** 失败原因的可读描述（仅用于服务端日志，便于事后定位） */
+function describeResult(r: ProbeResult): string {
+  switch (r.kind) {
+    case "ok":
+      return "成功";
+    case "http":
+      return `HTTP ${r.status}`;
+    case "timeout":
+      return "超时";
+    case "net":
+      return "连接失败";
+    default:
+      return "无 release";
+  }
 }
 
 /** 一轮竞速：并发探测全部候选源，首个成功即返回（快源无需等慢源），全失败则汇总定性原因 */
-async function raceOnce(sources: string[]): Promise<ProbeResult> {
+async function raceOnce(sources: string[], round: number): Promise<ProbeResult> {
   return new Promise<ProbeResult>((resolve) => {
     let settled = false;
     let failed = 0;
     const results = new Array<ProbeResult>(sources.length);
     sources.forEach((base, i) => {
-      probe(base).then((r) => {
+      // 官方源用更短超时、镜像放宽：首元素约定为官方（classify 依赖该顺序）
+      probe(base, i === 0 ? OFFICIAL_TIMEOUT_MS : MIRROR_TIMEOUT_MS).then((r) => {
         if (settled) return;
         if (r.kind === "ok") {
           settled = true;
@@ -256,11 +289,28 @@ async function raceOnce(sources: string[]): Promise<ProbeResult> {
         failed++;
         if (failed === sources.length) {
           settled = true;
+          // 出网异常是线上排查的常见盲区：把每个源的真实结果写进容器日志，
+          // 便于事后区分「官方被限流 403」/「出网超时」/「镜像自身故障」，而不是只有一句「网络错误」
+          console.warn(
+            `[version] 第 ${round} 轮全部源失败：` +
+              sources
+                .map((s, idx) => `${safeHost(s)}=${describeResult(results[idx])}`)
+                .join("，")
+          );
           resolve(classify(results));
         }
       });
     });
   });
+}
+
+/** 取源的 host 用于日志（镜像 base 是「代理 + 上游完整地址」，取到的即代理域名） */
+function safeHost(base: string): string {
+  try {
+    return new URL(base).host;
+  } catch {
+    return base;
+  }
 }
 
 export async function fetchLatestRelease(force = false): Promise<FetchLatestResult> {
@@ -292,7 +342,7 @@ export async function fetchLatestRelease(force = false): Promise<FetchLatestResu
   let last: ProbeResult | undefined;
 
   for (let round = 0; round < MAX_ROUNDS; round++) {
-    const res = await raceOnce(sources);
+    const res = await raceOnce(sources, round + 1);
     if (res.kind === "ok") {
       globalCache.latest = { at: Date.now(), data: res.data };
       return { data: res.data, fromCache: false };
@@ -312,7 +362,11 @@ export async function fetchLatestRelease(force = false): Promise<FetchLatestResu
     return { data: staleHost.data, fromCache: true };
   }
   const message =
-    last?.kind === "timeout" ? "检测最新版本超时，请稍后重试" : "网络错误，获取最新版本失败，请重试";
+    last?.kind === "timeout"
+      ? "检测最新版本超时，请稍后重试"
+      : last?.kind === "http"
+        ? `GitHub 接口返回 ${last.status}${last.status === 403 ? "（可能触发限流，请稍后重试）" : ""}`
+        : "网络错误，获取最新版本失败，请重试";
   if (staleHost?.error) {
     globalCache.latest = { at: Date.now(), data: null, error: staleHost.error };
     return { data: null, fromCache: true, error: staleHost.error };
@@ -373,6 +427,16 @@ async function writeVersionCache(doc: { timestamp: number; data: ReleaseInfo | n
   } catch {
     return false;
   }
+}
+
+/**
+ * 读取宿主机缓存里的最新 release（不看新鲜度）。
+ *
+ * 用途：强制刷新失败（出网抖动/限流）时的降级来源 —— 触发更新只需要一个有效的目标 tag，
+ * 用缓存里的上次成功结果即可继续，不必因为一次检测失败就把用户卡在「无法检测到最新版本」。
+ */
+export async function readCachedRelease(): Promise<ReleaseInfo | null> {
+  return (await readVersionCache())?.data ?? null;
 }
 
 /** 供测试清空缓存，保证隔离 */
