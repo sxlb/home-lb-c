@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Download, Upload, Loader2, FileJson } from "lucide-react";
+import { Download, Upload, Loader2, FileJson, RotateCcw, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 
 interface BackupSummary {
@@ -17,6 +17,8 @@ export default function DataPanel() {
   const [summary, setSummary] = useState<BackupSummary | null>(null);
   const [confirmed, setConfirmed] = useState(false);
   const [restoring, setRestoring] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handlePickFile = (f: File | null) => {
@@ -75,6 +77,25 @@ export default function DataPanel() {
       toast.error("网络错误");
     } finally {
       setRestoring(false);
+    }
+  };
+
+  /** 恢复默认状态：清空全部业务数据并重建种子默认值 */
+  const handleResetDefault = async () => {
+    setShowResetConfirm(false);
+    setResetting(true);
+    try {
+      const res = await fetch("/api/reset-default?confirm=true", { method: "POST" });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success(data.message || "已恢复为默认状态");
+      } else {
+        toast.error(data.error || "恢复默认失败");
+      }
+    } catch {
+      toast.error("网络错误，请重试");
+    } finally {
+      setResetting(false);
     }
   };
 
@@ -164,6 +185,84 @@ export default function DataPanel() {
               )}
             </Button>
           </div>
+        </div>
+      </CardContent>
+
+      {/* 恢复默认状态区 */}
+      <CardContent className="border-t space-y-6 pt-6">
+        <div className="rounded-xl border border-warning/30 bg-warning/5 p-4">
+          <h3 className="mb-1 flex items-center gap-2 text-sm font-semibold text-warning">
+            <AlertTriangle className="h-4 w-4" />
+            恢复默认状态
+          </h3>
+          <p className="mb-3 text-xs text-muted-foreground leading-relaxed">
+            清空全部站点配置、链接、作品、文章、技能、公告、统计数据与日志，重建种子默认数据。管理员账号保留但强制重新设置密码为 <code className="rounded bg-muted px-1 font-mono text-xs">123456</code>（登录后台后修改即可）。此操作不可撤销，请谨慎执行。
+          </p>
+          {showResetConfirm ? (
+            <div className="space-y-3 rounded-lg border border-warning/40 bg-warning/10 p-3">
+              <p className="text-xs font-medium text-warning">⚠️ 你即将重置以下所有数据：</p>
+              <ul className="grid grid-cols-2 gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
+                {[
+                  "Profile 站点配置",
+                  "社交链接 · 网站链接",
+                  "友情链接 · 作品项目",
+                  "技能云 · 随笔文章",
+                  "站点公告 · 媒体库",
+                  "操作日志 · 访问统计",
+                ].map((item) => (
+                  <li key={item} className="flex items-center gap-1">
+                    <span className="h-1 w-1 shrink-0 rounded-full bg-warning" />
+                    {item}
+                  </li>
+                ))}
+              </ul>
+              <div className="flex items-center gap-2">
+                <label className="flex cursor-pointer items-start gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={confirmed}
+                    onChange={(e) => setConfirmed(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 accent-destructive"
+                  />
+                  <span className="text-muted-foreground">我已备份数据并确认重置</span>
+                </label>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={handleResetDefault}
+                  disabled={!confirmed || resetting}
+                  className="gap-1.5"
+                >
+                  {resetting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      重置中...
+                    </>
+                  ) : (
+                    <>
+                      <RotateCcw className="h-4 w-4" />
+                      确认恢复默认
+                    </>
+                  )}
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setShowResetConfirm(false)}>
+                  取消
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 border-warning/40 text-warning hover:bg-warning/10 hover:text-warning"
+              onClick={() => setShowResetConfirm(true)}
+            >
+              <RotateCcw className="h-4 w-4" />
+              恢复默认状态
+            </Button>
+          )}
         </div>
       </CardContent>
     </Card>
