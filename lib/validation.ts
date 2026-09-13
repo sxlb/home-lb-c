@@ -27,19 +27,23 @@ export const DEFAULT_WELCOME_MESSAGES = [
   "欢迎回来，好久不见",
 ];
 
+// 图片地址：允许 http(s) 外链，以及后台「上传」按钮产出的媒体库相对路径（/api/uploads/file/xxx）。
+// 注意：只写 ^https?:// 会导致「上传成功但保存失败」—— 上传接口返回的正是相对路径。
+const IMAGE_SRC_RE = /^(https?:\/\/|\/api\/uploads\/)/;
+
 // Profile 校验 schema：用于 PUT /api/profile 请求体校验
 export const profileSchema = z.object({
   avatar: z
     .string()
     .max(2048, "头像 URL 过长")
-    .refine((v) => v === "" || /^https?:\/\//.test(v), "头像必须为 http(s):// 开头的 URL")
+    .refine((v) => v === "" || IMAGE_SRC_RE.test(v), "头像须为 http(s) 外链或 /api/uploads/ 上传路径")
     .optional()
     .default(""),
   // 网站图标（favicon / Logo）：后台配置后动态替换浏览器标签页图标
   siteIcon: z
     .string()
     .max(2048, "网站图标 URL 过长")
-    .refine((v) => v === "" || /^https?:\/\//.test(v), "网站图标必须为 http(s):// 开头的 URL")
+    .refine((v) => v === "" || IMAGE_SRC_RE.test(v), "网站图标须为 http(s) 外链或 /api/uploads/ 上传路径")
     .optional()
     .default(""),
   nickname: z
@@ -69,13 +73,13 @@ export const profileSchema = z.object({
     .refine((v) => v === "" || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v), "邮箱格式不正确")
     .optional()
     .default(""),
-  // 壁纸 API 地址，留空则使用默认必应每日壁纸
+  // 壁纸自定义地址（图片直链，可由后台上传）：留空则使用所选壁纸种类
   bgApi: z
     .string()
     .max(2048, "壁纸 API 地址过长")
     .refine(
-      (v) => v === "" || /^https?:\/\//.test(v),
-      "壁纸 API 必须为 http(s):// 开头的 URL"
+      (v) => v === "" || IMAGE_SRC_RE.test(v),
+      "壁纸须为 http(s) 外链或 /api/uploads/ 上传路径"
     )
     .optional()
     .default(""),

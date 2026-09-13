@@ -242,3 +242,38 @@ describe("profileSchema", () => {
     });
   });
 });
+
+/**
+ * 回归：后台「上传」按钮（UploadButton）写入的是媒体库相对路径
+ * （/api/uploads/file/xxx），若校验只接受 http(s):// 外链，
+ * 就会出现「上传成功、保存失败」（移动端点头像「上传」必现）。
+ */
+describe("profileSchema：图片字段须接受上传产生的媒体库路径", () => {
+  const uploaded = "/api/uploads/file/1789265262713-abcdef.jpg";
+
+  it("avatar 接受媒体库相对路径", () => {
+    expect(profileSchema.safeParse({ avatar: uploaded }).success).toBe(true);
+  });
+
+  it("siteIcon 接受媒体库相对路径", () => {
+    expect(profileSchema.safeParse({ siteIcon: uploaded }).success).toBe(true);
+  });
+
+  it("bgApi 接受媒体库相对路径（后台上传自定义壁纸）", () => {
+    expect(profileSchema.safeParse({ bgApi: uploaded }).success).toBe(true);
+  });
+
+  it("仍接受 http(s) 外链与空值", () => {
+    expect(profileSchema.safeParse({ avatar: "https://example.com/a.png" }).success).toBe(true);
+    expect(profileSchema.safeParse({ avatar: "http://example.com/a.png" }).success).toBe(true);
+    expect(profileSchema.safeParse({ avatar: "" }).success).toBe(true);
+    expect(profileSchema.safeParse({ bgApi: "" }).success).toBe(true);
+  });
+
+  it("仍拒绝非法协议与伪造路径", () => {
+    expect(profileSchema.safeParse({ avatar: "javascript:alert(1)" }).success).toBe(false);
+    expect(profileSchema.safeParse({ avatar: "ftp://example.com/a.png" }).success).toBe(false);
+    expect(profileSchema.safeParse({ avatar: "/etc/passwd" }).success).toBe(false);
+    expect(profileSchema.safeParse({ siteIcon: "data:image/svg+xml,<svg/>" }).success).toBe(false);
+  });
+});
