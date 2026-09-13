@@ -29,6 +29,12 @@ export default function LoginPage() {
     document.title = "登录 · 个人主页";
   }, []);
 
+  // 提前预取后台路由（RSC 负载 + 页面 chunk）：
+  // 后台是懒加载多面板的重页面，等点击登录后才开始下载会有明显停顿感
+  useEffect(() => {
+    router.prefetch("/admin");
+  }, [router]);
+
   // 用户名变化时探测是否开启 2FA（IP 限流防枚举，探测失败视为未开启）
   useEffect(() => {
     const name = username.trim();
@@ -83,8 +89,8 @@ export default function LoginPage() {
       });
 
       if (res?.ok) {
+        // 只需 push：后台首屏会话已由服务端下发，无需再 refresh 触发一次重复的 RSC 往返
         router.push("/admin");
-        router.refresh();
       } else {
         // 登录失败：立即清空密码框（防窥屏 + 防暴破脚本残留），并展示错误提示
         setPassword("");

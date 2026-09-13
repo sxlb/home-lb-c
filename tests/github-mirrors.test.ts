@@ -7,8 +7,10 @@ import {
   mirrorLabel,
   normalizeMirrorBase,
   readCustomMirrors,
+  readProxyPreference,
   testProxySources,
   writeCustomMirrors,
+  writeProxyPreference,
 } from "@/lib/version";
 
 const OK_BODY = { tag_name: "0.0.9", name: "0.0.9", body: "", html_url: "", published_at: "" };
@@ -123,6 +125,58 @@ describe("自定义代理持久化", () => {
     expect(await readCustomMirrors()).toEqual([]);
     fs.writeFileSync(path.join(tmp, "github-mirrors.json"), "{ not json");
     expect(await readCustomMirrors()).toEqual([]);
+  });
+});
+
+describe("优先代理（后台「设为优先」）", () => {
+  let tmp: string;
+  const saved = process.env.DATA_DIR;
+
+  beforeEach(() => {
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), "home-lb-preferred-"));
+    process.env.DATA_DIR = tmp;
+    delete process.env.GITHUB_API_MIRRORS;
+  });
+
+  afterEach(() => {
+    if (saved === undefined) delete process.env.DATA_DIR;
+    else process.env.DATA_DIR = saved;
+  });
+
+  it("设置后能读回，并在候选源清单里标记 preferred", async () => {
+    await writeProxyPreference("https://hk.gh-proxy.com");
+    const normalized = "https://hk.gh-proxy.com/https://api.github.com/";
+    expect(await readProxyPreference()).toBe(normalized);
+
+    const sources = await listProxySources();
+    const marked = sources.filter((s) => s.preferred);
+    expect(marked).toEqual([{ base: normalized, scope: "builtin", preferred: true }]);
+  });
+
+  it("传 null 清除设置，恢复全源自动竞速", async () => {
+    await writeProxyPreference("https://hk.gh-proxy.com");
+    await writeProxyPreference(null);
+    expect(await readProxyPreference()).toBeNull();
+    expect((await listProxySources()).some((s) => s.preferred)).toBe(false);
+  });
+
+  it("不在候选列表里的地址会被拒绝（避免写坏配置后版本检测反复空跑）", async () => {
+    await writeProxyPreference("https://not-in-list.example.com");
+    expect(await readProxyPreference()).toBeNull();
+  });
+
+  it("保存自定义代理列表不会清掉已有的优先设置", async () => {
+    await writeCustomMirrors(["https://mine.example.com"]);
+    await writeProxyPreference("https://mine.example.com");
+    await writeCustomMirrors(["https://mine.example.com", "https://other.example.com"]);
+    expect(await readProxyPreference()).toBe("https://mine.example.com/https://api.github.com/");
+  });
+
+  it("优先代理被移出列表时，优先设置一并清除", async () => {
+    await writeCustomMirrors(["https://mine.example.com"]);
+    await writeProxyPreference("https://mine.example.com");
+    await writeCustomMirrors([]);
+    expect(await readProxyPreference()).toBeNull();
   });
 });
 

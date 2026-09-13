@@ -22,6 +22,7 @@ import {
   Activity,
   Plus,
   Trash2,
+  Star,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -126,6 +127,8 @@ type ProxyScope = "official" | "builtin" | "env" | "custom";
 interface ProxySourceItem {
   base: string;
   scope: ProxyScope;
+  /** 是否为后台指定的优先代理 */
+  preferred?: boolean;
 }
 
 interface ProxyTestItem {
@@ -141,6 +144,8 @@ interface ProxyTestItem {
 interface ProxyData {
   sources: ProxySourceItem[];
   custom: string[];
+  /** 后台指定的优先代理（null = 全源自动竞速） */
+  preferred: string | null;
   results: ProxyTestItem[] | null;
 }
 
@@ -150,6 +155,15 @@ const SCOPE_MAP: Record<ProxyScope, { label: string; className: string }> = {
   env: { label: "环境变量", className: "bg-info/15 text-info" },
   custom: { label: "自定义", className: "bg-success/15 text-success" },
 };
+
+/** 取代理域名用于展示（不引 lib/version：它是服务端模块，会把 fs 带进客户端包） */
+function mirrorHost(base: string): string {
+  try {
+    return new URL(base).host;
+  } catch {
+    return base;
+  }
+}
 
 /** 更新/回滚徽章 */
 function ActionBadge({ action }: { action: UpdateRecord["action"] }) {
@@ -284,6 +298,29 @@ export default function UpdatePanel() {
       await loadProxies(true);
     } catch {
       toast.error("网络错误，保存失败");
+    } finally {
+      if (mountedRef.current) setSavingProxies(false);
+    }
+  }
+
+  /** 指定/清除优先代理：设置后版本检测先单独探它，成功即用，失败自动回退全源竞速 */
+  async function setPreferred(base: string | null) {
+    setSavingProxies(true);
+    try {
+      const res = await fetch("/api/update/proxies", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ preferred: base }),
+      });
+      const body = (await res.json().catch(() => ({}))) as { preferred?: string | null; error?: string };
+      if (!res.ok) {
+        toast.error(body.error || "设置失败");
+        return;
+      }
+      toast.success(body.preferred ? "已设为优先代理，版本检测将优先走它" : "已恢复自动竞速（全源取最快）");
+      await loadProxies(false);
+    } catch {
+      toast.error("网络错误，设置失败");
     } finally {
       if (mountedRef.current) setSavingProxies(false);
     }
@@ -606,7 +643,11 @@ export default function UpdatePanel() {
         {/* GitHub 加速代理 */}
         <SectionBlock
           title="GitHub 加速代理"
-          subtitle={`${proxies?.sources.length ?? 0} 个源`}
+          subtitle={
+            proxies?.preferred
+              ? `${proxies.sources.length} 个源 · 优先：${mirrorHost(proxies.preferred)}`
+              : `${proxies?.sources.length ?? 0} 个源 · 自动竞速`
+          }
           dotClass="bg-info"
           open={false}
         >
@@ -614,6 +655,10 @@ export default function UpdatePanel() {
             <p className="text-sm leading-relaxed text-muted-foreground">
               版本检测与更新会并发请求下面这些源，取最快可用的一个。官方源在部分网络下会超时，此时自动降级到代理；
               单个代理失效不影响其它源，全部不可用时还会降级使用上一次缓存的版本信息。
+              <br />
+              先用「测试连通性」看看哪个可用、哪个快，再点某一行的
+              <b> 设为优先 </b>
+              让版本检测固定走它（成功即用；它挂了会自动回退到全源竞速，不会把自己卡死）。
             </p>
 
             <div className="flex flex-wrap items-center gap-2">
@@ -627,6 +672,18 @@ export default function UpdatePanel() {
                 {testingProxies ? <Loader2 className="h-4 w-4 animate-spin" /> : <Activity className="h-4 w-4" />}
                 {testingProxies ? "测试中..." : "测试连通性"}
               </Button>
+              {proxies?.preferred && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={savingProxies}
+                  onClick={() => setPreferred(null)}
+                  className="gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+                >
+                  <Star className="h-3.5 w-3.5" />
+                  恢复自动竞速
+                </Button>
+              )}
               <span className="text-xs text-muted-foreground">
                 {proxies?.results
                   ? "最近一次测试结果：见每项右侧"
@@ -641,7 +698,9 @@ export default function UpdatePanel() {
                 return (
                   <div
                     key={s.base}
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-muted/30 px-4 py-2.5"
+                    className={`flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-2.5 ${
+                      s.preferred ? "border-warning/40 bg-warning/10" : "border-border bg-muted/30"
+                    }`}
                   >
                     <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
                       <span
@@ -649,6 +708,11 @@ export default function UpdatePanel() {
                       >
                         {scope.label}
                       </span>
+                      {s.preferred && (
+                        <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-warning/20 px-2 py-0.5 text-xs font-medium text-warning">
+                          <Star className="h-3 w-3" /> 优先
+                        </span>
+                      )}
                       <span className="truncate font-mono text-xs text-foreground">{s.base}</span>
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
@@ -668,6 +732,18 @@ export default function UpdatePanel() {
                         )
                       ) : (
                         <span className="text-xs text-muted-foreground">未测试</span>
+                      )}
+                      {s.scope !== "official" && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={savingProxies}
+                          onClick={() => setPreferred(s.preferred ? null : s.base)}
+                          className="h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
+                          title="版本检测优先走这个源；它不可用时自动回退全源竞速"
+                        >
+                          <Star className="h-3.5 w-3.5" /> {s.preferred ? "取消优先" : "设为优先"}
+                        </Button>
                       )}
                       {s.scope === "custom" && (
                         <Button
@@ -698,7 +774,7 @@ export default function UpdatePanel() {
                   value={newMirror}
                   onChange={(e) => setNewMirror(e.target.value)}
                   placeholder="如 https://hk.gh-proxy.com"
-                  className="h-9 min-w-0 flex-1 font-mono text-xs"
+                  className="h-10 min-w-0 flex-1 font-mono text-base sm:h-9 sm:text-xs"
                 />
                 <Button
                   size="sm"

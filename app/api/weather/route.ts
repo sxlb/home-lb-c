@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { prisma } from "@/lib/db";
 import { getClientIp } from "@/lib/server";
 import { resolveAmapCityQuery } from "@/lib/weather";
+import { buildTencentParams, parseTencentRealtime } from "@/lib/tencent";
 
 export const dynamic = "force-dynamic";
 
@@ -76,27 +77,9 @@ function sanitizeIp(ip: string): string {
 }
 
 /**
- * 腾讯位置服务 WebServiceAPI 数字签名（RFC 规范）：
- * 1. 参数按 key 字典序（ASCII）升序排列
- * 2. 拼接为 "k=v&k=v"（值需 URL 编码）
- * 3. 末尾直接拼接 SK（不编码）
- * 4. 整体 MD5 后转大写，即 sig
+ * 腾讯位置服务 WebServiceAPI 的签名与响应解析见 lib/tencent.ts
+ * （其中「请求路径必须参与签名」是最容易踩的坑，已单独抽出并加回归测试）。
  */
-function tencentSign(params: Record<string, string>, sk: string): string {
-  const query = Object.keys(params)
-    .sort()
-    .map((k) => `${k}=${encodeURIComponent(params[k])}`)
-    .join("&");
-  return createHash("md5").update(`${query}${sk}`).digest("hex").toUpperCase();
-}
-
-/** 组装腾讯 WebServiceAPI 请求参数（含可选签名） */
-function buildTencentParams(base: Record<string, string>, sk: string): URLSearchParams {
-  const sp = new URLSearchParams();
-  for (const [k, v] of Object.entries(base)) sp.set(k, v);
-  if (sk) sp.set("sig", tencentSign(base, sk));
-  return sp;
-}
 
 /**
  * 高德 Web 服务 API 数字签名（官方规范）：
@@ -294,17 +277,15 @@ interface TencentLbsLocation {
 interface TencentLbsWeather {
   status?: number;
   message?: string;
-  result?: {
-    now?: { temp?: string | number; weather?: string; wind_dir?: string; wind_power?: string };
-  };
 }
 
 async function fetchTencentKeyWeather(txKey: string, txSk: string, ip: string): Promise<WeatherResult> {
   // 1. 腾讯位置服务 IP 定位 → adcode（ip 可为空，此时按请求方 IP 定位；sk 非空时带签名）
+  const locPath = "ws/location/v1/ip";
   const locParams: Record<string, string> = { key: txKey };
   if (ip) locParams.ip = ip;
-  const locUrl = new URL("https://apis.map.qq.com/ws/location/v1/ip");
-  locUrl.search = buildTencentParams(locParams, txSk).toString();
+  const locUrl = new URL(`https://apis.map.qq.com/${locPath}`);
+  locUrl.search = buildTencentParams(locPath, locParams, txSk).toString();
   const locRes = await fetch(locUrl, {
     cache: "no-store",
     signal: AbortSignal.timeout(8000),
@@ -316,33 +297,26 @@ async function fetchTencentKeyWeather(txKey: string, txSk: string, ip: string): 
   }
   const ad = loc.result.ad_info;
   const adcode = ad.adcode;
-  const city = ad.district || ad.city || ad.province || "未知地区";
+  // 展示用名称取市级（如「盐城市」）；只有区县/省份时逐级回退
+  const city = ad.city || ad.district || ad.province || "未知地区";
 
-  // 2. 腾讯天气实况（同样携带签名）
+  // 2. 腾讯天气实况（同样携带签名；adcode 用定位结果）
+  const weatherPath = "ws/weather/v1/";
   const wParams: Record<string, string> = { key: txKey, adcode: String(adcode), type: "now" };
-  const wUrl = new URL("https://apis.map.qq.com/ws/weather/v1/");
-  wUrl.search = buildTencentParams(wParams, txSk).toString();
+  const wUrl = new URL(`https://apis.map.qq.com/${weatherPath}`);
+  wUrl.search = buildTencentParams(weatherPath, wParams, txSk).toString();
   const wRes = await fetch(wUrl, {
     cache: "no-store",
     signal: AbortSignal.timeout(8000),
   });
   if (!wRes.ok) throw new Error("tencent-key weather http error");
   const wData = (await wRes.json()) as TencentLbsWeather;
-  if (wData.status !== 0 || !wData.result?.now) {
+  // 实况字段在 result.realtime[].infos（解析见 lib/tencent.ts）
+  const parsed = parseTencentRealtime(wData);
+  if (!parsed) {
     throw new Error(`tencent-key weather error: ${wData.message || "no data"}`);
   }
-  const now = wData.result.now;
-  const windDirRaw = String(now.wind_dir ?? "未知");
-  const winddirection = windDirRaw.endsWith("风") ? windDirRaw : `${windDirRaw}风`;
-  const windpowerRaw = String(now.wind_power ?? "未知");
-  const windpower = windpowerRaw.endsWith("级") ? windpowerRaw : `${windpowerRaw}级`;
-  return {
-    city,
-    weather: String(now.weather ?? "未知"),
-    temperature: `${now.temp ?? "--"}℃`,
-    winddirection,
-    windpower,
-  };
+  return { city, ...parsed };
 }
 
 export async function GET(request: NextRequest) {
@@ -386,6 +360,15 @@ export async function GET(request: NextRequest) {
     sources.push({ name: "tencent", fn: () => fetchTencentWeather(weatherCity) });
   }
   sources.sort((a, b) => (a.name === provider ? -1 : 0) - (b.name === provider ? -1 : 0));
+
+  // 自动定位（未指定固定城市）时优先用腾讯位置服务：
+  // 它的 IP 库在境内能精确到区县，而高德的 IP 库常把地级市归到省会
+  // （实测 223.107.142.72 在盐城：高德给「南京市」，腾讯给「盐城市/盐都区」）。
+  // 配置了固定城市时保持用户选择的数据源优先。
+  if (!weatherCity && txKey) {
+    const i = sources.findIndex((s) => s.name === "tencent-key");
+    if (i > 0) sources.unshift(sources.splice(i, 1)[0]);
+  }
 
   if (sources.length === 0) {
     return NextResponse.json(

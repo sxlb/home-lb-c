@@ -161,7 +161,7 @@ export default function AccountPanel() {
                   value={form.username}
                   onChange={(e) => setForm({ ...form, username: e.target.value })}
                   placeholder="登录用户名"
-                  className="h-9 text-sm"
+                  className="h-10 sm:h-9"
                 />
               </div>
             </div>
@@ -190,7 +190,7 @@ export default function AccountPanel() {
                     setForm({ ...form, currentPassword: e.target.value })
                   }
                   placeholder="输入当前密码以验证身份"
-                  className="h-9 text-sm"
+                  className="h-10 sm:h-9"
                   required
                 />
               </div>
@@ -219,7 +219,7 @@ export default function AccountPanel() {
                       setForm({ ...form, newPassword: e.target.value })
                     }
                     placeholder="输入新密码（至少 8 位）"
-                    className="h-9 pr-9 text-sm"
+                    className="h-10 pr-9 sm:h-9"
                   />
                   <KeyRound className="absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/50" />
                 </div>
@@ -261,7 +261,7 @@ export default function AccountPanel() {
                   onChange={(e) => setDisableCode(e.target.value.replace(/\D/g, ""))}
                   placeholder="6 位验证码"
                   maxLength={6}
-                  className="h-8 w-28 text-center tracking-widest"
+                  className="h-10 w-28 text-center tracking-widest sm:h-8"
                 />
                 <Button size="sm" variant="outline" onClick={handleDisable} disabled={!disableCode || saving2fa}>
                   关闭
@@ -289,7 +289,7 @@ export default function AccountPanel() {
                   onChange={(e) => setEnableCode(e.target.value.replace(/\D/g, ""))}
                   placeholder="输入验证码确认"
                   maxLength={6}
-                  className="h-8 w-32 text-center tracking-widest"
+                  className="h-10 w-32 text-center tracking-widest sm:h-8"
                 />
                 <Button size="sm" onClick={handleEnable} disabled={!/^\d{6}$/.test(enableCode) || saving2fa}>
                   确认开启

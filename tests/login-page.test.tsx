@@ -4,9 +4,10 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import LoginPage from "@/app/admin/login/page";
 
 // vi.hoisted：mock 工厂提升执行时引用同一实例
-const { signInMock, pushMock } = vi.hoisted(() => ({
+const { signInMock, pushMock, prefetchMock } = vi.hoisted(() => ({
   signInMock: vi.fn(),
   pushMock: vi.fn(),
+  prefetchMock: vi.fn(),
 }));
 
 vi.mock("next-auth/react", () => ({
@@ -14,7 +15,8 @@ vi.mock("next-auth/react", () => ({
 }));
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: pushMock, refresh: vi.fn() }),
+  // prefetch：登录页挂载时会预取后台路由（缩短点登录后的等待）
+  useRouter: () => ({ push: pushMock, refresh: vi.fn(), prefetch: prefetchMock }),
 }));
 
 /** 构造 rate-limit 接口响应（默认未锁定） */

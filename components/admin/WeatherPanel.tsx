@@ -180,7 +180,7 @@ export default function WeatherPanel() {
                       value={amapKey}
                       onChange={(e) => setAmapKey(e.target.value)}
                       placeholder="如 8a4f...（16 位十六进制）"
-                      className="h-9 pr-10 text-sm"
+                      className="h-10 pr-10 sm:h-9"
                     />
                     <button
                       type="button"
@@ -216,7 +216,7 @@ export default function WeatherPanel() {
                       value={amapSecretKey}
                       onChange={(e) => setAmapSecretKey(e.target.value)}
                       placeholder="Key 开启数字签名时填写，未开启可留空"
-                      className="h-9 pr-10 text-sm"
+                      className="h-10 pr-10 sm:h-9"
                     />
                     <button
                       type="button"
@@ -249,7 +249,7 @@ export default function WeatherPanel() {
                       value={txWeatherKey}
                       onChange={(e) => setTxWeatherKey(e.target.value)}
                       placeholder="如 JXVBZ-...（腾讯位置服务 Key）"
-                      className="h-9 pr-10 text-sm"
+                      className="h-10 pr-10 sm:h-9"
                     />
                     <button
                       type="button"
@@ -273,7 +273,7 @@ export default function WeatherPanel() {
                       value={txWeatherSk}
                       onChange={(e) => setTxWeatherSk(e.target.value)}
                       placeholder="如 XXXX-XXXX（Key 开启数字签名时必填）"
-                      className="h-9 pr-10 text-sm"
+                      className="h-10 pr-10 sm:h-9"
                     />
                     <button
                       type="button"
@@ -315,7 +315,7 @@ export default function WeatherPanel() {
                   value={weatherCity}
                   onChange={(e) => setWeatherCity(e.target.value)}
                   placeholder="如 深圳、广州、北京"
-                  className="h-9 text-sm"
+                  className="h-10 sm:h-9"
                 />
                 <p className="text-[11px] text-muted-foreground leading-relaxed">
                   填写需要查询天气的城市名称，无需配置 Key
@@ -336,7 +336,7 @@ export default function WeatherPanel() {
               value={weatherCity}
               onChange={(e) => setWeatherCity(e.target.value)}
               placeholder="如 440100 或 广州，留空则使用默认定位"
-              className="h-9 text-sm"
+              className="h-10 sm:h-9"
             />
             <p className="text-[11px] text-muted-foreground leading-relaxed">
               可填城市 adcode 或城市名，留空使用高德默认定位

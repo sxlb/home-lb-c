@@ -312,7 +312,7 @@ export default function OperationLogPanel() {
                     setCleanFrom(e.target.value);
                     setCleanPending(false);
                   }}
-                  className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground disabled:opacity-50"
+                  className="h-10 sm:h-9 rounded-md border border-input bg-background px-3 text-base sm:text-sm text-foreground disabled:opacity-50"
                 />
               </label>
               <label className="flex flex-col gap-1 text-xs text-muted-foreground">
@@ -325,7 +325,7 @@ export default function OperationLogPanel() {
                     setCleanTo(e.target.value);
                     setCleanPending(false);
                   }}
-                  className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground disabled:opacity-50"
+                  className="h-10 sm:h-9 rounded-md border border-input bg-background px-3 text-base sm:text-sm text-foreground disabled:opacity-50"
                 />
               </label>
               <label className="ml-1 mt-5 flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">

@@ -202,7 +202,7 @@ export default function ThemePanel() {
                     type="color"
                     value={/^#[0-9a-fA-F]{6}$/.test(profile.accentColor) ? profile.accentColor : "#7dd3fc"}
                     onChange={(e) => set("accentColor", e.target.value)}
-                    className="h-9 w-12 cursor-pointer rounded-md border-0 bg-transparent [color-scheme:light]"
+                    className="h-10 w-12 cursor-pointer rounded-md border-0 bg-transparent sm:h-9 [color-scheme:light]"
                   />
                   <div className="h-6 w-px bg-border" />
                   <Input
@@ -275,7 +275,7 @@ export default function ThemePanel() {
                       type="color"
                       value={/^#[0-9a-fA-F]{6}$/.test(profile.avatarBorderColor) ? profile.avatarBorderColor : "#ffffff"}
                       onChange={(e) => set("avatarBorderColor", e.target.value)}
-                      className="h-9 w-12 cursor-pointer rounded-md border-0 bg-transparent [color-scheme:light]"
+                      className="h-10 w-12 cursor-pointer rounded-md border-0 bg-transparent sm:h-9 [color-scheme:light]"
                     />
                     <div className="h-6 w-px bg-border" />
                     <Input

@@ -170,6 +170,8 @@ export interface ProxySource {
   /** 可直接拼接 repos/... 的 base */
   base: string;
   scope: ProxyScope;
+  /** 是否为后台指定的优先代理（优先代理会先单独探测，成功即用） */
+  preferred?: boolean;
 }
 
 /**
@@ -212,34 +214,77 @@ function mirrorsFilePath(): string {
   return path.join(dir, "github-mirrors.json");
 }
 
-/** 读取后台配置的自定义代理（文件缺失/损坏返回空数组，不影响内置兜底） */
-export async function readCustomMirrors(): Promise<string[]> {
+/** 持久化结构：自定义代理列表 + 后台指定的优先代理（preferred 为空表示全源自动竞速） */
+interface ProxyStore {
+  mirrors: string[];
+  preferred: string | null;
+}
+
+/** 读取持久化文件（缺失/损坏返回空结构，不影响内置代理兜底） */
+async function readProxyStore(): Promise<ProxyStore> {
   try {
-    const parsed = JSON.parse(await fs.readFile(mirrorsFilePath(), "utf8")) as { mirrors?: unknown };
-    if (!Array.isArray(parsed?.mirrors)) return [];
-    return parsed.mirrors
-      .map((m) => normalizeMirrorBase(String(m)))
-      .filter((m): m is string => Boolean(m));
+    const parsed = JSON.parse(await fs.readFile(mirrorsFilePath(), "utf8")) as {
+      mirrors?: unknown;
+      preferred?: unknown;
+    };
+    const mirrors = Array.isArray(parsed?.mirrors)
+      ? parsed.mirrors.map((m) => normalizeMirrorBase(String(m))).filter((m): m is string => Boolean(m))
+      : [];
+    const preferredRaw = typeof parsed?.preferred === "string" ? parsed.preferred : "";
+    const preferred = preferredRaw ? normalizeMirrorBase(preferredRaw) : null;
+    return { mirrors, preferred };
   } catch {
-    return [];
+    return { mirrors: [], preferred: null };
   }
 }
 
-/** 写入自定义代理（原子写；返回是否成功，失败不影响内置代理继续工作） */
-export async function writeCustomMirrors(list: string[]): Promise<boolean> {
-  const normalized = Array.from(
-    new Set(list.map((m) => normalizeMirrorBase(m)).filter((m): m is string => Boolean(m)))
-  );
+/** 原子写入持久化文件（返回是否成功，失败不影响内置代理继续工作） */
+async function writeProxyStore(store: ProxyStore): Promise<boolean> {
   try {
     const file = mirrorsFilePath();
     await fs.mkdir(path.dirname(file), { recursive: true });
     const tmp = `${file}.tmp`;
-    await fs.writeFile(tmp, JSON.stringify({ mirrors: normalized }, null, 2));
+    await fs.writeFile(tmp, JSON.stringify(store, null, 2));
     await fs.rename(tmp, file);
     return true;
   } catch {
     return false;
   }
+}
+
+/** 读取后台配置的自定义代理（文件缺失/损坏返回空数组，不影响内置兜底） */
+export async function readCustomMirrors(): Promise<string[]> {
+  return (await readProxyStore()).mirrors;
+}
+
+/** 写入自定义代理（保留已设置的优先代理；代理被移除时一并清掉优先设置） */
+export async function writeCustomMirrors(list: string[]): Promise<boolean> {
+  const normalized = Array.from(
+    new Set(list.map((m) => normalizeMirrorBase(m)).filter((m): m is string => Boolean(m)))
+  );
+  const prev = await readProxyStore();
+  const preferred =
+    prev.preferred && normalized.some((m) => sourceKey(m) === sourceKey(prev.preferred as string))
+      ? prev.preferred
+      : null;
+  return writeProxyStore({ mirrors: normalized, preferred });
+}
+
+/** 读取后台指定的优先代理（null = 未指定，按全源竞速） */
+export async function readProxyPreference(): Promise<string | null> {
+  return (await readProxyStore()).preferred;
+}
+
+/**
+ * 设置优先代理：传 base 指定，传 null 清除（恢复自动竞速）。
+ * 非法值直接忽略并清除，避免把坏地址写进配置。
+ */
+export async function writeProxyPreference(base: string | null): Promise<boolean> {
+  const store = await readProxyStore();
+  const next = base ? normalizeMirrorBase(base) : null;
+  // 只有确实在候选列表里的地址才允许被设为优先，防止写入失效地址后版本检测反复空跑
+  const allowed = next ? (await listProxySources()).some((s) => sourceKey(s.base) === sourceKey(next)) : false;
+  return writeProxyStore({ mirrors: store.mirrors, preferred: allowed ? next : null });
 }
 
 /**
@@ -262,7 +307,7 @@ function sourceKey(base: string): string {
  */
 export async function listProxySources(): Promise<ProxySource[]> {
   const { bases, scope } = configuredMirrors();
-  const custom = await readCustomMirrors();
+  const [custom, preferred] = await Promise.all([readCustomMirrors(), readProxyPreference()]);
   const sources: ProxySource[] = [{ base: OFFICIAL_BASE, scope: "official" }];
   const seen = new Set<string>([sourceKey(OFFICIAL_BASE)]);
   for (const base of bases) {
@@ -275,7 +320,11 @@ export async function listProxySources(): Promise<ProxySource[]> {
     seen.add(sourceKey(base));
     sources.push({ base, scope: "custom" });
   }
-  return sources;
+  const preferredKey = preferred ? sourceKey(preferred) : "";
+  // 只在确实为优先源时附加标记，避免给每个源都塞一个 preferred: false（既有断言更干净）
+  return sources.map((s) =>
+    preferredKey && sourceKey(s.base) === preferredKey ? { ...s, preferred: true } : s
+  );
 }
 
 async function candidateSources(): Promise<string[]> {
@@ -480,6 +529,25 @@ export async function fetchLatestRelease(force = false): Promise<FetchLatestResu
 
   const sources = await candidateSources();
   let last: ProbeResult | undefined;
+
+  // 后台指定的优先代理：先单独探它一次，成功就直接采用（不再等其他源）。
+  // 用途：官方源在部分网络下长期超时而某个代理稳定可用时，可在后台「测试连通性」
+  // 后把它设为优先，版本检测就固定走它。
+  const preferred = await readProxyPreference();
+  if (preferred && sources.includes(preferred)) {
+    const r = await probe(preferred, MIRROR_TIMEOUT_MS);
+    if (r.kind === "ok") {
+      globalCache.latest = { at: Date.now(), data: r.data };
+      return { data: r.data, fromCache: false };
+    }
+    if (r.kind === "noRelease") {
+      const message = "暂无已发布的版本";
+      globalCache.latest = { at: Date.now(), data: null, error: message };
+      return { data: null, fromCache: false, error: message };
+    }
+    // 优先代理不可用：记录后继续走全源竞速，不让单点故障卡死版本检测
+    console.warn(`[version] 优先代理 ${safeHost(preferred)} 不可用（${describeResult(r)}），回退全源竞速`);
+  }
 
   for (let round = 0; round < MAX_ROUNDS; round++) {
     const res = await raceOnce(sources, round + 1);

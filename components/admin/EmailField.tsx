@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { selectClass } from "./profileShared";
+import { cn } from "@/lib/utils";
 
 /** 主流邮箱后缀（按国内使用频率排序） */
 export const EMAIL_DOMAINS = [
@@ -89,7 +90,9 @@ export default function EmailField({ id, value, onChange }: Props) {
         <select
           aria-label="切换为常见邮箱"
           value={CUSTOM_DOMAIN}
-          className={`${selectClass} w-[8.5rem] shrink-0`}
+          // cn（tailwind-merge）确保 w-* 覆盖 selectClass 里的 w-full：
+          // 直接拼字符串时 w-full 会赢，窄屏下下拉会吃满整行、把输入框挤到只剩几十像素
+          className={cn(selectClass, "w-[7rem] shrink-0 sm:w-[8.5rem]")}
           onChange={() => {
             setCustom(false);
             setLocal("");
@@ -114,6 +117,7 @@ export default function EmailField({ id, value, onChange }: Props) {
         id={id}
         value={local}
         autoComplete="off"
+        inputMode="email"
         placeholder="123456"
         aria-label="邮箱账号"
         className="min-w-0 flex-1 rounded-r-none border-r-0"
@@ -123,13 +127,13 @@ export default function EmailField({ id, value, onChange }: Props) {
           emit(nextLocal, domain);
         }}
       />
-      <span className="inline-flex select-none items-center border-y border-input bg-muted px-2 text-sm text-muted-foreground">
+      <span className="inline-flex select-none items-center border-y border-input bg-muted px-1.5 text-base text-muted-foreground sm:px-2 sm:text-sm">
         @
       </span>
       <select
         aria-label="邮箱后缀"
         value={domain}
-        className={`${selectClass} w-[9rem] shrink-0 rounded-l-none border-l-0`}
+        className={cn(selectClass, "w-[8rem] shrink-0 rounded-l-none border-l-0 sm:w-[9rem]")}
         onChange={(e) => {
           const next = e.target.value;
           if (next === CUSTOM_DOMAIN) {

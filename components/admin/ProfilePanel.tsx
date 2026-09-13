@@ -9,7 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
 import { DEFAULT_WELCOME_MESSAGES, DEFAULT_SITE_TITLE, DEFAULT_SITE_DESCRIPTION, DEFAULT_SITE_KEYWORDS } from "@/lib/validation";
 import { LoadingPlaceholder } from "./LinksPanel";
-import { loadProfile, setCachedProfile, hasCachedProfile, profileFieldPatch } from "./profileShared";
+import { loadProfile, setCachedProfile, hasCachedProfile, profileFieldPatch, selectClass } from "./profileShared";
 import { useGlobalSaveState, useRegisterSave, type SaveOutcome } from "./GlobalSave";
 import { useEditRevision } from "./useEditRevision";
 import GithubUserField from "./GithubUserField";
@@ -174,9 +174,7 @@ const DATE_FORMAT_PRESETS = [
   { value: "YYYY/M/D dddd", label: "2026/8/22 周六" },
 ];
 
-// 原生 select 的统一样式
-const selectClass =
-  "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 admin-select";
+// 原生 select 统一样式见 profileShared（此处不再重复定义，避免两处样式漂移）
 
 export default function ProfilePanel() {
   const [profile, setProfile] = useState<Profile>(INITIAL);
