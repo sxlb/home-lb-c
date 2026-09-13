@@ -3,10 +3,12 @@ import { prisma } from "@/lib/db";
 import { requireSession, success, error, internalError, parseJsonBody, writeOperationLog, getClientIp } from "@/lib/server";
 import { CURRENT_VERSION, fetchLatestRelease, isNewerRelease, readCachedRelease } from "@/lib/version";
 import {
+  checkDeployDirWritable,
   execState,
   writeRequest,
   rollbackTargets,
   newId,
+  DeployDirError,
   type UpdateAction,
   type UpdateMethod,
 } from "@/lib/update";
@@ -43,6 +45,11 @@ export async function POST(request: NextRequest) {
     const who = state.kind === "pending" ? "已有待执行的更新请求" : "已有正在执行的更新任务";
     return error(`${who}，请等待完成后再尝试`, 409);
   }
+
+  // 可写性前置检查：容器非 root 运行而部署目录属主为 root 时，写入握手请求会 EACCES。
+  // 提前拦下并返回可照做的修复命令，避免用户只看到笼统的「服务器内部错误」。
+  const dirIssue = checkDeployDirWritable();
+  if (dirIssue) return error(dirIssue, 500);
 
   try {
     let version = "";
@@ -124,6 +131,8 @@ export async function POST(request: NextRequest) {
 
     return success({ ok: true, action, method, version, id, versionSource });
   } catch (e) {
+    // 目录权限类问题原样回传具体原因（含修复命令），其余归为通用内部错误
+    if (e instanceof DeployDirError) return error(e.message, 500);
     return internalError("触发更新失败", e);
   }
 }

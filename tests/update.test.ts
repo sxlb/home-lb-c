@@ -11,6 +11,8 @@ import {
   execState,
   rollbackTargets,
   listBackupSnapshots,
+  checkDeployDirWritable,
+  DeployDirError,
 } from "@/lib/update";
 
 describe("lib/version 版本比较", () => {
@@ -119,5 +121,70 @@ describe("lib/update 更新握手协议（临时目录隔离）", () => {
 
   it("newId 生成唯一 id", () => {
     expect(newId()).not.toBe(newId());
+  });
+});
+
+describe("部署目录可写性（容器非 root + data/deploy 属主 root 的线上 500 回归）", () => {
+  let tmp: string;
+  // 用普通文件占位当 base：其下无法创建 deploy/ 子目录，稳定复现"目录不可写"
+  let blocked: string;
+
+  beforeEach(() => {
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), "home-lb-deploy-"));
+    blocked = path.join(tmp, "not-a-dir");
+    fs.writeFileSync(blocked, "x");
+  });
+
+  it("目录不可写时返回可照做的修复提示（含 chown/chmod 命令），而非笼统报错", () => {
+    const msg = checkDeployDirWritable(blocked);
+    expect(msg).toBeTruthy();
+    expect(msg).toContain("对应用不可写");
+    expect(msg).toContain("chown -R 1001:1001");
+    expect(msg).toContain("chmod 775");
+    expect(msg).toContain("setup-update.sh");
+  });
+
+  it("目录可写时返回 null，writeRequest 正常落盘握手请求", () => {
+    expect(checkDeployDirWritable(tmp)).toBeNull();
+    writeRequest(
+      {
+        id: "test-1",
+        action: "update",
+        method: "image",
+        version: "0.0.21",
+        requestedBy: "admin",
+        createdAt: new Date().toISOString(),
+      },
+      tmp
+    );
+    expect(readRequest(tmp)?.version).toBe("0.0.21");
+  });
+
+  it("写入失败抛 DeployDirError（带目录与修复命令），不把裸 EACCES 抛给上层", () => {
+    let thrown: unknown;
+    try {
+      writeRequest(
+        {
+          id: "test-2",
+          action: "update",
+          method: "image",
+          version: "0.0.21",
+          requestedBy: "admin",
+          createdAt: new Date().toISOString(),
+        },
+        blocked
+      );
+    } catch (e) {
+      thrown = e;
+    }
+    expect(thrown).toBeInstanceOf(DeployDirError);
+    const err = thrown as DeployDirError;
+    expect(err.dir).toBe(deployDir(blocked));
+    expect(err.message).toContain("sudo chown -R 1001:1001");
+    expect(err.cause).toBeDefined(); // 原始 EACCES/ENOTDIR 保留，便于日志追根因
+  });
+
+  it("部署目录不可创建时，状态查询降级为空闲而不是抛错", () => {
+    expect(execState(blocked).kind).toBe("idle");
   });
 });

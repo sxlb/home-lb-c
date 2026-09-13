@@ -66,6 +66,21 @@ json_get() { # file key
 
 now_ts() { date '+%Y%m%d-%H%M%S'; }
 
+# 容器以非 root 用户（Dockerfile 里固定 uid 1001）运行，而本脚本以 root 运行，
+# 由 root 创建/触碰过的 data/deploy 属主会是 root 且非组可写 → 容器写 request.json 报 EACCES，
+# 后台表现为「点击更新提示服务器内部错误」。每次调度都校正一次，保证自愈不复发。
+APP_UID="${APP_UID:-1001}"
+APP_GID="${APP_GID:-1001}"
+ensure_deploy_perms() {
+  mkdir -p "$DEPLOY_DIR"
+  [ "$(id -u)" = "0" ] || return 0
+  chown "$APP_UID:$APP_GID" "$DEPLOY_DIR" 2>/dev/null || true
+  chmod 775 "$DEPLOY_DIR" 2>/dev/null || true
+  # 版本缓存由容器侧（登录/检测更新）回写，同样需要容器可写
+  [ -f "$DATA_DIR/latest.json" ] && chown "$APP_UID:$APP_GID" "$DATA_DIR/latest.json" 2>/dev/null
+  return 0
+}
+
 # 更新 versions.json：记录一次操作历史，并更新 currentVersion。
 # 优先用 python3，缺失时回退 node（二者在现代 Linux 上通常至少其一）。
 update_versions() { # version action
@@ -195,6 +210,8 @@ PY
 request="$DEPLOY_DIR/request.json"
 # 每次调度先维护版本缓存（无请求时也执行），保证容器永远有可读的最新版本缓存
 refresh_version_cache
+# 再校正数据目录属主（需在 refresh 之后：refresh 会以 root 重写 latest.json）
+ensure_deploy_perms
 [ -f "$request" ] || exit 0   # 无待执行请求，本次调度直接退出
 
 req_id=$(json_get "$request" id)

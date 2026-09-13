@@ -72,6 +72,41 @@ function ensureDirSync(dir: string): void {
   fs.mkdirSync(dir, { recursive: true });
 }
 
+/**
+ * 部署目录不可写：容器以非 root（uid 1001）运行，而 data/deploy 由宿主机脚本以 root 创建时
+ * 属主为 root 且非组可写 → 写入握手请求 EACCES。带上目录与修复命令，便于直接照做。
+ */
+export class DeployDirError extends Error {
+  readonly dir: string;
+  readonly cause?: unknown;
+
+  constructor(dir: string, cause?: unknown) {
+    super(
+      `宿主机部署目录 ${dir} 对应用不可写，无法提交更新请求（容器以非 root 运行，而该目录属主为 root）。` +
+        `请在服务器执行：sudo chown -R 1001:1001 ${dir} && sudo chmod 775 ${dir}，` +
+        `或重跑 scripts/setup-update.sh 修正权限后重试`
+    );
+    this.name = "DeployDirError";
+    this.dir = dir;
+    this.cause = cause;
+  }
+}
+
+/**
+ * 检查部署目录是否可写：可写返回 null，不可写返回面向用户的修复提示。
+ * 触发更新前先调用，把「服务器内部错误」换成可照做的具体原因。
+ */
+export function checkDeployDirWritable(base = dataDir()): string | null {
+  const dir = deployDir(base);
+  try {
+    ensureDirSync(dir);
+    fs.accessSync(dir, fs.constants.W_OK);
+    return null;
+  } catch {
+    return new DeployDirError(dir).message;
+  }
+}
+
 function readJson<T>(file: string): T | null {
   try {
     return JSON.parse(fs.readFileSync(file, "utf8")) as T;
@@ -109,10 +144,15 @@ function fileMtime(dir: string, name: string): number {
 
 export function writeRequest(req: UpdateRequest, base = dataDir()): void {
   const dir = deployDir(base);
-  ensureDirSync(dir); // 目标目录可能尚未创建（首次触发前）
-  const id = req.id || newId();
-  const full: UpdateRequest = { ...req, id };
-  writeAtomic(path.join(dir, "request.json"), full);
+  try {
+    ensureDirSync(dir); // 目标目录可能尚未创建（首次触发前）
+    const id = req.id || newId();
+    const full: UpdateRequest = { ...req, id };
+    writeAtomic(path.join(dir, "request.json"), full);
+  } catch (e) {
+    // 写入失败最多见的原因是目录不可写（属主 root + 容器非 root），转成可照做的提示
+    throw new DeployDirError(dir, e);
+  }
 }
 
 export function readRequest(base = dataDir()): UpdateRequest | null {
@@ -152,7 +192,12 @@ export interface ExecState {
 
 export function execState(base = dataDir()): ExecState {
   const dir = deployDir(base);
-  ensureDirSync(dir);
+  // 目录不可创建时不在此抛错：状态查询应当降级为"空闲"，把可写性问题留给触发更新时报明确原因
+  try {
+    ensureDirSync(dir);
+  } catch {
+    return { kind: "idle" };
+  }
   if (readRequest(base)) {
     return { kind: "pending", request: readRequest(base) ?? undefined };
   }

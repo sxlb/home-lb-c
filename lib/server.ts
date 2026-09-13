@@ -14,13 +14,15 @@ import type { z, ZodTypeAny } from "zod";
 
 /* ==================== 日志与响应封装 ==================== */
 
-/** 仅在开发环境输出完整错误；生产环境只输出摘要（可接入 Sentry 等） */
+/** 输出服务端错误日志（含调用栈），供运维排查；错误详情不回传给客户端 */
 function logError(message: string, error?: unknown) {
-  if (process.env.NODE_ENV === "development") {
-    console.error(message, error);
-  } else {
+  // 生产环境同样要打全量错误：只打 message 会让容器日志里只剩「触发更新失败」，
+  // 真实原因（如 EACCES: permission denied）无处可查，线上排查只能靠猜。
+  if (error === undefined) {
     console.error(message);
+    return;
   }
+  console.error(message, error instanceof Error ? (error.stack ?? error.message) : error);
 }
 
 /** 返回 JSON 响应，默认 200 */

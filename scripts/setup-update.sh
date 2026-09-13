@@ -54,6 +54,16 @@ fi
 
 # ---------- 4. 写基线版本 ----------
 mkdir -p "$DEPLOY_DIR"
+# 容器以非 root（uid 1001）运行，需要能往 deploy 目录写握手请求 request.json；
+# 这里以 root 创建的目录必须交给容器用户，否则后台点更新会因 EACCES 报「服务器内部错误」。
+APP_UID="${APP_UID:-1001}"
+APP_GID="${APP_GID:-1001}"
+if [ "$(id -u)" = "0" ]; then
+  chown "$APP_UID:$APP_GID" "$DEPLOY_DIR" 2>/dev/null || true
+  chmod 775 "$DEPLOY_DIR" 2>/dev/null || true
+  [ -f "$DEPLOY_DIR/../latest.json" ] && chown "$APP_UID:$APP_GID" "$DEPLOY_DIR/../latest.json" 2>/dev/null
+  echo "==> 已校正 $DEPLOY_DIR 属主为 $APP_UID:$APP_GID（容器写入握手请求用）"
+fi
 VERSION_FILE="$DEPLOY_DIR/versions.json"
 if [ ! -f "$VERSION_FILE" ]; then
   # 与运行中应用报告的版本（package.json）对齐；无 node 时回退 git tag
