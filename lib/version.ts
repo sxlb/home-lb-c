@@ -150,7 +150,7 @@ const RELEASE_HEADERS = {
 };
 
 const OFFICIAL_TIMEOUT_MS = 5000; // 官方源很快（实测约 0.6s），超时给紧一点
-const MIRROR_TIMEOUT_MS = 8000; // 公共镜像慢得多（实测 3.5s~7s），超时放宽
+const MIRROR_TIMEOUT_MS = 10000; // 公共镜像慢得多（实测 3.5s~7s，出网拥堵时更慢），超时放宽
 const MAX_ROUNDS = 2; // 竞速总轮数：首轮失败后短暂间隔重试，抵御服务器出网间歇性丢包
 const ROUND_GAP_MS = 300; // 轮次间间隔
 

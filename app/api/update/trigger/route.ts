@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireSession, success, error, internalError, parseJsonBody, writeOperationLog, getClientIp } from "@/lib/server";
-import { fetchLatestRelease, readCachedRelease } from "@/lib/version";
+import { CURRENT_VERSION, fetchLatestRelease, isNewerRelease, readCachedRelease } from "@/lib/version";
 import {
   execState,
   writeRequest,
@@ -56,8 +56,16 @@ export async function POST(request: NextRequest) {
       if (!release) {
         // 实时检测失败（出网抖动 / GitHub 限流）时降级用缓存版本：
         // 触发更新只需要一个有效的目标 tag，不该因为一次检测失败就把用户卡在「无法检测到最新版本」。
-        release = await readCachedRelease();
-        if (release) versionSource = "cache";
+        // 但缓存版本必须确实比当前版本新，否则会把「检测失败」变成「静默降级到旧版本」。
+        const cached = await readCachedRelease();
+        if (cached && isNewerRelease(cached.version, CURRENT_VERSION)) {
+          release = cached;
+          versionSource = "cache";
+        } else if (cached) {
+          return error(
+            `实时检测最新版本失败（${latest.error ?? "网络异常"}）；缓存中的版本 ${cached.version} 不高于当前版本 ${CURRENT_VERSION}，没有可更新的版本`
+          );
+        }
       }
       if (!release) {
         return error(latest.error ? `无法检测到最新版本：${latest.error}` : "暂无可更新版本");
