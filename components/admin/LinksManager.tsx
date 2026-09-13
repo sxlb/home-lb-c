@@ -76,7 +76,7 @@ export default function LinksManager() {
             tabLabel="社交链接"
             showTip
             namePlaceholder="如 GitHub"
-            iconPlaceholder="图标名 / 图片URL / random:关键词"
+            iconPlaceholder="图标名 / Iconify(fa:github) / 图片URL或路径 / SVG代码 / random:关键词"
             urlPlaceholder="https://github.com/yourname 或 mailto:xxx"
           />
         </div>
@@ -89,7 +89,7 @@ export default function LinksManager() {
             successMessage="网站链接保存成功"
             tabLabel="网站链接"
             namePlaceholder="如 博客"
-            iconPlaceholder="图标名 / 图片URL / random:关键词"
+            iconPlaceholder="图标名 / Iconify(fa:github) / 图片URL或路径 / SVG代码 / random:关键词"
             urlPlaceholder="https://blog.example.com"
           />
         </div>

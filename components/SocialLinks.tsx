@@ -13,8 +13,19 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useIconfontSymbols } from "./Iconfont";
-import { resolveLucideIcon, isLucideIcon, getLucideIconByName } from "./lucideIconResolver";
-import { resolveIconImageSrc } from "@/lib/iconValue";
+import {
+  resolveLucideIcon,
+  isLucideIcon,
+  getLucideIconByName,
+} from "./lucideIconResolver";
+import {
+  resolveIconImageSrc,
+  isInlineSvgValue,
+  isIconifyValue,
+  renderInlineSvg,
+} from "@/lib/iconValue";
+import IconifyIcon from "./IconifyIcon";
+import { resolveFaPresetLucideName } from "@/lib/iconPreset";
 
 const ICON_MAP: Record<string, LucideIcon> = {
   github: Github,
@@ -53,7 +64,13 @@ const resolveIcon = (iconName: string): LucideIcon => {
     const LucideIconComp = resolveLucideIcon(iconName);
     if (LucideIconComp) return LucideIconComp;
   }
-  // 其次是裸图标名（历史数据/手填），先按连字符式在白名单里查（如 book-open）
+  // 其次是 @vicons/fa 预设名（Blog / Cloud / ... 大写形式的历史值）
+  const presetLucide = resolveFaPresetLucideName(iconName);
+  if (presetLucide) {
+    const presetComp = getLucideIconByName(presetLucide);
+    if (presetComp) return presetComp;
+  }
+  // 再是裸图标名（历史数据/手填），先按连字符式在白名单里查（如 book-open）
   const kebab = getLucideIconByName(iconName.trim());
   if (kebab) return kebab;
   const key = iconName.toLowerCase().replace(/[^a-z]/g, "");
@@ -79,6 +96,20 @@ function SocialIcon({
   const [imgBroken, setImgBroken] = useState(false);
   const imgSrc = imgBroken ? null : resolveIconImageSrc(icon, 32);
 
+  // 1. 内联 SVG 代码（后台可整体粘贴 iconfont 导出的 <svg>…</svg>）
+  if (isInlineSvgValue(icon)) {
+    return (
+      <span
+        aria-hidden="true"
+        data-testid="social-icon-inline-svg"
+        className="inline-flex items-center justify-center"
+        style={{ width: 32, height: 32 }}
+        dangerouslySetInnerHTML={{ __html: renderInlineSvg(icon, 32) }}
+      />
+    );
+  }
+
+  // 2. 图片类（favicon / 图片直链，后台「从网站获取」写入的就是这类）
   if (imgSrc) {
     return (
       // 管理员配置的外部图标地址，走原生 img（同 LinkIconPreview / MediaPicker 的做法）
@@ -93,6 +124,7 @@ function SocialIcon({
     );
   }
 
+  // 3. iconfont symbol（阿里云矢量图标库，后台图标库地址注入的 symbol 名）
   if (iconfontSymbols.includes(icon)) {
     return (
       <svg className="h-[32px] w-[32px]" aria-hidden="true" focusable="false">
@@ -101,6 +133,12 @@ function SocialIcon({
     );
   }
 
+  // 4. Iconify 在线图标（prefix:name，如 fa:github、mdi:home）
+  if (isIconifyValue(icon)) {
+    return <IconifyIcon icon={icon} size={32} className="h-[32px] w-[32px]" />;
+  }
+
+  // 5. lucide / @vicons/fa 预设名（兜底）
   const IconComponent = resolveIcon(icon);
   return <IconComponent className="h-[32px] w-[32px]" />;
 }

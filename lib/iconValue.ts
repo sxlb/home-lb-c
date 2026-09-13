@@ -38,14 +38,78 @@ export function getRandomImageUrl(keyword: string, width: number, height: number
 }
 
 /**
+ * 判断值是否为「内联 SVG 代码」（以 <svg 开头的一整段可粘贴图标）。
+ * 仅接受以 <svg 开头的片段，并排除夹杂 <script 的注入型内容。
+ */
+export function isInlineSvgValue(value: string): boolean {
+  if (!value) return false;
+  const trimmed = value.trimStart();
+  return trimmed.startsWith("<svg") && !/<\s*script/i.test(value);
+}
+
+/**
+ * 非 Iconify 的保留前缀：这些形态本身带冒号（lucide:xxx、random:city、http://…），
+ * 若不做排除会被 Iconify 的正则（prefix:name）误判，导致 lucide 图标被当成在线图标去请求。
+ */
+const RESERVED_ICON_PREFIXES = [
+  "http:",
+  "https:",
+  "data:",
+  "blob:",
+  "mailto:",
+  "tel:",
+  "random:",
+  "unsplash:",
+  "lucide:",
+];
+
+/**
+ * 判断值是否为 Iconify 在线图标（prefix:name 格式，如 fa:github、mdi:home、tabler:brand-github）。
+ * 注意排除 http(s) 外链、lucide: 前缀与 random:/unsplash: 随机图前缀。
+ */
+export function isIconifyValue(value: string): boolean {
+  if (typeof value !== "string" || !value) return false;
+  const trimmed = value.trim();
+  const lower = trimmed.toLowerCase();
+  if (RESERVED_ICON_PREFIXES.some((p) => lower.startsWith(p))) return false;
+  return /^[a-z0-9-]+:[a-z0-9-]+$/i.test(trimmed);
+}
+
+/**
+ * 将内联 SVG 代码规范化为页面可安全注入的形式：
+ * - 移除 <script> 之外的事件属性（on*）、外链 href/src，防止注入；
+ * - 把 width/height 统一为指定尺寸（后台粘贴的阿里 iconfont 常带 200x200 固定大小，直接注入会撑破布局）。
+ */
+export function renderInlineSvg(svg: string, size: number): string {
+  const safe = svg
+    .replace(/\s+on\w+\s*=\s*(["']).*?\1/gi, "")
+    .replace(/\s+href\s*=\s*(["']).*?\1/gi, "")
+    .replace(/\s+src\s*=\s*(["']).*?\1/gi, "");
+  return safe.replace(/<svg([^>]*)>/, (_m, attrs) => {
+    const rest = (attrs || "").replace(/\s(width|height)="[^"]*"/g, "");
+    return `<svg${rest} width="${size}" height="${size}">`;
+  });
+}
+
+/**
  * 解析「图片型」图标 / 封面值 → 可渲染的图片地址。
  * - random: / unsplash: 关键词 → 随机图直链
- * - http(s):// 外链、/api/uploads/ 媒体库路径 → 原样返回
- * - 其他（纯图标名）→ null，由调用方走图标渲染分支
+ * - http(s):// 外链 → 原样返回
+ * - 以 / 开头的本地/站点内路径（/images/xxx.png、/api/uploads/... 等）→ 原样返回
+ * - 内联 SVG / Iconify（prefix:name）/ 纯图标名 → null，由调用方走图标渲染分支
  */
 export function resolveIconImageSrc(value: string, size: number): string | null {
   if (!value) return null;
+  if (isInlineSvgValue(value) || isIconifyValue(value)) return null;
   if (isRandomImageValue(value)) return getRandomImageUrl(extractRandomKeyword(value), size);
-  if (/^(https?:\/\/|\/api\/uploads\/)/i.test(value)) return value;
+  if (/^https?:\/\//i.test(value)) return value;
+  // 站点内相对路径：Vue 版（home 项目）对「非预设名 / 非 iconify」的值一律当图片地址处理，
+  // 这里同样放宽到任意 / 开头的路径，保证 /icon.svg、/assets/logo.webp 等本地图片可用。
+  if (isLocalImagePath(value)) return value;
   return null;
+}
+
+/** 判断是否为站点内本地/媒体图片路径（以 / 开头，排除协议相对地址 //host） */
+export function isLocalImagePath(value: string): boolean {
+  return value.startsWith("/") && !value.startsWith("//");
 }

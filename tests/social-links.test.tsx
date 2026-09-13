@@ -45,4 +45,35 @@ describe("社交链接图标渲染（显示错误图标的回归）", () => {
     const { container } = render(<SocialLinks initialLinks={[]} />);
     expect(container.querySelector(".social-links-bar")).toBeNull();
   });
+
+  it("内联 SVG 代码（iconfont 粘贴）按 32×32 内联渲染", () => {
+    render(
+      <SocialLinks
+        initialLinks={[
+          {
+            id: 5,
+            name: "小猪",
+            icon: '<svg t="1789304190843" viewBox="0 0 1024 1024" width="200" height="200"><path d="M1 2" fill="#FAAD08"/></svg>',
+            ...base,
+          },
+        ]}
+      />
+    );
+    const holder = document.querySelector('[data-testid="social-icon-inline-svg"]');
+    expect(holder).not.toBeNull();
+    const svg = holder?.querySelector("svg");
+    expect(svg?.getAttribute("width")).toBe("32");
+    expect(svg?.getAttribute("height")).toBe("32");
+  });
+
+  it("@vicons/fa 预设名（历史数据）渲染为 lucide 图标而非兜底地球", () => {
+    render(<SocialLinks initialLinks={[{ id: 6, name: "博客", icon: "Blog", ...base }]} />);
+    expect(document.querySelector("img")).toBeNull();
+    expect(document.querySelector("svg")).not.toBeNull();
+  });
+
+  it("本地图片路径渲染为 img", () => {
+    render(<SocialLinks initialLinks={[{ id: 7, name: "本地图标", icon: "/images/icon/github.png", ...base }]} />);
+    expect(document.querySelector("img")?.getAttribute("src")).toBe("/images/icon/github.png");
+  });
 });

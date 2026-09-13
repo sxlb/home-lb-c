@@ -10,8 +10,10 @@ import { toast } from "sonner";
 import { useLinkList } from "./useLinkList";
 import { PanelHeader, EmptyState } from "./panel";
 import MediaPicker from "./MediaPicker";
-import { resolveLucideIcon, isLucideIcon } from "@/components/lucideIconResolver";
-import { resolveIconImageSrc } from "@/lib/iconValue";
+import { resolveLucideIcon, isLucideIcon, getLucideIconByName } from "@/components/lucideIconResolver";
+import { resolveIconImageSrc, isInlineSvgValue, isIconifyValue, renderInlineSvg } from "@/lib/iconValue";
+import { resolveFaPresetLucideName } from "@/lib/iconPreset";
+import IconifyIcon from "@/components/IconifyIcon";
 
 /** 后台面板通用加载占位（社交/网站链接面板、站点信息、天气等共用） */
 export function LoadingPlaceholder() {
@@ -427,13 +429,29 @@ function LinkRow({
 }
 
 /**
- * 链接图标预览：支持 lucide:xxx / iconfont / 网络图片 URL / random:关键词 随机图。
+ * 链接图标预览：支持内联 SVG 代码 / Iconify（prefix:name）/ lucide:xxx / iconfont /
+ * 网络图片 URL 与本地图片路径 / random:关键词 随机图。
  * 供列表收起态与表单内实时预览使用。
  */
 export function LinkIconPreview({ icon }: { icon: string }) {
   if (!icon) return <Globe className="h-5 w-5" />;
 
-  // 图片型：网络图片 URL 或 random:关键词 随机图
+  // 内联 SVG 代码（iconfont 导出的整段 <svg>…</svg>）
+  if (isInlineSvgValue(icon)) {
+    return (
+      <span
+        className="inline-flex h-5 w-5 items-center justify-center"
+        dangerouslySetInnerHTML={{ __html: renderInlineSvg(icon, 20) }}
+      />
+    );
+  }
+
+  // Iconify 在线图标
+  if (isIconifyValue(icon)) {
+    return <IconifyIcon icon={icon} size={20} className="h-5 w-5" />;
+  }
+
+  // 图片型：网络图片 URL / 本地图片路径 / random:关键词 随机图
   const imgSrc = resolveIconImageSrc(icon, 40);
   if (imgSrc) {
     return (
@@ -446,6 +464,13 @@ export function LinkIconPreview({ icon }: { icon: string }) {
         onError={(e) => { e.currentTarget.style.display = "none"; }}
       />
     );
+  }
+
+  // @vicons/fa 预设名（历史数据，如 Blog / CompactDisc）
+  const presetLucideName = resolveFaPresetLucideName(icon);
+  if (presetLucideName) {
+    const PresetComp = getLucideIconByName(presetLucideName);
+    if (PresetComp) return <PresetComp className="h-5 w-5" />;
   }
 
   // lucide 图标：支持 "lucide:xxx" 前缀，也兼容历史数据的裸图标名

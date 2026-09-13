@@ -4,13 +4,17 @@
  * 统一媒体选择器（后台用）
  * - 支持 iconfont 图标库选择
  * - 支持 lucide 图标库选择
- * - 支持手动输入网络图片 URL
+ * - 支持手动输入网络图片 URL / 本地图片路径
+ * - 支持 Iconify 在线图标（prefix:name）
+ * - 支持粘贴 iconfont 导出的内联 SVG 代码
  * - 支持关键词随机图（loremflickr，无需 API Key）
  * - 支持 Openverse API 搜索（Creative Commons 开放版权图片）
  * - 值格式：
  *   - iconfont 图标：纯名称（如 "github"）
  *   - lucide 图标："lucide:图标名"（如 "lucide:github"）
- *   - 网络图片：http(s)://... URL
+ *   - 网络图片：http(s)://... URL；本地图片：/images/xxx.png、/api/uploads/...
+ *   - Iconify 图标："prefix:name"（如 "fa:github"、"mdi:home"）
+ *   - 内联 SVG：以 "<svg" 开头的整段代码（阿里 iconfont 直接复制）
  *   - 随机图："random:关键词"（如 "random:nature"；旧写法 "unsplash:关键词" 仍兼容识别）
  *
  * 注：本组件刻意使用原生 <img> 而非 next/image —— 预览对象是管理员即时输入/第三方搜索返回的
@@ -20,17 +24,24 @@
 
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import { Image as ImageIcon, Link, Sparkles, Search, Loader2 } from "lucide-react";
+import { Image as ImageIcon, Link, Sparkles, Search, Loader2, Code2, Cloud } from "lucide-react";
 import IconfontPicker from "./IconfontPicker";
 import LucideIconPicker, { LUCIDE_PREFIX, extractLucideIconName } from "./LucideIconPicker";
-import { resolveLucideIcon } from "@/components/lucideIconResolver";
+import { resolveLucideIcon, getLucideIconByName } from "@/components/lucideIconResolver";
 import { useIconfontSymbols } from "@/components/Iconfont";
+import IconifyIcon from "@/components/IconifyIcon";
+import { resolveFaPresetLucideName } from "@/lib/iconPreset";
 import {
   RANDOM_PREFIX,
   extractRandomKeyword,
   getRandomImageUrl,
   isRandomImageValue,
+  isInlineSvgValue,
+  isIconifyValue,
+  isLocalImagePath,
+  renderInlineSvg,
 } from "@/lib/iconValue";
 
 interface Props {
@@ -63,6 +74,23 @@ function MediaPreview({ value, className = "h-10 w-10" }: { value: string; class
 
   if (!value) return null;
 
+  // 内联 SVG 代码（阿里 iconfont 直接复制的一整段 <svg>…</svg>）
+  if (isInlineSvgValue(value)) {
+    return (
+      <span
+        className={className}
+        style={{ display: "inline-flex", alignItems: "center", justifyContent: "center" }}
+        // renderInlineSvg 已做安全清洗（去 on* 事件与 href/src）并统一尺寸，避免 200×200 撑破预览框
+        dangerouslySetInnerHTML={{ __html: renderInlineSvg(value, 28) }}
+      />
+    );
+  }
+
+  // Iconify 在线图标（prefix:name，如 fa:github）
+  if (isIconifyValue(value)) {
+    return <IconifyIcon icon={value} size={28} className={`${className} text-muted-foreground`} />;
+  }
+
   // 随机图（random: / 旧 unsplash:）
   if (isRandomImageValue(value)) {
     const keyword = extractRandomKeyword(value);
@@ -76,8 +104,8 @@ function MediaPreview({ value, className = "h-10 w-10" }: { value: string; class
     );
   }
 
-  // 网络图片 URL
-  if (/^https?:\/\//i.test(value)) {
+  // 图片：网络图片 URL，或本地/媒体路径（/images/xxx.png、/api/uploads/...）
+  if (/^https?:\/\//i.test(value) || isLocalImagePath(value)) {
     return (
       <img
         src={value}
@@ -86,6 +114,13 @@ function MediaPreview({ value, className = "h-10 w-10" }: { value: string; class
         onError={(e) => { e.currentTarget.style.display = "none"; }}
       />
     );
+  }
+
+  // @vicons/fa 预设名（历史数据，如 Blog / CompactDisc）→ 映射到 lucide 同名图标
+  const presetLucideName = resolveFaPresetLucideName(value);
+  if (presetLucideName) {
+    const PresetComp = getLucideIconByName(presetLucideName);
+    if (PresetComp) return <PresetComp className={`${className} text-muted-foreground`} />;
   }
 
   // lucide 图标
@@ -110,6 +145,9 @@ function MediaPreview({ value, className = "h-10 w-10" }: { value: string; class
   return null;
 }
 
+/** Iconify 常用图标快捷示例（避免管理员记不住 prefix:name 写法） */
+const ICONIFY_SAMPLES = ["fa:github", "mdi:home", "tabler:brand-bilibili", "simple-icons:bilibili", "ri:wechat-fill"];
+
 export default function MediaPicker({
   value,
   onChange,
@@ -117,9 +155,11 @@ export default function MediaPicker({
   label,
   id,
 }: Props) {
-  const [tab, setTab] = useState<"url" | "iconfont" | "lucide" | "random" | "openverse">(() => {
+  const [tab, setTab] = useState<"url" | "iconfont" | "lucide" | "iconify" | "svg" | "random" | "openverse">(() => {
+    if (isInlineSvgValue(value)) return "svg";
+    if (isIconifyValue(value)) return "iconify";
     if (isRandomImageValue(value)) return "random";
-    if (/^https?:\/\//i.test(value)) return "url";
+    if (/^https?:\/\//i.test(value) || isLocalImagePath(value)) return "url";
     if (value.startsWith(LUCIDE_PREFIX)) return "lucide";
     return "iconfont";
   });
@@ -204,41 +244,72 @@ export default function MediaPicker({
       {label && <label htmlFor={id} className="text-xs font-medium text-muted-foreground">{label}</label>}
 
       {/* 预览 + 手动输入（min-w-0 允许在窄列/移动端收缩，避免撑破父容器） */}
-      <div className="flex min-w-0 items-center gap-2">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded border bg-muted/30">
-          <MediaPreview value={value} />
+      {tab === "svg" ? (
+        // SVG 代码是多行长文本，改用 Textarea 编辑（单行 Input 粘贴 10KB+ 代码体验极差）
+        <div className="flex min-w-0 items-start gap-2">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded border bg-muted/30">
+            <MediaPreview value={value} />
+          </div>
+          <Textarea
+            id={id}
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder={'粘贴 iconfont 导出的完整代码，形如 <svg ...>...</svg>'}
+            spellCheck={false}
+            className="min-h-[76px] min-w-0 flex-1 font-mono text-xs leading-relaxed"
+          />
         </div>
-        <Input
-          id={id}
-          value={value}
-          onChange={(e) => {
-            onChange(e.target.value);
-            if (isRandomImageValue(e.target.value)) {
-              setRandomKeyword(extractRandomKeyword(e.target.value));
-            }
-          }}
-          placeholder={placeholder}
-          className="h-10 sm:h-9 min-w-0 flex-1"
-        />
-      </div>
+      ) : (
+        <div className="flex min-w-0 items-center gap-2">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded border bg-muted/30">
+            <MediaPreview value={value} />
+          </div>
+          <Input
+            id={id}
+            value={value}
+            onChange={(e) => {
+              onChange(e.target.value);
+              if (isRandomImageValue(e.target.value)) {
+                setRandomKeyword(extractRandomKeyword(e.target.value));
+              }
+            }}
+            placeholder={placeholder}
+            className="h-10 sm:h-9 min-w-0 flex-1"
+          />
+        </div>
+      )}
 
-      {/* Tab 选择器：移动端固定成三列（末项不会再被拉伸成整行），≥sm 恢复五项一行 */}
+      {/* Tab 选择器：移动端固定成三列，≥sm 四列（末项不会被拉伸成整行） */}
       <div className="flex flex-wrap gap-1.5 rounded-lg border bg-muted/30 p-1 sm:gap-1">
-        {(["url", "iconfont", "lucide", "random", "openverse"] as const).map((t) => (
+        {(["url", "iconfont", "lucide", "iconify", "svg", "random", "openverse"] as const).map((t) => (
           <button
             key={t}
             type="button"
             onClick={() => setTab(t)}
-            className={`flex basis-[calc((100%-0.75rem)/3)] items-center justify-center gap-1 whitespace-nowrap rounded-md px-1.5 py-2 text-xs transition-colors sm:basis-0 sm:grow sm:py-1 ${
+            className={`flex basis-[calc((100%-0.75rem)/3)] items-center justify-center gap-1 whitespace-nowrap rounded-md px-1.5 py-2 text-xs transition-colors sm:basis-[calc((100%-1.125rem)/4)] sm:py-1 ${
               tab === t ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
             }`}
           >
             {t === "url" && <Link className="h-3 w-3 shrink-0" />}
             {t === "iconfont" && <Sparkles className="h-3 w-3 shrink-0" />}
             {t === "lucide" && <ImageIcon className="h-3 w-3 shrink-0" />}
+            {t === "iconify" && <Cloud className="h-3 w-3 shrink-0" />}
+            {t === "svg" && <Code2 className="h-3 w-3 shrink-0" />}
             {t === "random" && <Sparkles className="h-3 w-3 shrink-0" />}
             {t === "openverse" && <Search className="h-3 w-3 shrink-0" />}
-            {t === "url" ? "URL" : t === "iconfont" ? "图标库" : t === "lucide" ? "Lucide" : t === "random" ? "随机图" : "Openverse"}
+            {t === "url"
+              ? "URL/路径"
+              : t === "iconfont"
+                ? "图标库"
+                : t === "lucide"
+                  ? "Lucide"
+                  : t === "iconify"
+                    ? "Iconify"
+                    : t === "svg"
+                      ? "SVG代码"
+                      : t === "random"
+                        ? "随机图"
+                        : "Openverse"}
           </button>
         ))}
       </div>
@@ -247,12 +318,20 @@ export default function MediaPicker({
       <div className="min-h-[60px] min-w-0">
         {tab === "url" && (
           <p className="text-xs text-muted-foreground">
-            直接在上方输入框粘贴图片 URL（支持 http/https）
+            在上方输入框粘贴图片地址：支持 http(s) 网络图片，也支持本地/媒体路径（/images/xxx.png、上传后得到的 /api/uploads/...）。
           </p>
         )}
         {tab === "iconfont" && (
           <IconfontPicker
-            value={value.startsWith(LUCIDE_PREFIX) || /^https?:\/\//i.test(value) || isRandomImageValue(value) ? "" : value}
+            value={
+              value.startsWith(LUCIDE_PREFIX) ||
+              /^https?:\/\//i.test(value) ||
+              isRandomImageValue(value) ||
+              isInlineSvgValue(value) ||
+              isIconifyValue(value)
+                ? ""
+                : value
+            }
             onChange={(name) => {
               onChange(name);
               setTab("iconfont");
@@ -267,6 +346,62 @@ export default function MediaPicker({
               setTab("lucide");
             }}
           />
+        )}
+        {tab === "iconify" && (
+          <div className="space-y-2">
+            <Input
+              value={isIconifyValue(value) ? value : ""}
+              onChange={(e) => onChange(e.target.value.trim())}
+              placeholder="输入 prefix:name，如 fa:github、mdi:home"
+              spellCheck={false}
+              className="h-10 sm:h-8 font-mono text-xs"
+            />
+            {/* 常用图标一键填入：Iconify 聚合 150+ 图标集，无需本地依赖 */}
+            <div className="flex flex-wrap gap-1.5">
+              {ICONIFY_SAMPLES.map((sample) => (
+                <button
+                  key={sample}
+                  type="button"
+                  onClick={() => onChange(sample)}
+                  className={`rounded-md border px-2 py-1 font-mono text-[11px] transition-colors ${
+                    value === sample
+                      ? "border-primary bg-primary/10 text-foreground"
+                      : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                  }`}
+                >
+                  {sample}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              从 iconify.design 在线加载（首次访问需联网），图标颜色跟随主题文字色。浏览器打开
+              iconify.design 搜索图标即可拿到 prefix:name。
+            </p>
+          </div>
+        )}
+        {tab === "svg" && (
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">
+              在 iconfont.cn 选中图标 → 「复制 SVG」→ 把完整 &lt;svg&gt;…&lt;/svg&gt; 代码粘贴到上方文本框，
+              保存后前台按原色渲染（尺寸会自动缩放为 32×32，不会撑破布局）。
+            </p>
+            {isInlineSvgValue(value) && (
+              <div className="flex items-center justify-between gap-2 rounded-md border bg-muted/30 px-2 py-1.5">
+                <span className="text-xs text-muted-foreground">
+                  已识别为 SVG 代码（{value.length} 字符）
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onChange("")}
+                  className="h-6 shrink-0 px-2 text-xs"
+                >
+                  清空
+                </Button>
+              </div>
+            )}
+          </div>
         )}
         {tab === "random" && (
           <div className="space-y-2">

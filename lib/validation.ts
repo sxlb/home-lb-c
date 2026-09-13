@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isInlineSvgValue } from "@/lib/iconValue";
 
 // 站点公告新增/编辑校验 schema（title 必填、content 必填、时间区间可空）
 export const announcementSchema = z.object({
@@ -424,20 +425,42 @@ export const profileSchema = z.object({
     .default(""),
 });
 
-// 图标字段公共校验：允许「纯图标名」（lucide:xxx / iconfont symbol）或「媒体值」（外链图片 /
-// 媒体库路径 / 关键词随机图），供社交链接、网站链接、友情链接、技能等 icon 字段共用。
-// 随机图前缀见 lib/iconValue.ts：当前为 random:，旧写法 unsplash: 一并兼容。
+// 图标字段公共校验：允许以下任一形态（供社交链接、网站链接、友情链接、技能等 icon 字段共用）：
+// 1) 纯图标名（lucide:xxx / iconfont symbol / @vicons 预设名）
+// 2) Iconify 在线图标（prefix:name，如 fa:github、mdi:home）
+// 3) 内联 SVG 代码（<svg …>，长度上限放宽）
+// 4) 图片：http(s) 外链、本地上传 /api/uploads/、静态图片路径（/images/…）、随机图 random:/unsplash:
 const ICON_NAME_RE = /^[a-zA-Z0-9:_-]+$/;
-const MEDIA_VALUE_RE = /^(https?:\/\/|\/api\/uploads\/|random:|unsplash:)/;
+// 媒体/图片型值：http(s) 外链、站点内相对路径（/images/x.png、/api/uploads/...）、随机图前缀
+const MEDIA_VALUE_RE = /^(https?:\/\/|\/(?!\/)|random:|unsplash:)/;
+const ICONIFY_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*:[a-z0-9]+(?:-[a-z0-9]+)*$/i;
 
-const iconOrMediaValue = (required: boolean) => {
-  const base = z.string().trim().max(2048, "图标值过长");
-  const withMin = required ? base.min(1, "图标不能为空") : base;
-  return withMin.refine(
-    (v) => v === "" || ICON_NAME_RE.test(v) || MEDIA_VALUE_RE.test(v),
-    "须为图标名、http(s) 外链、/api/uploads/ 路径或 random:关键词"
-  );
-};
+const iconOrMediaValue = (required: boolean) =>
+  z
+    .string()
+    .trim()
+    .superRefine((v, ctx) => {
+      if (v === "") {
+        if (required) ctx.addIssue({ code: "custom", message: "图标不能为空" });
+        return;
+      }
+      // 内联 SVG：单独放行，长度上限放宽（粘贴的 iconfont svg 可能较长）
+      if (isInlineSvgValue(v)) {
+        if (v.length > 20000) ctx.addIssue({ code: "custom", message: "图标值过长" });
+        return;
+      }
+      if (v.length > 2048) {
+        ctx.addIssue({ code: "custom", message: "图标值过长" });
+        return;
+      }
+      const ok = ICON_NAME_RE.test(v) || MEDIA_VALUE_RE.test(v) || ICONIFY_RE.test(v);
+      if (!ok) {
+        ctx.addIssue({
+          code: "custom",
+          message: "须为图标名、iconify(prefix:name)、内联 SVG、http(s) 外链、本地图片路径或 random:关键词",
+        });
+      }
+    });
 
 // SocialLink 校验 schema
 export const socialLinkSchema = z.object({
