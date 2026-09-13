@@ -148,6 +148,17 @@ function MediaPreview({ value, className = "h-10 w-10" }: { value: string; class
 /** Iconify 常用图标快捷示例（避免管理员记不住 prefix:name 写法） */
 const ICONIFY_SAMPLES = ["fa:github", "mdi:home", "tabler:brand-bilibili", "simple-icons:bilibili", "ri:wechat-fill"];
 
+/** Tab 切换时需要值格式的映射表（空串表示当前 value 不匹配该 tab，需清空或跳过） */
+const TAB_VALID_VALUE_CHECKS: Record<string, (v: string) => boolean> = {
+  iconfont: (v) => !v.startsWith(LUCIDE_PREFIX) && !/^https?:\/\//i.test(v) && !isRandomImageValue(v) && !isInlineSvgValue(v) && !isIconifyValue(v),
+  lucide: (v) => v.startsWith(LUCIDE_PREFIX),
+  iconify: isIconifyValue,
+  svg: isInlineSvgValue,
+  random: isRandomImageValue,
+  url: (v) => /^https?:\/\//i.test(v) || isLocalImagePath(v),
+  openverse: () => true, // 搜索页面无需校验
+};
+
 export default function MediaPicker({
   value,
   onChange,
@@ -164,6 +175,16 @@ export default function MediaPicker({
     return "iconfont";
   });
   const [randomKeyword, setRandomKeyword] = useState(() => extractRandomKeyword(value));
+
+  /** 智能切换 Tab：若当前 value 不匹配目标 tab 的格式要求，则先清空再切换 */
+  const handleTabChange = (t: "url" | "iconfont" | "lucide" | "iconify" | "svg" | "random" | "openverse") => {
+    const checker = TAB_VALID_VALUE_CHECKS[t];
+    if (checker && !checker(value)) {
+      // 当前 value 不符合该 tab 格式 → 先清空值（避免残留旧值导致渲染异常）
+      onChange("");
+    }
+    setTab(t);
+  };
 
   // Openverse 搜索状态
   const [openverseQuery, setOpenverseQuery] = useState("");
@@ -285,7 +306,7 @@ export default function MediaPicker({
           <button
             key={t}
             type="button"
-            onClick={() => setTab(t)}
+            onClick={() => handleTabChange(t)}
             className={`flex basis-[calc((100%-0.75rem)/3)] items-center justify-center gap-1 whitespace-nowrap rounded-md px-1.5 py-2 text-xs transition-colors sm:basis-[calc((100%-1.125rem)/4)] sm:py-1 ${
               tab === t ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
             }`}

@@ -1,5 +1,14 @@
 import { z } from "zod";
-import { isInlineSvgValue } from "@/lib/iconValue";
+import { isInlineSvgValue, isLocalImagePath } from "@/lib/iconValue";
+
+// ===== URL 合法性辅助函数 =====
+
+/** 检查相对路径是否为合法 URL pathname（不含非法字符） */
+function isValidRelativePath(path: string): boolean {
+  // URL pathname 只允许：字母、数字、. - _ ~ ! $ & ' ( ) * + , ; = : @ / % 以及 Unicode
+  // 拒绝控制字符、空格、尖括号、引号等危险/非法字符
+  return /^[A-Za-z0-9\-._~!$&'()*+,;=:@/%]+$/.test(path);
+}
 
 // 站点公告新增/编辑校验 schema（title 必填、content 必填、时间区间可空）
 export const announcementSchema = z.object({
@@ -453,7 +462,12 @@ const iconOrMediaValue = (required: boolean) =>
         ctx.addIssue({ code: "custom", message: "图标值过长" });
         return;
       }
-      const ok = ICON_NAME_RE.test(v) || MEDIA_VALUE_RE.test(v) || ICONIFY_RE.test(v);
+      const okName = ICON_NAME_RE.test(v);
+      const okMedia = MEDIA_VALUE_RE.test(v);
+      const okIconify = ICONIFY_RE.test(v);
+      // 媒体路径以 / 开头时，额外做 URL 合法性检查（防止非法字符入库）
+      const pathOk = !okMedia || !isLocalImagePath(v) || isValidRelativePath(v);
+      const ok = okName || (okMedia && pathOk) || okIconify;
       if (!ok) {
         ctx.addIssue({
           code: "custom",

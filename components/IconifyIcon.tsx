@@ -7,9 +7,11 @@
  * - color=currentColor：让图标可随主题 / hover 变色
  * - 模块级缓存放跨组件/页面的重复请求；loadingSet 做并发去重
  * - 加载失败 / 结果非 SVG 时兜底为默认 Link 图标，避免留空白
+ * - useRef 替代 useState 作为初始源：避免 SSR 返回空白占位符后 hydration
+ *   检测到非空 cached SVG 产生水合不匹配（React Hydration Mismatch）
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const ICONIFY_API = "https://api.iconify.design";
 
@@ -42,9 +44,12 @@ export default function IconifyIcon({
   size?: number;
   className?: string;
 }) {
-  const [svg, setSvg] = useState(() => iconSvgCache[icon] ?? "");
+  // 用 ref 记录初始化时的缓存值，避免 SSR hydration 时 setState 产生水合不匹配
+  const cachedInit = useRef<string>(iconSvgCache[icon] ?? "");
+  const [svg, setSvg] = useState(cachedInit.current);
 
   useEffect(() => {
+    // 若缓存已有值，同步到 state（仅 hydrate 后执行一次）
     if (iconSvgCache[icon]) {
       setSvg(iconSvgCache[icon]);
       return;
