@@ -80,27 +80,30 @@ async function isReachable(url: string, timeoutMs: number): Promise<boolean> {
   }
 }
 
+/** 站点自身图标单独先试时的超时：命中即可立刻返回，不必等第三方源 */
+const PRIMARY_TRY_MS = 2500;
+
 /**
- * 依次探测候选源，返回首个真实可用的地址；全部不可用返回 null。
- * 用总超时兜底，避免多个候选串行叠加导致接口长时间不响应。
+ * 按优先级探测候选源，返回首个真实可用的地址；全部不可用返回 null。
+ *
+ * 策略：先单独探测「站点自身 favicon.ico」（最权威），命中就直接返回；
+ * 未命中再把其余第三方源**并行**探测，最后按优先级取第一个成功的 ——
+ * 串行探测在慢站点上会叠加成十几秒，接口长时间不响应。
  *
  * 探测前先确认目标主机能解析且为公网地址：否则像 favicon.im 这类服务对
  * 不存在的域名也会返回一张占位图，会把「域名写错」伪装成「已获取到图标」。
  */
-export async function probeFavicon(host: string, perTryMs = 3000, totalMs = 8000): Promise<FaviconCandidate | null> {
+export async function probeFavicon(host: string, perTryMs = 4000): Promise<FaviconCandidate | null> {
   try {
     await assertPublicHttpUrl(`https://${host}/`);
   } catch {
     return null;
   }
 
-  const deadline = Date.now() + totalMs;
-  for (const candidate of faviconCandidates(host)) {
-    const remaining = deadline - Date.now();
-    if (remaining <= 500) break;
-    if (await isReachable(candidate.url, Math.min(perTryMs, remaining))) {
-      return candidate;
-    }
-  }
-  return null;
+  const [primary, ...others] = faviconCandidates(host);
+  if (await isReachable(primary.url, PRIMARY_TRY_MS)) return primary;
+
+  const results = await Promise.all(others.map((candidate) => isReachable(candidate.url, perTryMs)));
+  const index = results.findIndex(Boolean);
+  return index >= 0 ? others[index] : null;
 }
