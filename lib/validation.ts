@@ -31,6 +31,11 @@ export const DEFAULT_WELCOME_MESSAGES = [
 // 注意：只写 ^https?:// 会导致「上传成功但保存失败」—— 上传接口返回的正是相对路径。
 const IMAGE_SRC_RE = /^(https?:\/\/|\/api\/uploads\/)/;
 
+// 站点 SEO 默认文案：后台留空时前后台统一使用（避免搜索引擎抓到空描述/空关键词）
+export const DEFAULT_SITE_TITLE = "个人主页";
+export const DEFAULT_SITE_DESCRIPTION = "记录我的作品、随笔与生活，这里是我的个人主页，欢迎交流指教。";
+export const DEFAULT_SITE_KEYWORDS = "个人主页,个人博客,作品集,技术分享,前端开发";
+
 // Profile 校验 schema：用于 PUT /api/profile 请求体校验
 export const profileSchema = z.object({
   avatar: z

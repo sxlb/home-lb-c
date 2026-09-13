@@ -1,32 +1,17 @@
 "use client";
 
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { Plus, Trash2, Loader2, GripVertical, Users, Wand2 } from "lucide-react";
+import { toast } from "sonner";
 import { useLinkList } from "./useLinkList";
 import { PanelHeader, EmptyState } from "./panel";
 import { LoadingPlaceholder } from "./LinksPanel";
 import MediaPicker from "./MediaPicker";
-
-/** 从 URL 提取域名，用于 Google Favicon API */
-function extractDomain(url: string): string | null {
-  try {
-    const u = new URL(url.startsWith("http") ? url : `https://${url}`);
-    return u.hostname;
-  } catch {
-    return null;
-  }
-}
-
-/** 生成 Google Favicon URL */
-function getFaviconUrl(url: string, size = 64): string | null {
-  const domain = extractDomain(url);
-  if (!domain) return null;
-  return `https://www.google.com/s2/favicons?domain=${domain}&sz=${size}`;
-}
 
 interface FriendLinkItem {
   id?: number;
@@ -57,8 +42,34 @@ export default function FriendLinksPanel() {
     emptyItem,
     "友情链接保存成功",
     // 友情链接仅允许 http(s)（后端 friendLinkSchema），icon 可空
-    { urlPattern: /^https?:\/\// }
+    { urlPattern: /^https?:\/\//, label: "友情链接" }
   );
+  // 「从网站获取」探测中的行号（-1 表示无）
+  const [fetchingIconIndex, setFetchingIconIndex] = useState(-1);
+
+  /** 从网站地址自动探测图标（服务端依次尝试多个可用图源） */
+  const handleFetchIcon = async (index: number, url: string) => {
+    const target = (url || "").trim();
+    if (!target) {
+      toast.error("请先填写网站地址");
+      return;
+    }
+    setFetchingIconIndex(index);
+    try {
+      const res = await fetch(`/api/favicon?url=${encodeURIComponent(target)}`, { cache: "no-store" });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.ok && data.url) {
+        updateItem(index, "icon", data.url);
+        toast.success(`已获取网站图标（来源：${data.source}）`);
+      } else {
+        toast.error(data?.error || "未能获取网站图标，请手动填写");
+      }
+    } catch {
+      toast.error("网络错误，获取图标失败");
+    } finally {
+      setFetchingIconIndex(-1);
+    }
+  };
 
   if (loading) {
     return <LoadingPlaceholder />;
@@ -151,15 +162,17 @@ export default function FriendLinksPanel() {
                       type="button"
                       variant="ghost"
                       size="sm"
-                      onClick={() => {
-                        const favicon = getFaviconUrl(link.url);
-                        if (favicon) updateItem(index, "icon", favicon);
-                      }}
+                      onClick={() => void handleFetchIcon(index, link.url)}
+                      disabled={fetchingIconIndex === index}
                       className="h-6 shrink-0 gap-1 px-1.5 text-xs text-muted-foreground hover:text-foreground"
-                      title="从网站地址自动获取 favicon"
+                      title="从网站地址自动探测图标（自动挑选可用的图标源）"
                     >
-                      <Wand2 className="h-3 w-3" />
-                      从网站获取
+                      {fetchingIconIndex === index ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <Wand2 className="h-3 w-3" />
+                      )}
+                      {fetchingIconIndex === index ? "获取中…" : "从网站获取"}
                     </Button>
                   )}
                 </div>

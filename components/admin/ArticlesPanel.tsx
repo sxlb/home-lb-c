@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Plus, Loader2, FileText, FilePen, Pin, Eye, Trash2, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { PanelHeader, EmptyState } from "./panel";
+import { useRegisterSave } from "./GlobalSave";
 
 interface ArticleItem {
   id: number;
@@ -81,12 +82,23 @@ export default function ArticlesPanel() {
     setDirty(false);
   };
 
-  const save = async () => {
-    if (!form) return;
-    if (!form.title.trim()) return toast.error("标题不能为空");
-    if (!form.slug.trim()) return toast.error(`请填写链接标识（小写字母/数字，如 my-first-post）`);
+  /** 本地校验：标题 / 链接标识（slug） */
+  const collectErrors = (): string | null => {
+    if (!form) return null;
+    if (!form.title.trim()) return "标题不能为空";
+    if (!form.slug.trim()) return "请填写链接标识（小写字母/数字，如 my-first-post）";
     if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(form.slug.trim())) {
-      return toast.error("链接标识须为小写字母/数字，用连字符分隔");
+      return "链接标识须为小写字母/数字，用连字符分隔";
+    }
+    return null;
+  };
+
+  const save = async (): Promise<boolean> => {
+    if (!form) return true;
+    const message = collectErrors();
+    if (message) {
+      toast.error(message);
+      return false;
     }
     const body = {
       title: form.title.trim(),
@@ -114,16 +126,28 @@ export default function ArticlesPanel() {
         setNewMode(false);
         setSelectedId(null);
         setForm(null);
-      } else {
-        const d = await res.json();
-        toast.error(d.error || "保存失败");
+        return true;
       }
+      const d = await res.json();
+      toast.error(d.error || "保存失败");
+      return false;
     } catch {
       toast.error("网络错误");
+      return false;
     } finally {
       setSaving(false);
     }
   };
+
+  // 接入全局保存：正在编辑的文章表单也能被底部悬浮按钮保存
+  useRegisterSave({
+    id: "articles",
+    label: "随笔",
+    dirty,
+    save,
+    markClean: () => setDirty(false),
+    validate: () => collectErrors(),
+  });
 
   const del = async (a: ArticleItem) => {
     if (!window.confirm(`确定删除文章「${a.title}」？该操作不可恢复。`)) return;

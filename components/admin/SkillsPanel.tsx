@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Plus, Trash2, Loader2, GripVertical, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { PanelHeader, EmptyState } from "./panel";
+import { useRegisterSave } from "./GlobalSave";
 import MediaPicker from "./MediaPicker";
 
 interface SkillItem {
@@ -62,10 +63,20 @@ export default function SkillsPanel() {
     setDirty(true);
   };
 
-  const save = async () => {
+  /** 本地校验：熟练度越界时定位到具体行 */
+  const collectErrors = (): string | null => {
     const valid = items.filter((it) => it.name.trim() !== "");
-    const err = valid.find((it) => it.level < 0 || it.level > 100);
-    if (err) return toast.error("熟练度须在 0-100 之间");
+    const bad = valid.findIndex((it) => it.level < 0 || it.level > 100);
+    return bad >= 0 ? `第 ${bad + 1} 行：熟练度须在 0-100 之间` : null;
+  };
+
+  const save = async (): Promise<boolean> => {
+    const message = collectErrors();
+    if (message) {
+      toast.error(message);
+      return false;
+    }
+    const valid = items.filter((it) => it.name.trim() !== "");
 
     setSaving(true);
     try {
@@ -79,16 +90,28 @@ export default function SkillsPanel() {
         setItems(data.list);
         setDirty(false);
         toast.success(`技能保存成功：新增 ${data.createdCount} / 更新 ${data.updatedCount} / 删除 ${data.deletedCount}`);
-      } else {
-        const d = await res.json();
-        toast.error(d.error || "保存失败");
+        return true;
       }
+      const d = await res.json();
+      toast.error(d.error || "保存失败");
+      return false;
     } catch {
       toast.error("网络错误");
+      return false;
     } finally {
       setSaving(false);
     }
   };
+
+  // 接入全局保存：任一页面改动都能被底部悬浮按钮一并保存
+  useRegisterSave({
+    id: "skills",
+    label: "技能云",
+    dirty,
+    save,
+    markClean: () => setDirty(false),
+    validate: () => collectErrors(),
+  });
 
   if (loading) {
     return (

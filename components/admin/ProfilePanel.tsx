@@ -7,9 +7,12 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
-import { DEFAULT_WELCOME_MESSAGES } from "@/lib/validation";
+import { DEFAULT_WELCOME_MESSAGES, DEFAULT_SITE_TITLE, DEFAULT_SITE_DESCRIPTION, DEFAULT_SITE_KEYWORDS } from "@/lib/validation";
 import { LoadingPlaceholder } from "./LinksPanel";
 import { loadProfile, setCachedProfile, hasCachedProfile } from "./profileShared";
+import { useRegisterSave } from "./GlobalSave";
+import GithubUserField from "./GithubUserField";
+import EmailField from "./EmailField";
 import UploadButton from "./UploadButton";
 
 interface Profile {
@@ -180,6 +183,10 @@ export default function ProfilePanel() {
   const [saving, setSaving] = useState(false);
   // 是否存在未保存的修改：控制右下角悬浮保存按钮的显隐
   const [dirty, setDirty] = useState(false);
+  // GitHub 用户名校验错误：非空时阻止保存，避免把不存在的账号写进配置
+  const [githubError, setGithubError] = useState<string | null>(null);
+  // 载入时的基线快照：用于向全局保存上报「本面板改动了哪些字段」
+  const baselineRef = useRef<Profile | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
@@ -187,8 +194,10 @@ export default function ProfilePanel() {
     loadProfile()
       .then((data) => {
         if (cancelled) return;
-        if (data) setProfile(data);
-        else toast.error("加载数据失败");
+        if (data) {
+          setProfile(data);
+          baselineRef.current = data;
+        } else toast.error("加载数据失败");
         setLoading(false);
       })
       .catch(() => setLoading(false));
@@ -209,6 +218,10 @@ export default function ProfilePanel() {
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (githubError) {
+      toast.error(`GitHub 账号：${githubError}`);
+      return;
+    }
     setSaving(true);
     try {
       const res = await fetch("/api/profile", {
@@ -218,6 +231,7 @@ export default function ProfilePanel() {
       });
       if (res.ok) {
         setCachedProfile(profile);
+        baselineRef.current = profile;
         toast.success("保存成功");
         setDirty(false);
       } else toast.error("保存失败");
@@ -227,6 +241,27 @@ export default function ProfilePanel() {
       setSaving(false);
     }
   }
+
+  // 接入全局保存：仅上报本面板改动过的字段，避免与主题/音乐面板互相覆盖
+  useRegisterSave({
+    id: "profile",
+    label: "站点信息",
+    dirty,
+    profilePatch: () => {
+      const baseline = baselineRef.current;
+      if (!baseline) return null;
+      const patch: Record<string, unknown> = {};
+      for (const key of Object.keys(profile) as (keyof Profile)[]) {
+        if (profile[key] !== baseline[key]) patch[key] = profile[key];
+      }
+      return patch;
+    },
+    markClean: () => {
+      baselineRef.current = profile;
+      setDirty(false);
+    },
+    validate: () => githubError,
+  });
 
   if (loading) {
     return <LoadingPlaceholder />;
@@ -492,25 +527,27 @@ export default function ProfilePanel() {
 
                 <div className="grid gap-3 md:grid-cols-2">
                   <div className="space-y-2">
-                    <Label htmlFor="github">GitHub 链接</Label>
-                    <Input
+                    <Label htmlFor="github">GitHub 账号</Label>
+                    <GithubUserField
                       id="github"
                       value={profile.github}
-                      onChange={(e) => set("github", e.target.value)}
-                      placeholder="https://github.com/yourname"
+                      onChange={(v) => set("github", v)}
+                      onValidityChange={setGithubError}
                     />
+                    <p className="text-xs text-muted-foreground">
+                      只填用户名即可，链接自动补全为 https://github.com/用户名；失焦后自动校验是否存在
+                    </p>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="email">邮箱</Label>
-                    <Input
+                    <EmailField
                       id="email"
-                      name="email"
-                      type="email"
-                      autoComplete="email"
                       value={profile.email}
-                      onChange={(e) => set("email", e.target.value)}
-                      placeholder="you@example.com"
+                      onChange={(v) => set("email", v)}
                     />
+                    <p className="text-xs text-muted-foreground">
+                      只填账号部分，后缀从下拉选择；非常规邮箱可切换「自定义」手填完整地址
+                    </p>
                   </div>
                 </div>
               </div>
@@ -612,27 +649,49 @@ export default function ProfilePanel() {
                     id="siteTitle"
                     value={profile.siteTitle}
                     onChange={(e) => set("siteTitle", e.target.value)}
-                    placeholder="留空使用默认「个人主页」"
+                    placeholder={`留空使用默认「${DEFAULT_SITE_TITLE}」`}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="siteDescription">站点描述</Label>
+                  <div className="flex items-center justify-between gap-2">
+                    <Label htmlFor="siteDescription">站点描述</Label>
+                    <button
+                      type="button"
+                      className="text-xs text-primary underline-offset-2 hover:underline"
+                      onClick={() => set("siteDescription", DEFAULT_SITE_DESCRIPTION)}
+                    >
+                      填入默认描述
+                    </button>
+                  </div>
                   <Textarea
                     id="siteDescription"
                     value={profile.siteDescription}
                     onChange={(e) => set("siteDescription", e.target.value)}
-                    placeholder="一句话描述站点，展示在搜索结果摘要"
+                    placeholder={DEFAULT_SITE_DESCRIPTION}
                     rows={2}
                   />
+                  <p className="text-xs text-muted-foreground">
+                    用于搜索引擎收录；留空则自动使用上面这句默认描述
+                  </p>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="siteKeywords">站点关键词</Label>
+                  <div className="flex items-center justify-between gap-2">
+                    <Label htmlFor="siteKeywords">站点关键词</Label>
+                    <button
+                      type="button"
+                      className="text-xs text-primary underline-offset-2 hover:underline"
+                      onClick={() => set("siteKeywords", DEFAULT_SITE_KEYWORDS)}
+                    >
+                      填入默认关键词
+                    </button>
+                  </div>
                   <Input
                     id="siteKeywords"
                     value={profile.siteKeywords}
                     onChange={(e) => set("siteKeywords", e.target.value)}
-                    placeholder="个人主页, 博客, 导航（逗号分隔）"
+                    placeholder={DEFAULT_SITE_KEYWORDS}
                   />
+                  <p className="text-xs text-muted-foreground">逗号分隔；留空使用默认关键词</p>
                 </div>
               </div>
             </div>
@@ -944,18 +1003,6 @@ export default function ProfilePanel() {
             {saving ? "保存中..." : "保存站点信息"}
           </Button>
         </form>
-
-        {/* 右下角悬浮保存：修改任意配置后浮现，免去滚动到底部（保存成功后自动隐藏） */}
-        {dirty && (
-          <button
-            type="button"
-            onClick={() => formRef.current?.requestSubmit()}
-            disabled={saving}
-            className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground shadow-lg shadow-black/40 transition-transform hover:scale-105 active:scale-95 disabled:opacity-60"
-          >
-            {saving ? "保存中..." : "保存"}
-          </button>
-        )}
       </CardContent>
     </Card>
   );

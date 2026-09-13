@@ -195,6 +195,32 @@ function BrandHeader({ username, compact = false }: { username: string; compact?
   );
 }
 
+/** 面板懒加载时的占位（每个面板各自独立，互不影响） */
+function PanelLoading() {
+  return (
+    <div className="flex h-64 flex-col items-center justify-center gap-3 text-muted-foreground">
+      <Loader2 className="h-6 w-6 animate-spin" />
+      <p className="text-sm">正在加载面板...</p>
+    </div>
+  );
+}
+
+/**
+ * 面板插槽：每个面板拥有**独立的 Suspense 边界**。
+ *
+ * 这里必须一个面板一个边界，不能共用一个外层 Suspense：
+ * 首次进入某个懒加载面板时它会挂起（chunk 未加载），共用边界会让 React
+ * 隐藏并重置其余已挂载面板的副作用与状态 —— 表现就是「切个选项卡，刚才改的
+ * 内容全没了」，后台全局保存也就无从谈起。
+ */
+function PanelSlot({ active, children }: { active: boolean; children: React.ReactNode }) {
+  return (
+    <div className={active ? "" : "hidden"}>
+      <Suspense fallback={<PanelLoading />}>{children}</Suspense>
+    </div>
+  );
+}
+
 export default function AdminPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -481,97 +507,89 @@ export default function AdminPage() {
             )}
 
             {/* 内容面板：已访问过的面板全部保持挂载，未激活的用 CSS 隐藏。
-                首次进入某面板时经 Suspense 按需加载其 chunk；此后切换回来状态/滚动/输入全部保留，零重载 */}
+                每个面板各自一个 Suspense 边界按需加载 chunk —— 共用边界会让「首次进入某个面板」
+                挂起时重置其它面板的状态，导致未保存的改动丢失。切换回来状态/滚动/输入全部保留，零重载 */}
             <div className="transition-opacity duration-300">
-              <Suspense
-                fallback={
-                  <div className="flex h-64 flex-col items-center justify-center gap-3 text-muted-foreground">
-                    <Loader2 className="h-6 w-6 animate-spin" />
-                    <p className="text-sm">正在加载面板...</p>
-                  </div>
-                }
-              >
-                {mountedTabs.has("profile") && (
-                  <div className={activeTab === "profile" ? "" : "hidden"}>
-                    <ProfilePanel />
-                  </div>
-                )}
-                {mountedTabs.has("theme") && (
-                  <div className={activeTab === "theme" ? "" : "hidden"}>
-                    <ThemePanel />
-                  </div>
-                )}
-                {mountedTabs.has("music") && (
-                  <div className={activeTab === "music" ? "" : "hidden"}>
-                    <MusicPanel />
-                  </div>
-                )}
-                {mountedTabs.has("links") && (
-                  <div className={activeTab === "links" ? "" : "hidden"}>
-                    <LinksManager />
-                  </div>
-                )}
-                {mountedTabs.has("weather") && (
-                  <div className={activeTab === "weather" ? "" : "hidden"}>
-                    <WeatherPanel />
-                  </div>
-                )}
-                {mountedTabs.has("announcements") && (
-                  <div className={activeTab === "announcements" ? "" : "hidden"}>
-                    <AnnouncementPanel />
-                  </div>
-                )}
-                {mountedTabs.has("account") && (
-                  <div className={activeTab === "account" ? "" : "hidden"}>
-                    <AccountPanel />
-                  </div>
-                )}
-                {mountedTabs.has("logs") && (
-                  <div className={activeTab === "logs" ? "" : "hidden"}>
-                    <OperationLogPanel />
-                  </div>
-                )}
-                {mountedTabs.has("health") && (
-                  <div className={activeTab === "health" ? "" : "hidden"}>
-                    <HealthPanel />
-                  </div>
-                )}
-                {mountedTabs.has("data") && (
-                  <div className={activeTab === "data" ? "" : "hidden"}>
-                    <DataPanel />
-                  </div>
-                )}
-                {mountedTabs.has("stats") && (
-                  <div className={activeTab === "stats" ? "" : "hidden"}>
-                    <StatsPanel />
-                  </div>
-                )}
-                {mountedTabs.has("media") && (
-                  <div className={activeTab === "media" ? "" : "hidden"}>
-                    <MediaPanel />
-                  </div>
-                )}
-                {mountedTabs.has("update") && (
-                  <div className={activeTab === "update" ? "" : "hidden"}>
-                    <UpdatePanel />
-                  </div>
-                )}
-                {mountedTabs.has("projects") && (
-                  <div className={activeTab === "projects" ? "" : "hidden"}>
-                    <ProjectsPanel />
-                  </div>
-                )}
-                {mountedTabs.has("skills") && (
-                  <div className={activeTab === "skills" ? "" : "hidden"}>
-                    <SkillsPanel />
-                  </div>
-                )}
-                {mountedTabs.has("articles") && (
-                  <div className={activeTab === "articles" ? "" : "hidden"}>
-                    <ArticlesPanel />
-                  </div>
-                )}
-              </Suspense>
+              {mountedTabs.has("profile") && (
+                <PanelSlot active={activeTab === "profile"}>
+                  <ProfilePanel />
+                </PanelSlot>
+              )}
+              {mountedTabs.has("theme") && (
+                <PanelSlot active={activeTab === "theme"}>
+                  <ThemePanel />
+                </PanelSlot>
+              )}
+              {mountedTabs.has("music") && (
+                <PanelSlot active={activeTab === "music"}>
+                  <MusicPanel />
+                </PanelSlot>
+              )}
+              {mountedTabs.has("links") && (
+                <PanelSlot active={activeTab === "links"}>
+                  <LinksManager />
+                </PanelSlot>
+              )}
+              {mountedTabs.has("weather") && (
+                <PanelSlot active={activeTab === "weather"}>
+                  <WeatherPanel />
+                </PanelSlot>
+              )}
+              {mountedTabs.has("announcements") && (
+                <PanelSlot active={activeTab === "announcements"}>
+                  <AnnouncementPanel />
+                </PanelSlot>
+              )}
+              {mountedTabs.has("account") && (
+                <PanelSlot active={activeTab === "account"}>
+                  <AccountPanel />
+                </PanelSlot>
+              )}
+              {mountedTabs.has("logs") && (
+                <PanelSlot active={activeTab === "logs"}>
+                  <OperationLogPanel />
+                </PanelSlot>
+              )}
+              {mountedTabs.has("health") && (
+                <PanelSlot active={activeTab === "health"}>
+                  <HealthPanel />
+                </PanelSlot>
+              )}
+              {mountedTabs.has("data") && (
+                <PanelSlot active={activeTab === "data"}>
+                  <DataPanel />
+                </PanelSlot>
+              )}
+              {mountedTabs.has("stats") && (
+                <PanelSlot active={activeTab === "stats"}>
+                  <StatsPanel />
+                </PanelSlot>
+              )}
+              {mountedTabs.has("media") && (
+                <PanelSlot active={activeTab === "media"}>
+                  <MediaPanel />
+                </PanelSlot>
+              )}
+              {mountedTabs.has("update") && (
+                <PanelSlot active={activeTab === "update"}>
+                  <UpdatePanel />
+                </PanelSlot>
+              )}
+              {mountedTabs.has("projects") && (
+                <PanelSlot active={activeTab === "projects"}>
+                  <ProjectsPanel />
+                </PanelSlot>
+              )}
+              {mountedTabs.has("skills") && (
+                <PanelSlot active={activeTab === "skills"}>
+                  <SkillsPanel />
+                </PanelSlot>
+              )}
+              {mountedTabs.has("articles") && (
+                <PanelSlot active={activeTab === "articles"}>
+                  <ArticlesPanel />
+                </PanelSlot>
+              )}
             </div>
           </div>
         </div>

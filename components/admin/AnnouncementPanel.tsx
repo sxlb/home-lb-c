@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Plus, Trash2, Pencil, ChevronUp, ChevronDown, Pin, Loader2, Megaphone } from "lucide-react";
 import { toast } from "sonner";
 import { PanelHeader, EmptyState } from "./panel";
+import { useRegisterSave } from "./GlobalSave";
 
 /** 公告：服务端字段 + 前端本地唯一标识（新增行在保存前使用，服务端不持久化） */
 interface Announcement {
@@ -114,17 +115,22 @@ export default function AnnouncementPanel() {
     setDirty(true);
   };
 
-  const save = async () => {
-    // 本地预校验：空标题行过滤、有标题但内容为空定位到行
+  /** 本地预校验：空标题行过滤、有标题但内容为空定位到行 */
+  const collectErrors = (): string | null => {
     const errors: string[] = [];
     items.forEach((it, i) => {
       if (it.title.trim() === "") return;
       if (!it.content.trim()) errors.push(`第 ${i + 1} 行：内容不能为空`);
       if (it.sort < 0 || it.sort > 9999) errors.push(`第 ${i + 1} 行：排序需在 0-9999`);
     });
-    if (errors.length > 0) {
-      toast.error(errors.join("；"));
-      return;
+    return errors.length > 0 ? errors.join("；") : null;
+  };
+
+  const save = async (): Promise<boolean> => {
+    const message = collectErrors();
+    if (message) {
+      toast.error(message);
+      return false;
     }
 
     setSaving(true);
@@ -149,7 +155,7 @@ export default function AnnouncementPanel() {
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
         toast.error(d.error || "保存失败");
-        return;
+        return false;
       }
       toast.success("公告已保存");
       const data = await res.json();
@@ -157,12 +163,24 @@ export default function AnnouncementPanel() {
       else fetchList().then((fresh) => fresh && setItems(fresh));
       setDirty(false);
       setExpandedIndex(-1);
+      return true;
     } catch {
       toast.error("保存失败");
+      return false;
     } finally {
       setSaving(false);
     }
   };
+
+  // 接入全局保存
+  useRegisterSave({
+    id: "announcements",
+    label: "公告",
+    dirty,
+    save,
+    markClean: () => setDirty(false),
+    validate: () => collectErrors(),
+  });
 
   if (loading) {
     return (

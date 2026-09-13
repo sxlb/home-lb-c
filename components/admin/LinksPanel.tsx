@@ -6,28 +6,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Plus, Trash2, Loader2, ChevronUp, ChevronDown, Pencil, Globe, Wand2 } from "lucide-react";
+import { toast } from "sonner";
 import { useLinkList } from "./useLinkList";
 import { PanelHeader, EmptyState } from "./panel";
 import MediaPicker from "./MediaPicker";
 import { resolveLucideIcon, isLucideIcon } from "@/components/lucideIconResolver";
 import { resolveIconImageSrc } from "@/lib/iconValue";
-
-/** 从 URL 提取域名，用于 Google Favicon API */
-function extractDomain(url: string): string | null {
-  try {
-    const u = new URL(url.startsWith("http") ? url : `https://${url}`);
-    return u.hostname;
-  } catch {
-    return null;
-  }
-}
-
-/** 生成 Google Favicon URL */
-function getFaviconUrl(url: string, size = 64): string | null {
-  const domain = extractDomain(url);
-  if (!domain) return null;
-  return `https://www.google.com/s2/favicons?domain=${domain}&sz=${size}`;
-}
 
 /** 后台面板通用加载占位（社交/网站链接面板、站点信息、天气等共用） */
 export function LoadingPlaceholder() {
@@ -109,36 +93,30 @@ export default function LinksPanel({
     ...(showTip ? { tip: "" } : {}),
     sort: 0,
   };
-  const { items: links, loading, saving, addItem, removeItem, updateItem, save } = useLinkList(
+  const { items: links, loading, saving, dirty, addItem, removeItem, updateItem, save } = useLinkList(
     apiPath,
     emptyItem,
     successMessage,
-    // 社交/网站链接的 icon 必填（后端 zod min(1)）
-    { requireIcon: true }
+    // 社交/网站链接的 icon 必填（后端 zod min(1)）；label 用于全局保存提示
+    { requireIcon: true, label: tabLabel }
   );
 
   // 同一时间只展开一行（-1 表示全部收起）
   const [expandedIndex, setExpandedIndex] = useState(-1);
-  // 未保存变更标记：任何增删改置 true，保存成功置 false
-  const [dirty, setDirty] = useState(false);
-
-  const markDirty = () => setDirty(true);
+  // 脏状态由 useLinkList 统一维护（增删改内部即置脏），此处不再重复维护
 
   const handleAdd = () => {
     addItem();
-    markDirty();
     setExpandedIndex(links.length);
   };
 
   const handleRemove = (index: number) => {
     removeItem(index);
-    markDirty();
     setExpandedIndex((prev) => (prev === index ? -1 : prev > index ? prev - 1 : prev));
   };
 
   const handleUpdate = (index: number, field: keyof LinkItem, value: string | number) => {
     updateItem(index, field, value);
-    markDirty();
   };
 
   // 上移/下移：交换相邻两行的内容字段（id/clientId 跟随行位置，避免主键错乱）
@@ -158,12 +136,10 @@ export default function LinksPanel({
       updateItem(index, f, b[f]);
       updateItem(target, f, a[f]);
     }
-    markDirty();
   };
 
   const handleSave = async () => {
     await save();
-    setDirty(false);
     setExpandedIndex(-1);
   };
 
@@ -243,6 +219,33 @@ function LinkRow({
   onRemove,
   onUpdate,
 }: LinkRowProps) {
+  // 「从网站获取」探测中：按钮显示 loading，避免重复点击
+  const [fetchingIcon, setFetchingIcon] = useState(false);
+
+  /** 从填写的链接地址自动探测网站图标（服务端依次尝试多个可用图源） */
+  const handleFetchIcon = async () => {
+    const target = link.url?.trim();
+    if (!target) {
+      toast.error("请先填写链接地址");
+      return;
+    }
+    setFetchingIcon(true);
+    try {
+      const res = await fetch(`/api/favicon?url=${encodeURIComponent(target)}`, { cache: "no-store" });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.ok && data.url) {
+        onUpdate("icon", data.url);
+        toast.success(`已获取网站图标（来源：${data.source}）`);
+      } else {
+        toast.error(data?.error || "未能获取网站图标，请手动填写");
+      }
+    } catch {
+      toast.error("网络错误，获取图标失败");
+    } finally {
+      setFetchingIcon(false);
+    }
+  };
+
   // 收起态：紧凑预览行
   if (!expanded) {
     return (
@@ -357,15 +360,13 @@ function LinkRow({
                   type="button"
                   variant="ghost"
                   size="sm"
-                  onClick={() => {
-                    const favicon = getFaviconUrl(link.url);
-                    if (favicon) onUpdate("icon", favicon);
-                  }}
+                  onClick={() => void handleFetchIcon()}
+                  disabled={fetchingIcon}
                   className="h-6 shrink-0 gap-1 px-1.5 text-xs text-muted-foreground hover:text-foreground"
-                  title="从链接地址自动获取 favicon"
+                  title="从链接地址自动探测网站图标（自动挑选可用的图标源）"
                 >
-                  <Wand2 className="h-3 w-3" />
-                  从网站获取
+                  {fetchingIcon ? <Loader2 className="h-3 w-3 animate-spin" /> : <Wand2 className="h-3 w-3" />}
+                  {fetchingIcon ? "获取中…" : "从网站获取"}
                 </Button>
               )}
             </div>

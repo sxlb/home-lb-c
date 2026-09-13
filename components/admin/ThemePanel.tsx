@@ -55,7 +55,7 @@ function RangeField({
 }
 
 export default function ThemePanel() {
-  const { profile, loading, saving, dirty, set, save, formRef } = useProfileForm();
+  const { profile, loading, saving, dirty, set, save, formRef } = useProfileForm({ id: "theme", label: "主题与壁纸" });
 
   if (loading) {
     return <LoadingPlaceholder />;

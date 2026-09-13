@@ -9,7 +9,7 @@ import { useProfileForm } from "./useProfileForm";
 import { SONG_SERVERS, SONG_API_PRESETS, selectClass } from "./profileShared";
 
 export default function MusicPanel() {
-  const { profile, loading, saving, dirty, set, save, formRef } = useProfileForm();
+  const { profile, loading, saving, dirty, set, save, formRef } = useProfileForm({ id: "music", label: "音乐设置" });
 
   if (loading) {
     return <LoadingPlaceholder />;

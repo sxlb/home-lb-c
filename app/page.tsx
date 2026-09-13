@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { DEFAULT_SITE_TITLE, DEFAULT_SITE_DESCRIPTION, DEFAULT_SITE_KEYWORDS } from "@/lib/validation";
 import { cache } from "react";
 import { Quote } from "lucide-react";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
@@ -43,9 +44,10 @@ const getProfile = cache(async () => {
 /** 动态 SEO 元信息：后台配置的标题/描述/关键词/站点地址（ISR 60s 缓存） */
 export async function generateMetadata(): Promise<import("next").Metadata> {
   const profile = await getProfile();
-  const siteTitle = profile?.siteTitle?.trim() || "个人主页";
-  const siteDescription = profile?.siteDescription?.trim() || "极简个人主页";
-  const siteKeywords = profile?.siteKeywords?.trim();
+  // 后台留空时回退到统一默认文案，保证搜索引擎不会抓到空描述 / 空关键词
+  const siteTitle = profile?.siteTitle?.trim() || DEFAULT_SITE_TITLE;
+  const siteDescription = profile?.siteDescription?.trim() || DEFAULT_SITE_DESCRIPTION;
+  const siteKeywords = profile?.siteKeywords?.trim() || DEFAULT_SITE_KEYWORDS;
   const siteUrl = profile?.siteUrl?.trim().replace(/\/+$/, "");
   // 头像可能为空、相对上传路径或外链：仅当可拼出完整 URL 时才作为 OG 图片，避免产出损坏的分享卡片
   let ogImage;
