@@ -19,7 +19,8 @@ import { IconfontScript } from "@/components/Iconfont";
 import { MusicProviderLazy, MusicCardLazy } from "@/components/MusicProviderLazy";
 import DecorativeEffectsLazy from "@/components/DecorativeEffectsLazy";
 import dynamic from "next/dynamic";
-
+// SSR: loading screen 必须渲染，保证首屏无白屏；客户端 hydrate 后自动由
+// LoadingScreen 自身逻辑（等待 background-ready）控制收起。
 const LoadingScreen = dynamic(() => import("@/components/LoadingScreen").then((m) => m.LoadingScreen), { ssr: true });
 const SeasonalEffect = dynamic(() => import("@/components/SeasonalEffect"));
 // 公告居中弹窗（非首屏必需，延迟加载减小首屏 JS）
@@ -110,6 +111,7 @@ export default async function Home() {
         songApi={d.songApi}
         songServer={d.songServer}
         songId={d.songId}
+        profile={profile ?? undefined}
       >
         {/* 桌面端 main 最小一屏高（md:min-h-dvh）：内容不足一屏时仍整体垂直居中，页脚贴底；
             内容超高（如并入技能云后）自然增长而非裁切，仅超高部分滚动。
@@ -127,13 +129,15 @@ export default async function Home() {
           welcomeIndex={d.welcomeIndex}
         />
 
-        {/* 命令面板：Ctrl/Cmd+K 或 「/」唤起，搜索网站/友链快捷跳转 */}
-        <CommandPalette
-          siteLinks={d.siteLinks}
-          friendLinks={d.friendLinks}
-          siteTitle={d.siteLinksTitle}
-          friendTitle={d.friendLinksTitle}
-        />
+        {/* 命令面板：Ctrl/Cmd+K 或 「/」唤起，搜索网站/友链快捷跳转（受后台开关控制） */}
+        {d.commandPalette && (
+          <CommandPalette
+            siteLinks={d.siteLinks}
+            friendLinks={d.friendLinks}
+            siteTitle={d.siteLinksTitle}
+            friendTitle={d.friendLinksTitle}
+          />
+        )}
 
         {/* 全屏加载动画：首屏必需，保持预加载（ssr:true） */}
         <LoadingScreen enabled={d.loadingScreen} siteName={d.nickname} />
@@ -153,7 +157,7 @@ export default async function Home() {
         <IconfontScript url={d.iconfontUrl} />
 
         <Background bgApi={d.bgApi} coverType={d.coverType} autoSwitchInterval={d.autoBGSwitchInterval} bgOverlay={d.bgOverlay} wallpaperRefresh={d.wallpaperRefresh} initialUrl={d.wallpaperUrl} />
-        <SeasonalEffect type={d.effectType} enabled />
+        <SeasonalEffect type={d.effectType} enabled={d.seasonalEffectEnabled} />
         {/* 自定义字体（范围=全站时注入 body 字体） */}
         <CustomFont enabled={d.customFontEnabled} family={d.customFontFamily} scope={d.customFontScope} />
 
@@ -232,6 +236,7 @@ export default async function Home() {
                       friendLinks={d.friendLinks}
                       projects={d.projects}
                       siteTitle={d.siteLinksTitle}
+                      siteIcon={d.siteLinksIcon}
                       friendTitle={d.friendLinksTitle}
                     />
                   </div>

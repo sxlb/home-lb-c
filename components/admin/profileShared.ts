@@ -20,6 +20,8 @@ export interface ProfileShape {
   songApi: string;
   songServer: string;
   songId: string;
+  /** 播放器显示形态：card(内嵌卡片) | side(侧边栏浮窗) */
+  musicPlayerMode: string;
   siteUrl: string;
   siteIcp: string;
   siteMps: string;
@@ -29,7 +31,6 @@ export interface ProfileShape {
   friendLinksTitle: string;
   iconfontUrl: string;
   logoArtFont: boolean;
-  logoFont: string;
   customFontEnabled: boolean;
   customFontFamily: string;
   customFontScope: string;
@@ -39,6 +40,7 @@ export interface ProfileShape {
   showStats: boolean;
   dynamicTitle: boolean;
   topProgressBar: boolean;
+  seasonalEffectEnabled: boolean;
   useRandomAvatar: boolean;
   welcomeEnabled: boolean;
   welcomeIndex: number;
@@ -60,7 +62,7 @@ export interface ProfileShape {
   avatarShape: string;
   avatarBorderColor: string;
   siteFooterHtml: string;
-  // 天气配置（与 /api/weather-setting 读写同一份 Profile 记录）。
+  // 天气配置（统一通过 /api/profile 读写 Profile 记录）。
   // 显式声明到接口中：面板保存时会回传完整 profile 对象，若不声明，
   // 仅靠运行时 spread 隐式透传，一旦有人加 .pick()/.strict() 会静默清空天气配置。
   weatherProvider: string;
@@ -86,6 +88,7 @@ export const INITIAL_PROFILE: ProfileShape = {
   songApi: "https://api.injahow.cn/meting",
   songServer: "netease",
   songId: "3778678",
+  musicPlayerMode: "card",
   siteUrl: "",
   siteIcp: "",
   siteMps: "",
@@ -95,7 +98,6 @@ export const INITIAL_PROFILE: ProfileShape = {
   friendLinksTitle: "友情链接",
   iconfontUrl: "",
   logoArtFont: true,
-  logoFont: "zcool-kuail",
   customFontEnabled: false,
   customFontFamily: "",
   customFontScope: "nickname",
@@ -105,6 +107,7 @@ export const INITIAL_PROFILE: ProfileShape = {
   showStats: true,
   dynamicTitle: true,
   topProgressBar: true,
+  seasonalEffectEnabled: false,
   useRandomAvatar: false,
   welcomeEnabled: true,
   welcomeIndex: 0,
@@ -203,11 +206,6 @@ export async function loadProfile(force = false): Promise<ProfileShape | null> {
 
 export function setCachedProfile(p: Partial<ProfileShape>) {
   cachedProfile = { ...INITIAL_PROFILE, ...p };
-}
-
-export function resetCachedProfile() {
-  cachedProfile = null;
-  inflightProfile = null;
 }
 
 /** 是否已有内存缓存：面板初始 loading 据此置 false，切换面板时零闪烁 */

@@ -43,7 +43,7 @@ const IMAGE_SRC_RE = /^(https?:\/\/|\/api\/uploads\/)/;
 
 // 站点 SEO 默认文案：后台留空时前后台统一使用（避免搜索引擎抓到空描述/空关键词）
 export const DEFAULT_SITE_TITLE = "个人主页";
-export const DEFAULT_SITE_DESCRIPTION = "记录我的作品、随笔与生活，这里是我的个人主页，欢迎交流指教。";
+export const DEFAULT_SITE_DESCRIPTION = "记录我的作品与生活，这里是我的个人主页，欢迎交流指教。";
 export const DEFAULT_SITE_KEYWORDS = "个人主页,个人博客,作品集,技术分享,前端开发";
 
 // Profile 校验 schema：用于 PUT /api/profile 请求体校验
@@ -180,6 +180,13 @@ export const profileSchema = z.object({
     .max(64, "歌单 ID 过长")
     .optional()
     .default(""),
+  // 播放器显示模式：card(内嵌卡片) | side(侧边栏浮窗)
+  musicPlayerMode: z
+    .enum(["card", "side"], {
+      errorMap: () => ({ message: "播放器样式必须是 card / side" }),
+    })
+    .optional()
+    .default("card"),
   // 页脚配置
   siteUrl: z
     .string()
@@ -219,34 +226,11 @@ export const profileSchema = z.object({
   dynamicTitle: z.boolean().optional().default(true),
   // 顶部音乐进度条
   topProgressBar: z.boolean().optional().default(true),
-  // 昵称标题艺术字体选择（共 19 种，全部中英双语）
-  logoFont: z
-    .enum(
-      [
-        "ma-shan-zheng",
-        "zcool-kuail",
-        "long-cang",
-        "zcool-xiaowei",
-        "zcool-qingke",
-        "liu-jian-mao-cao",
-        "zhi-mang-xing",
-        "noto-serif-sc",
-        "smiley-sans",
-        "maoken-sans",
-        "yozai",
-        "lxgw-wen-kai",
-        "alimama-daka",
-        "dingtalk-jinbuti",
-        "hongleixingshu",
-        "xiaolai",
-        "slidefu",
-        "slideqiuhong",
-        "nowar-rounded",
-      ],
-      { errorMap: () => ({ message: "艺术字体参数不合法" }) }
-    )
-    .optional()
-    .default("zcool-kuail"),
+  // 季节装饰特效（萤火虫/雪花/灯笼）
+  seasonalEffectEnabled: z.boolean().optional().default(false),
+  // 命令面板（Ctrl/Cmd+K）
+  commandPalette: z.boolean().optional().default(true),
+  // 昵称艺术字体（内置仅一款「有爱圆体」，因此只保留开关，不再提供字体选择）
   // 自定义字体（方案 A：输入 CSS 字体名，不存文件）
   customFontEnabled: z.boolean().optional().default(false),
   customFontFamily: z
@@ -602,24 +586,27 @@ export const skillSchema = z.object({
 
 export const skillBatchSchema = z.array(skillSchema.extend({ id: z.number().int().positive().optional() }));
 
-// 随笔/文章校验 schema：title/slug 必填，正文可空（初始草稿），封面/摘要/标签可空
-export const articleSchema = z.object({
-  title: z.string().trim().min(1, "标题不能为空").max(128, "标题最长 128 字符"),
-  slug: z
-    .string()
-    .trim()
-    .min(1, "链接标识不能为空")
-    .max(128, "链接标识最长 128 字符")
-    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "链接标识须为小写字母/数字，用连字符分隔（如 my-first-post）"),
-  content: z.string().max(100000, "正文过长").optional().default(""),
-  excerpt: z.string().max(500, "摘要最长 500 字符").optional().default(""),
-  cover: imageOrMediaValue("封面图地址过长").optional().default(""),
-  tags: z.string().max(200, "标签过长").optional().default(""),
-  published: z.boolean().optional().default(false),
-  pinned: z.boolean().optional().default(false),
+// 媒体库记录（ImageAsset）校验 schema：用于备份恢复。
+// 注意：这里只校验数据库记录，不含图片文件本身——文件位于 data/uploads，需随目录一并拷贝。
+export const imageAssetSchema = z.object({
+  url: z.string().trim().min(1, "媒体地址不能为空").max(2048, "媒体地址过长"),
+  fileName: z.string().trim().min(1, "文件名不能为空").max(255, "文件名过长"),
+  mimeType: z.string().trim().max(128, "MIME 过长").optional().default("image/png"),
+  size: z.number().int().min(0, "文件大小不能为负").optional().default(0),
+  width: z.number().int().min(0, "宽度不能为负").optional().default(0),
+  height: z.number().int().min(0, "高度不能为负").optional().default(0),
+  usage: z.string().max(64, "用途标识过长").optional().default(""),
 });
 
-// 天气设置校验 schema：用于 PUT /api/weather-setting
+// 链接点击统计（SiteLinkClick）校验 schema：linkId 为唯一键，恢复时按主键回填
+export const linkClickSchema = z.object({
+  linkId: z.number().int().positive("链接 ID 必须为正整数"),
+  name: z.string().max(100, "名称过长").optional().default(""),
+  url: z.string().max(2000, "链接过长").optional().default(""),
+  count: z.number().int().min(0, "点击数不能为负").optional().default(0),
+});
+
+// 天气设置校验 schema：兼容旧版 /api/weather-setting 调用（已迁移至统一 PUT /api/profile）。
 // 注：wttr.in 已下线，路由仅使用 amap / tencent / tencent-key；
 // "wttr" / "uapis" 枚举值仅为兼容历史存量数据保留（保存后仍会继续存储，但不会被执行）
 export const weatherSettingSchema = z

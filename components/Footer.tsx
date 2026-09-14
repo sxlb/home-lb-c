@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Shield, Zap, History } from "lucide-react";
+import { sanitizeHtml } from "@/lib/sanitize";
 
 /**
  * 页脚版权信息中的作者名与跳转链接均写死在此：
@@ -181,7 +182,11 @@ export default function Footer({
   // 统计数据：上报本次访问（PV）并一次请求拿回统计结果用于展示
   // （原 SiteStats 组件功能已合并至此，保证统计记录与显示不分离）
   // UV 去重由服务端 Cookie 判定；POST 响应即含统计结果，无需再单独发 GET
+  //
+  // 开关语义：后台「站点访问统计」关闭时**既不上报、也不展示**。
+  // 此前该开关只控制展示、采集照旧执行，用户以为关掉即停止统计，实际仍在上报。
   useEffect(() => {
+    if (!showStats) return;
     let cancelled = false;
 
     fetch("/api/stats", {
@@ -200,7 +205,7 @@ export default function Footer({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [showStats]);
 
   // memo 化页脚分组
   const groups = useFooterGroups(icp, mps, showStats, stats, days, loadTime);
@@ -218,7 +223,9 @@ export default function Footer({
         {footerHtml && (
           <div
             className="text-xs md:text-sm"
-            dangerouslySetInnerHTML={{ __html: footerHtml }}
+            // siteFooterHtml 是管理员后台配置的内容，用 HTML 白名单清理后渲染，防止 on* 事件和危险协议注入。
+            // data-* 属性和 href(仅 http/https/mailto/tel) 放行，其余属性全部过滤。
+            dangerouslySetInnerHTML={{ __html: sanitizeHtml(footerHtml) }}
           />
         )}
         {/* Copyright 随页脚同行排布：作者名高亮为焦点，版本号弱化 */}

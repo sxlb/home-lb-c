@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
 import { DEFAULT_WELCOME_MESSAGES, DEFAULT_SITE_TITLE, DEFAULT_SITE_DESCRIPTION, DEFAULT_SITE_KEYWORDS } from "@/lib/validation";
+import { Eye, EyeOff } from "lucide-react";
 import { LoadingPlaceholder } from "./LinksPanel";
 import { loadProfile, setCachedProfile, hasCachedProfile, profileFieldPatch, selectClass } from "./profileShared";
 import { useGlobalSaveState, useRegisterSave, type SaveOutcome } from "./GlobalSave";
@@ -31,6 +32,7 @@ interface Profile {
   songApi: string;
   songServer: string;
   songId: string;
+  musicPlayerMode: string;
   siteUrl: string;
   siteIcp: string;
   siteMps: string;
@@ -40,7 +42,6 @@ interface Profile {
   friendLinksTitle: string;
   iconfontUrl: string;
   logoArtFont: boolean;
-  logoFont: string;
   customFontEnabled: boolean;
   customFontFamily: string;
   customFontScope: string;
@@ -50,6 +51,7 @@ interface Profile {
   showStats: boolean;
   dynamicTitle: boolean;
   topProgressBar: boolean;
+  seasonalEffectEnabled: boolean;
   useRandomAvatar: boolean;
   welcomeEnabled: boolean;
   welcomeIndex: number;
@@ -71,7 +73,7 @@ interface Profile {
   avatarShape: string;
   avatarBorderColor: string;
   siteFooterHtml: string;
-  // 天气配置（与 /api/weather-setting 共用同一份 Profile 记录，保存时原样回传）
+  // 天气配置（统一通过 /api/profile 读写，与 WeatherPanel 共享同一数据源）
   weatherProvider: string;
   amapKey: string;
   amapSecretKey: string;
@@ -95,6 +97,7 @@ const INITIAL: Profile = {
   songApi: "https://api.injahow.cn/meting",
   songServer: "netease",
   songId: "3778678",
+  musicPlayerMode: "card",
   siteUrl: "",
   siteIcp: "",
   siteMps: "",
@@ -104,7 +107,6 @@ const INITIAL: Profile = {
   friendLinksTitle: "友情链接",
   iconfontUrl: "",
   logoArtFont: true,
-  logoFont: "zcool-kuail",
   customFontEnabled: false,
   customFontFamily: "",
   customFontScope: "nickname",
@@ -114,6 +116,7 @@ const INITIAL: Profile = {
   showStats: true,
   dynamicTitle: true,
   topProgressBar: true,
+  seasonalEffectEnabled: false,
   useRandomAvatar: false,
   welcomeEnabled: true,
   welcomeIndex: 0,
@@ -190,6 +193,11 @@ export default function ProfilePanel() {
   // 全局保存进行中：提示统一由注册中心汇总，面板内不再重复弹
   const { saving: globalSaving } = useGlobalSaveState();
   const formRef = useRef<HTMLFormElement>(null);
+  // 天气配置密码可见性切换
+  const [showAmapKey, setShowAmapKey] = useState(false);
+  const [showAmapSecretKey, setShowAmapSecretKey] = useState(false);
+  const [showTxWeatherKey, setShowTxWeatherKey] = useState(false);
+  const [showTxWeatherSk, setShowTxWeatherSk] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -495,7 +503,7 @@ export default function ProfilePanel() {
                       {
                         key: "showStats" as const,
                         title: "站点访问统计",
-                        desc: "页脚显示浏览与访客数",
+                        desc: "关闭后停止上报，页脚也不显示数字",
                       },
                       {
                         key: "dynamicTitle" as const,
@@ -506,6 +514,16 @@ export default function ProfilePanel() {
                         key: "topProgressBar" as const,
                         title: "顶部音乐进度条",
                         desc: "页面顶部可拖拽播放进度",
+                      },
+                      {
+                        key: "seasonalEffectEnabled" as const,
+                        title: "季节装饰特效",
+                        desc: "萤火虫/雪花/灯笼（按月份自动切换）",
+                      },
+                      {
+                        key: "commandPalette" as const,
+                        title: "命令面板 (Ctrl/Cmd+K)",
+                        desc: "快捷键呼出全局搜索与执行面板",
                       },
                       {
                         key: "useRandomAvatar" as const,
@@ -533,6 +551,23 @@ export default function ProfilePanel() {
                       />
                     </label>
                   ))}
+                </div>
+
+                {/* 播放器显示模式（快捷切换，也可在「音乐设置」面板完整配置） */}
+                <div className="space-y-2">
+                  <Label htmlFor="musicPlayerMode">音乐播放器样式</Label>
+                  <select
+                    id="musicPlayerMode"
+                    className={selectClass}
+                    value={profile.musicPlayerMode}
+                    onChange={(e) => set("musicPlayerMode", e.target.value)}
+                  >
+                    <option value="card">内嵌卡片面板（默认）</option>
+                    <option value="side">侧边栏浮窗</option>
+                  </select>
+                  <p className="text-xs text-muted-foreground">
+                    切换后全局生效，刷新页面可见效果。完整歌单/API 源配置请在「音乐设置」面板操作。
+                  </p>
                 </div>
 
                 <div className="space-y-2">
@@ -869,7 +904,8 @@ export default function ProfilePanel() {
                     placeholder="link"
                   />
                   <p className="text-xs text-muted-foreground">
-                    lucide 图标名 或 iconfont symbol 名
+                    显示在「我的网站」标签文字前。支持 lucide 图标名（如 link / globe）、
+                    iconfont symbol 名，或图片地址（http(s) 外链 / 媒体库路径）；留空则不显示图标。
                   </p>
                 </div>
 
@@ -989,41 +1025,219 @@ export default function ProfilePanel() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="analyticsScript">统计代码</Label>
-                  <Textarea
-                    id="analyticsScript"
-                    value={profile.analyticsScript}
-                    onChange={(e) => set("analyticsScript", e.target.value)}
-                    placeholder={"<script>\n// 百度统计 / Umami / 51LA 统计代码\n</script>"}
-                    rows={5}
-                    className="font-mono text-xs"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    粘贴统计服务提供的完整代码片段（可含 script 标签），保存后立即生效
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="headScript">自定义 head 脚本</Label>
+                  <Label htmlFor="headScript" className="flex items-center justify-between">
+                    <span>&lt;head&gt; 脚本注入</span>
+                    <button
+                      type="button"
+                      className="text-xs text-primary underline-offset-2 hover:underline"
+                      onClick={() => set("headScript", "/* 清除 */")}
+                    >
+                      清除
+                    </button>
+                  </Label>
                   <Textarea
                     id="headScript"
                     value={profile.headScript}
                     onChange={(e) => set("headScript", e.target.value)}
-                    placeholder={"<meta name=\"baidu-site-verification\" content=\"...\" />\n<script>...</script>"}
-                    rows={5}
-                    className="font-mono text-xs"
+                    placeholder="&#60;script src=&#34;https://example.com/analytics.js&#34;&#62;&#60;/script&#62;"
+                    rows={3}
+                    spellCheck={false}
                   />
                   <p className="text-xs text-muted-foreground">
-                    站长验证、第三方插件等任意 head 内容（script 与 meta 均可）
+                    将 HTML 代码片段插入到 &lt;head&gt; 标签结束前；通常用于广告追踪、统计脚本
                   </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="analyticsScript" className="flex items-center justify-between">
+                    <span>自定义分析脚本</span>
+                    <button
+                      type="button"
+                      className="text-xs text-primary underline-offset-2 hover:underline"
+                      onClick={() => set("analyticsScript", "")}
+                    >
+                      清除
+                    </button>
+                  </Label>
+                  <Textarea
+                    id="analyticsScript"
+                    value={profile.analyticsScript}
+                    onChange={(e) => set("analyticsScript", e.target.value)}
+                    placeholder="// 例如百度统计 / Google Analytics / Cloudflare Web Analytics 内联脚本"
+                    rows={5}
+                    spellCheck={false}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    自定义分析脚本将注入到页面底部（&lt;/body&gt; 之前），支持匿名函数包裹的异步执行逻辑
+                  </p>
+                </div>
+
+                {/* ---- 天气配置 ---- */}
+                <div className="space-y-3.5">
+                  <div className="flex items-center gap-2">
+                    <div className="h-px flex-1 bg-border/60" />
+                    <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">天气配置</h4>
+                    <div className="h-px flex-1 bg-border/60" />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="weatherProvider">天气数据源</Label>
+                    <select
+                      id="weatherProvider"
+                      value={profile.weatherProvider || "tencent"}
+                      onChange={(e) => set("weatherProvider", e.target.value)}
+                      className={selectClass}
+                    >
+                      <option value="tencent">腾讯天气（免费，需填城市）</option>
+                      <option value="tencent-key">腾讯天气 Key 版（IP 定位 + 实况）</option>
+                      <option value="amap">高德地图（Web 服务 API）</option>
+                    </select>
+                  </div>
+
+                  {(profile.weatherProvider === "tencent-key" || profile.weatherProvider === "amap") && (
+                    <>
+                      <div className="space-y-2">
+                        {profile.weatherProvider === "amap" ? (
+                          <>
+                            <Label htmlFor="amapKey">高德 Web 服务 API Key</Label>
+                            <div className="relative">
+                              <Input
+                                id="amapKey"
+                                type={showAmapKey ? "text" : "password"}
+                                value={profile.amapKey || ""}
+                                onChange={(e) => set("amapKey", e.target.value)}
+                                placeholder="如 8a4f...（16 位十六进制）"
+                                className="pr-10"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setShowAmapKey((v) => !v)}
+                                className="absolute inset-y-0 right-0 flex w-9 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
+                                aria-label={showAmapKey ? "隐藏 Key" : "显示 Key"}
+                                tabIndex={-1}
+                              >
+                                {showAmapKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                              </button>
+                            </div>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              前往{" "}
+                              <a href="https://console.amap.com/dev/key/app" target="_blank" rel="noopener noreferrer" className="underline hover:text-primary">
+                                高德开放平台
+                              </a>{" "}
+                              创建「Web 服务」类型的 Key
+                            </p>
+                          </>
+                        ) : (
+                          <>
+                            <Label htmlFor="txWeatherKey">腾讯位置服务 Key</Label>
+                            <div className="relative">
+                              <Input
+                                id="txWeatherKey"
+                                type={showTxWeatherKey ? "text" : "password"}
+                                value={profile.txWeatherKey || ""}
+                                onChange={(e) => set("txWeatherKey", e.target.value)}
+                                placeholder="如 JXVBZ-..."
+                                className="pr-10"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setShowTxWeatherKey((v) => !v)}
+                                className="absolute inset-y-0 right-0 flex w-9 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
+                                aria-label={showTxWeatherKey ? "隐藏 Key" : "显示 Key"}
+                                tabIndex={-1}
+                              >
+                                {showTxWeatherKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                              </button>
+                            </div>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              前往{" "}
+                              <a href="https://console.map.qq.com/" target="_blank" rel="noopener noreferrer" className="underline hover:text-primary">
+                                腾讯位置服务
+                              </a>{" "}
+                              创建 Key 并开通「WebServiceAPI」权限
+                            </p>
+                          </>
+                        )}
+                      </div>
+
+                      <div className="space-y-2">
+                        {profile.weatherProvider === "amap" ? (
+                          <>
+                            <Label htmlFor="amapSecretKey">高德私钥（签名密钥）</Label>
+                            <div className="relative">
+                              <Input
+                                id="amapSecretKey"
+                                type={showAmapSecretKey ? "text" : "password"}
+                                value={profile.amapSecretKey || ""}
+                                onChange={(e) => set("amapSecretKey", e.target.value)}
+                                placeholder="Key 开启数字签名时填写，未开启可留空"
+                                className="pr-10"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setShowAmapSecretKey((v) => !v)}
+                                className="absolute inset-y-0 right-0 flex w-9 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
+                                aria-label={showAmapSecretKey ? "隐藏私钥" : "显示私钥"}
+                                tabIndex={-1}
+                              >
+                                {showAmapSecretKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                              </button>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <Label htmlFor="txWeatherSk">腾讯位置服务密钥（SK）</Label>
+                            <div className="relative">
+                              <Input
+                                id="txWeatherSk"
+                                type={showTxWeatherSk ? "text" : "password"}
+                                value={profile.txWeatherSk || ""}
+                                onChange={(e) => set("txWeatherSk", e.target.value)}
+                                placeholder="Key 开启数字签名时必填"
+                                className="pr-10"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setShowTxWeatherSk((v) => !v)}
+                                className="absolute inset-y-0 right-0 flex w-9 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
+                                aria-label={showTxWeatherSk ? "隐藏密钥 SK" : "显示密钥 SK"}
+                                tabIndex={-1}
+                              >
+                                {showTxWeatherSk ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                              </button>
+                            </div>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              Key 在控制台开启了「数字签名」时需填写对应的密钥（SK）；未开启签名可留空
+                            </p>
+                          </>
+                        )}
+                      </div>
+                    </>
+                  )}
+
+                  {profile.weatherProvider === "tencent" && (
+                    <div className="space-y-2">
+                      <Label htmlFor="weatherCity">城市名称</Label>
+                      <Input
+                        id="weatherCity"
+                        value={profile.weatherCity || ""}
+                        onChange={(e) => set("weatherCity", e.target.value)}
+                        placeholder="如 深圳、广州、北京"
+                      />
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        填写需要查询天气的城市名称，无需配置 Key
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
           </details>
-
-          <Button type="submit" disabled={saving} className="w-full">
-            {saving ? "保存中..." : "保存站点信息"}
-          </Button>
         </form>
+      </CardContent>
+      <CardContent className="pt-0">
+        <Button onClick={onSubmit} disabled={saving} type="button" className="w-full">
+          {saving ? "保存中..." : "保存站点信息"}
+        </Button>
       </CardContent>
     </Card>
   );

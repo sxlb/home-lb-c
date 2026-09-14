@@ -4,12 +4,59 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
+import { toast } from "sonner";
 import { LoadingPlaceholder } from "./LinksPanel";
 import { useProfileForm } from "./useProfileForm";
 import { SONG_SERVERS, SONG_API_PRESETS, selectClass } from "./profileShared";
 
+/**
+ * 音乐设置面板：歌单 API 源、平台、播放器显示形态。
+ *
+ * 保存走 useProfileForm（与「站点信息」「主题与壁纸」一致）：
+ * 该 Hook 只提交本面板**改动过**的字段，再与服务端最新配置合并后 PUT。
+ * 这一点至关重要 —— /api/profile 会把请求体里的全部字段写库，若只提交部分字段，
+ * 缺失字段会被 profileSchema 的默认值填充，导致昵称 / 头像 / 主题等整站配置被重置。
+ */
+
+/** 快捷歌单（网易云歌单 ID） */
+const QUICK_PLAYLISTS = [
+  { id: "3778678", name: "热歌榜" },
+  { id: "2884035", name: "网易原创榜" },
+  { id: "3779629", name: "新歌榜" },
+  { id: "991319590", name: "华语金曲榜" },
+];
+
+/** 播放器显示形态：card=内嵌卡片 / side=侧边栏浮窗 */
+const PLAYER_MODES = [
+  {
+    value: "card",
+    label: "内嵌卡片面板（默认）",
+    desc: "音乐控制内嵌于首页功能卡组，与一言共用一张卡片",
+  },
+  {
+    value: "side",
+    label: "侧边栏浮窗",
+    desc: "右侧浮动播放器，支持收起控制条与展开完整面板",
+  },
+];
+
+/** 歌单 API 地址本地校验（与后端 zod 一致），返回文案表示不通过 */
+function validateSongApi(p: { songApi: string }): string | null {
+  const v = p.songApi.trim();
+  if (v === "" || /^https?:\/\//.test(v)) return null;
+  return "歌单 API 地址须以 http:// 或 https:// 开头";
+}
+
 export default function MusicPanel() {
-  const { profile, loading, saving, set, save } = useProfileForm({ id: "music", label: "音乐设置" });
+  // 注册到全局保存：否则「保存全部修改」会漏掉音乐设置
+  const { profile, loading, saving, set, save } = useProfileForm({
+    id: "music",
+    label: "音乐设置",
+    validate: () => validateSongApi(profile),
+  });
+
+  // 当前 songApi 是否命中预设（未命中且非空时，下拉显示"自定义"占位项）
+  const matchedPreset = SONG_API_PRESETS.find((p) => p.value === profile.songApi);
 
   if (loading) {
     return <LoadingPlaceholder />;
@@ -17,18 +64,28 @@ export default function MusicPanel() {
 
   return (
     <Card>
-      {/* 页面级标题头由 admin/page.tsx 提供，卡内不再重复标题 */}
       <CardContent>
-        <form onSubmit={(e) => { e.preventDefault(); save(); }} className="space-y-3 pb-16">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            // 本地校验：非法地址直接拦下，避免等服务端 zod 拒绝后整批保存失败
+            const message = validateSongApi(profile);
+            if (message) {
+              toast.error(message);
+              return;
+            }
+            save();
+          }}
+          className="space-y-5 pb-16"
+        >
           <div className="space-y-5 rounded-lg border border-border bg-card px-5 py-5 shadow-sm">
+            {/* ── 歌单 API 源 ── */}
             <div className="space-y-2">
               <Label htmlFor="songApiPreset">选择 API 源</Label>
               <select
                 id="songApiPreset"
                 className={selectClass}
-                value={
-                  SONG_API_PRESETS.find((p) => p.value === profile.songApi)?.value ?? "__custom__"
-                }
+                value={matchedPreset ? matchedPreset.value : "__custom__"}
                 onChange={(e) => {
                   const val = e.target.value;
                   if (val === "__custom__") return;
@@ -40,12 +97,10 @@ export default function MusicPanel() {
                     {o.label}
                   </option>
                 ))}
-                {!SONG_API_PRESETS.some((p) => p.value === profile.songApi) && profile.songApi && (
-                  <option value="__custom__" disabled>
-                    — 自定义地址 —
-                  </option>
-                )}
               </select>
+              <p className="text-xs text-muted-foreground">
+                {matchedPreset?.desc || "当前为自定义地址，可在下方直接编辑"}
+              </p>
             </div>
 
             <div className="space-y-2">
@@ -57,8 +112,7 @@ export default function MusicPanel() {
                 placeholder="https://music.example.com"
               />
               <p className="text-xs text-muted-foreground">
-                支持三种数据源：① NeteaseCloudMusicApi 基地址（推荐自建，支持本机/内网）；
-                ② meting 类歌单接口；③ home 项目同格式 API。留空则播放器无歌单。
+                支持 NeteaseCloudMusicApi / meting 类接口，须为 http(s) 开头的完整地址。
               </p>
             </div>
 
@@ -89,31 +143,50 @@ export default function MusicPanel() {
               </div>
             </div>
 
-            {/* 快速配置：预设歌单 */}
+            {/* ── 快捷歌单 ── */}
             <div className="space-y-2">
               <Label>快捷歌单</Label>
               <div className="flex flex-wrap gap-2">
-                {[
-                  { id: "3778678", name: "热歌榜" },
-                  { id: "2884035", name: "网易原创榜" },
-                  { id: "3779629", name: "新歌榜" },
-                  { id: "991319590", name: "华语金曲榜" },
-                ].map((pl) => (
-                  <button
-                    key={pl.id}
-                    type="button"
-                    onClick={() => set("songId", pl.id)}
-                    className={`rounded-md border px-2.5 py-1 text-xs transition-colors ${
-                      profile.songId === pl.id
-                        ? "border-primary bg-primary/10 text-primary"
-                        : "border-border hover:border-primary/50 hover:bg-muted/50"
-                    }`}
-                  >
-                    {pl.name}
-                  </button>
-                ))}
+                {QUICK_PLAYLISTS.map((pl) => {
+                  const active = profile.songId === pl.id;
+                  return (
+                    <button
+                      key={pl.id}
+                      type="button"
+                      onClick={() => set("songId", pl.id)}
+                      aria-pressed={active}
+                      className={`rounded-md border px-2.5 py-1 text-xs transition-colors ${
+                        active
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-border hover:border-primary/50 hover:bg-muted/50"
+                      }`}
+                    >
+                      {pl.name}
+                    </button>
+                  );
+                })}
               </div>
-              <p className="text-[11px] text-muted-foreground">点击快速填入常用网易云歌单 ID</p>
+            </div>
+
+            {/* ── 播放器显示形态 ── */}
+            <div className="space-y-2">
+              <Label htmlFor="musicPlayerMode">播放器显示模式</Label>
+              <select
+                id="musicPlayerMode"
+                className={selectClass}
+                value={profile.musicPlayerMode}
+                onChange={(e) => set("musicPlayerMode", e.target.value)}
+              >
+                {PLAYER_MODES.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-muted-foreground">
+                {PLAYER_MODES.find((o) => o.value === profile.musicPlayerMode)?.desc ||
+                  "切换后全局生效，刷新页面可见效果。"}
+              </p>
             </div>
           </div>
 

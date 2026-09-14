@@ -56,6 +56,8 @@ interface LinkTabsProps {
   projects: ProjectRow[];
   /** 区域标题「网站」部分（后台可配置） */
   siteTitle?: string;
+  /** 标题图标：显示在「网站」tab 标签前（后台可配置，支持图片/iconfont/lucide 图标名） */
+  siteIcon?: string;
   /** 区域标题「友情」部分（后台可配置） */
   friendTitle?: string;
 }
@@ -78,6 +80,7 @@ export default function LinkTabs({
   friendLinks,
   projects,
   siteTitle = "我的网站",
+  siteIcon = "",
   friendTitle = "友情链接",
 }: LinkTabsProps) {
   // 仅渲染有数据的 tab；初始 tab 优先网站 → 友链 → 作品
@@ -85,8 +88,8 @@ export default function LinkTabs({
   const hasFriend = friendLinks.length > 0;
   const hasProject = projects.length > 0;
 
-  const availableTabs: { key: TabKey; label: string; count: number }[] = [];
-  if (hasSite) availableTabs.push({ key: "site", label: siteTitle || "我的网站", count: siteLinks.length });
+  const availableTabs: { key: TabKey; label: string; count: number; icon?: string }[] = [];
+  if (hasSite) availableTabs.push({ key: "site", label: siteTitle || "我的网站", count: siteLinks.length, icon: siteIcon });
   if (hasFriend) availableTabs.push({ key: "friend", label: friendTitle || "友情链接", count: friendLinks.length });
   if (hasProject) availableTabs.push({ key: "project", label: "我的作品", count: projects.length });
 
@@ -183,6 +186,8 @@ export default function LinkTabs({
             active={tab === t.key}
             onClick={() => setTab(t.key)}
             label={t.label}
+            icon={t.icon}
+            iconfontSymbols={iconfontSymbols}
             isLast={i === availableTabs.length - 1}
           />
         ))}
@@ -390,15 +395,54 @@ export default function LinkTabs({
   );
 }
 
+/**
+ * tab 标签前的图标。
+ * 与链接卡保持同一套三分支渲染：图片地址 → iconfont symbol → lucide 图标名。
+ * 解析不出具体图标时返回 null（不渲染），避免出现无意义的默认占位图形。
+ */
+function TabIcon({ value, iconfontSymbols }: { value?: string; iconfontSymbols: string[] }) {
+  if (!value) return null;
+  const imgSrc = resolveIconImageSrc(value, 32);
+  if (imgSrc) {
+    return (
+      <Image
+        src={imgSrc}
+        alt=""
+        width={16}
+        height={16}
+        className="h-4 w-4 shrink-0 rounded object-cover"
+        unoptimized
+        onError={(e) => {
+          e.currentTarget.style.display = "none";
+        }}
+      />
+    );
+  }
+  if (iconfontSymbols.includes(value)) {
+    return (
+      <svg className="h-4 w-4 shrink-0" aria-hidden="true" focusable="false">
+        <use href={`#${value}`} />
+      </svg>
+    );
+  }
+  const key = value.toLowerCase().replace(/[^a-z-]/g, "");
+  const IconComp = ICON_MAP[key];
+  return IconComp ? <IconComp className="h-4 w-4 shrink-0" aria-hidden /> : null;
+}
+
 function FragmentTabBtn({
   active,
   onClick,
   label,
+  icon,
+  iconfontSymbols,
   isLast,
 }: {
   active: boolean;
   onClick: () => void;
   label: string;
+  icon?: string;
+  iconfontSymbols: string[];
   isLast: boolean;
 }) {
   return (
@@ -411,6 +455,7 @@ function FragmentTabBtn({
       } ${active && "underline decoration-[1.5px] underline-offset-[4px]"}`}
       style={active ? { textDecorationColor: "var(--accent-color, #7dd3fc)" } : undefined}
     >
+      <TabIcon value={icon} iconfontSymbols={iconfontSymbols} />
       {label}
       {!isLast && (
         <span className="absolute inset-y-1.5 -right-[6.5px] w-px bg-white/15" aria-hidden />

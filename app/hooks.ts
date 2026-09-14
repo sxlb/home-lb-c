@@ -9,10 +9,10 @@ import { resolveWallpaperUrl } from "@/lib/wallpaperServer";
 import type { Profile } from "@prisma/client";
 import type { ThemeMode } from "@/components/ThemeProvider";
 
-// ── 静态常量：内置艺术字体映射（仅保留有爱圆体，其余字体已随瘦身移除） ──
-const LOGO_FONT_CLASS: Record<string, string> = {
-  "nowar-rounded": "font-art-nowar",
-};
+// ── 静态常量：昵称艺术字体 ──
+// 内置仅一款「有爱圆体」（中英双语，随镜像打包），由 logoArtFont 开关控制启停；
+// 若需按品牌选择更多字体，应改为引入对应字体文件并恢复多字体映射，而不是仅改一个字段值。
+const LOGO_ART_FONT_CLASS = "font-art-nowar";
 
 export interface SiteLinkRow {
   id: number;
@@ -161,6 +161,8 @@ export async function getHomeData(profile: Profile | null): Promise<{
   showStats: boolean;
   dynamicTitle: boolean;
   topProgressBar: boolean;
+  seasonalEffectEnabled: boolean;
+  commandPalette: boolean;
   welcomeEnabled: boolean;
   welcomeIndex: number;
   welcomeMessages: string;
@@ -250,9 +252,7 @@ export async function getHomeData(profile: Profile | null): Promise<{
     siteLinksIcon: profile?.siteLinksIcon || "link",
     friendLinksTitle: profile?.friendLinksTitle || "友情链接",
     iconfontUrl: profile?.iconfontUrl || "",
-    logoFontClass: (profile?.logoArtFont ?? true)
-      ? (LOGO_FONT_CLASS[profile?.logoFont || "nowar-rounded"] || "font-art-nowar")
-      : "font-bold",
+    logoFontClass: (profile?.logoArtFont ?? true) ? LOGO_ART_FONT_CLASS : "font-bold",
     // 自定义字体（仅范围=昵称时注入到昵称元素；范围=全站时由 CustomFont 组件注入 body）
     logoFontFamily: profile?.customFontEnabled && profile?.customFontFamily?.trim()
       ? `"${profile.customFontFamily.trim()}", var(--font-noto-sc), var(--font-inter), sans-serif`
@@ -267,6 +267,8 @@ export async function getHomeData(profile: Profile | null): Promise<{
     showStats: profile?.showStats ?? true,
     dynamicTitle: profile?.dynamicTitle ?? true,
     topProgressBar: profile?.topProgressBar ?? true,
+    seasonalEffectEnabled: profile?.seasonalEffectEnabled ?? false,
+    commandPalette: profile?.commandPalette ?? true,
     welcomeEnabled: profile?.welcomeEnabled ?? true,
     welcomeIndex: profile?.welcomeIndex ?? 0,
     welcomeMessages: profile?.welcomeMessages || JSON.stringify(DEFAULT_WELCOME_MESSAGES),

@@ -16,6 +16,7 @@ export default function FaviconUpdater({ icon }: { icon?: string }) {
     if (!link) {
       link = document.createElement("link");
       link.rel = "icon";
+      link.type = "image/x-icon";
       document.head.appendChild(link);
     }
     link.href = icon;

@@ -160,6 +160,44 @@ write_result() { # id action version method status message
   log "执行结果已写回 → ${vf}"
 }
 
+# ---------- 失败回退 ----------
+
+# 代码已切换后任一步失败：把代码切回切换前的版本并重新拉起容器。
+# 不这样做会留下「仓库是新版本、运行中的容器仍是旧版本」的混合状态，
+# 用户只看到「更新失败」，却不知道系统实际处于什么状态。
+rollback_code() { # targetVersion
+  local target="$1"
+  log "检测到失败，尝试回滚代码到 ${target} ..."
+  if ! git -C "$REPO_DIR" checkout "$target" >/dev/null 2>&1; then
+    log "✗ 回滚 git checkout 失败"
+    return 1
+  fi
+  if [ "$req_method" = "image" ]; then
+    IMAGE_TAG="$target" GHCR_IMAGE="$PULL_IMAGE" APP_VERSION="$target" \
+      docker compose --env-file "$ENV_FILE" -f docker-compose.yml -f docker-compose.image.yml up --no-build -d >/dev/null 2>&1 || true
+  else
+    APP_VERSION="$target" docker compose --env-file "$ENV_FILE" up -d --build >/dev/null 2>&1 || true
+  fi
+  log "已回滚代码到 ${target}，容器已按该版本重新拉起"
+  return 0
+}
+
+# 统一失败出口：写回失败结果，并在必要时回退代码。
+# code_switched_ok=1 表示 git checkout 已成功、但后续步骤失败。
+fail_after_switch() { # message
+  local message="$1"
+  if [ "${code_switched_ok:-0}" = "1" ] && [ -n "${cur:-}" ] && [ "$cur" != "unknown" ] && [ "$cur" != "$version" ]; then
+    if rollback_code "$cur"; then
+      write_result "$req_id" "$action" "$version" "$req_method" failed "${message}；已自动回退代码到 ${cur}"
+    else
+      write_result "$req_id" "$action" "$version" "$req_method" failed "${message}；自动回退失败，仓库当前停留在 ${version}，请手动处理"
+    fi
+  else
+    write_result "$req_id" "$action" "$version" "$req_method" failed "$message"
+  fi
+  exit 0
+}
+
 # ---------- 版本缓存 refresh（兜底每日一次） ----------
 # 版本缓存的"权威频率"已迁移到容器侧：登录后台按需刷新（短时去重）+ 手工"检测更新"强制刷新。
 # 宿主机仅保留每日一次的兜底刷新（出网更稳），保证哪怕容器网络不可达，缓存也不会超过约一天陈旧。
@@ -262,9 +300,18 @@ else
     || log "警告：git fetch（经代理 $GIT_PROXY_URL）失败，将使用本地已有 tag"
 fi
 
+# 标记：git checkout 是否已成功。成功之后的任何失败都需要回退代码，
+# 否则会留下「仓库是新版本、容器是旧版本」的混合状态。
+code_switched_ok=0
+
 if git rev-parse -q --verify "refs/tags/$version" >/dev/null 2>&1; then
   log "切换到版本 $version"
-  git checkout "$version" >/dev/null 2>&1 || { write_result "$req_id" "$action" "$version" "$req_method" failed "git 切换失败，请检查版本号是否已发布"; exit 0; }
+  if git checkout "$version" >/dev/null 2>&1; then
+    code_switched_ok=1
+  else
+    write_result "$req_id" "$action" "$version" "$req_method" failed "git 切换失败，请检查版本号是否已发布"
+    exit 0
+  fi
 else
   write_result "$req_id" "$action" "$version" "$req_method" failed "目标版本 $version 不存在（未发布或未推送 tag）"
   exit 0
@@ -272,7 +319,7 @@ fi
 
 # 2) 优雅停止容器：让 SQLite WAL 落盘，保证后续数据库读写（备份/恢复）处于一致状态
 log "停止容器（等待未落盘写入收尾）..."
-docker compose --env-file "$ENV_FILE" stop || { write_result "$req_id" "$action" "$version" "$req_method" failed "停止容器失败"; exit 0; }
+docker compose --env-file "$ENV_FILE" stop || fail_after_switch "停止容器失败"
 
 # 3) 备份当前版本数据库（回档数据点）
 backup_db "$cur"
@@ -284,18 +331,19 @@ fi
 
 # 5) 重建并启动容器（按更新方式分流：build=本地构建 / image=拉取发布镜像）
 #    无论哪种方式，均注入 APP_VERSION=目标版本，让容器内"当前版本"与发布版本一致。
+#    此处起的每个失败分支都走 fail_after_switch：写回失败结果并自动回退代码。
 if [ "$req_method" = "image" ]; then
   log "镜像更新模式：拉取 ${PULL_IMAGE}:${version} 并重启容器..."
   IMAGE_TAG="$version" GHCR_IMAGE="$PULL_IMAGE" APP_VERSION="$version" docker compose --env-file "$ENV_FILE" -f docker-compose.yml -f docker-compose.image.yml pull \
-    || { write_result "$req_id" "$action" "$version" "$req_method" failed "拉取镜像失败，请检查网络与 GHCR 仓库访问权限"; exit 0; }
+    || fail_after_switch "拉取镜像失败，请检查网络与 GHCR 仓库访问权限"
   IMAGE_TAG="$version" GHCR_IMAGE="$PULL_IMAGE" APP_VERSION="$version" docker compose --env-file "$ENV_FILE" -f docker-compose.yml -f docker-compose.image.yml up --no-build -d \
-    || { write_result "$req_id" "$action" "$version" "$req_method" failed "启动容器失败，请查看 docker compose logs"; exit 0; }
+    || fail_after_switch "启动容器失败，请查看 docker compose logs"
 else
   if [ -f ./deploy.sh ]; then
-    APP_VERSION="$version" bash ./deploy.sh || { write_result "$req_id" "$action" "$version" "$req_method" failed "构建/启动失败，请查看 docker compose logs"; exit 0; }
+    APP_VERSION="$version" bash ./deploy.sh || fail_after_switch "构建/启动失败，请查看 docker compose logs"
   else
     # 无 deploy.sh 时直接使用 compose 重建（用 .env.deploy 或用户指定的环境文件）
-    APP_VERSION="$version" docker compose --env-file "$ENV_FILE" up -d --build || { write_result "$req_id" "$action" "$version" "$req_method" failed "构建/启动失败，请查看 docker compose logs"; exit 0; }
+    APP_VERSION="$version" docker compose --env-file "$ENV_FILE" up -d --build || fail_after_switch "构建/启动失败，请查看 docker compose logs"
   fi
 fi
 

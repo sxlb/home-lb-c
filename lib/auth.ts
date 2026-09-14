@@ -8,6 +8,7 @@ import { isValidIp } from "@/lib/ip";
 declare module "next-auth" {
   interface User {
     mustChangePassword?: boolean;
+    sessionVersion?: number;
   }
   interface Session {
     user: {
@@ -16,12 +17,14 @@ declare module "next-auth" {
       email?: string | null;
       image?: string | null;
       mustChangePassword?: boolean;
+      sessionVersion?: number;
     };
   }
 }
 declare module "next-auth/jwt" {
   interface JWT {
     mustChangePassword?: boolean;
+    sessionVersion?: number;
   }
 }
 
@@ -186,15 +189,6 @@ export function resetLoginRateLimit(): void {
 // 这是一个 bcrypt 哈希字符串，对任意密码 compare 都会返回 false 但消耗相同时间
 const DUMMY_HASH = "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy";
 
-// 登录失败原因码，用于前端区分错误类型
-// NextAuth v4 的 authorize 抛出的异常会被吞掉，改用 URL error 参数传递
-export const AUTH_ERROR_CODES = {
-  RATE_LIMITED: "rate_limited",
-  INVALID_CREDENTIALS: "invalid_credentials",
-  TOTP_REQUIRED: "totp_required",
-  TOTP_INVALID: "totp_invalid",
-} as const;
-
 export const authOptions: NextAuthOptions = {
   session: { strategy: "jwt" },
   pages: { signIn: "/admin/login" },
@@ -268,22 +262,29 @@ export const authOptions: NextAuthOptions = {
           id: String(user.id),
           name: user.username,
           mustChangePassword: user.mustChangePassword,
+          sessionVersion: user.sessionVersion ?? 0,
         };
       },
     }),
   ],
   callbacks: {
     async jwt({ token, user, trigger }) {
-      // 首次登录：把"是否需要强制改密"标记写入 token
+      // 首次登录：把"是否需要强制改密"与"会话版本号"写入 token
       if (user) {
-        token.mustChangePassword = (user as { mustChangePassword?: boolean }).mustChangePassword ?? false;
+        const u = user as { mustChangePassword?: boolean; sessionVersion?: number };
+        token.mustChangePassword = u.mustChangePassword ?? false;
+        token.sessionVersion = u.sessionVersion ?? 0;
       }
       // 改密成功触发 session.update() 时，从数据库读取最新标记，
       // 保证"改密后提示条消失"无需重新登录也能立即生效。
       if (trigger === "update" && token.name) {
         try {
-          const fresh = await prisma.user.findUnique({ where: { username: token.name } });
+          const fresh = await prisma.user.findUnique({
+            where: { username: token.name },
+            select: { mustChangePassword: true, sessionVersion: true },
+          });
           token.mustChangePassword = fresh?.mustChangePassword ?? token.mustChangePassword ?? false;
+          token.sessionVersion = fresh?.sessionVersion ?? token.sessionVersion ?? 0;
         } catch {
           // DB 读取异常时保留原标记，不影响登录流程
         }
@@ -293,6 +294,7 @@ export const authOptions: NextAuthOptions = {
     async session({ session, token }) {
       if (session.user) {
         session.user.mustChangePassword = token.mustChangePassword ?? false;
+        session.user.sessionVersion = token.sessionVersion ?? 0;
       }
       return session;
     },
@@ -301,6 +303,33 @@ export const authOptions: NextAuthOptions = {
 };
 
 export { validateAuthEnv };
+
+/**
+ * 校验会话是否已被吊销（改密 / 重置默认 / 账号被删）。
+ *
+ * JWT 策略下 token 默认 30 天内始终有效，改密码并不会让它失效；
+ * 因此引入 User.sessionVersion：登录时写入 token，敏感操作时自增，
+ * 两者不一致即说明该 token 已过期，应视为未登录。
+ *
+ * 数据库异常时返回 false（不误判失效），避免把管理员锁在门外。
+ */
+export async function isSessionRevoked(
+  session: { user?: { name?: string | null; sessionVersion?: number } } | null
+): Promise<boolean> {
+  const name = session?.user?.name;
+  if (!name) return false;
+  try {
+    const user = await prisma.user.findUnique({
+      where: { username: name },
+      select: { sessionVersion: true },
+    });
+    // 账号已不存在（被删除或改名）：当前 token 同样应当失效
+    if (!user) return true;
+    return (session?.user?.sessionVersion ?? 0) !== (user.sessionVersion ?? 0);
+  } catch {
+    return false;
+  }
+}
 
 /**
  * 登录成功后触发版本缓存按需刷新（fire-and-forget）。

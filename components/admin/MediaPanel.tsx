@@ -57,6 +57,8 @@ export default function MediaPanel() {
   const [confirmingId, setConfirmingId] = useState<number | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // 预览弹层：用于把焦点移入关闭按钮，保证键盘可达
+  const previewCloseRef = useRef<HTMLButtonElement>(null);
   const seqRef = useRef(0);
   const mountedRef = useRef(true);
 
@@ -66,6 +68,18 @@ export default function MediaPanel() {
       mountedRef.current = false;
     };
   }, []);
+
+  // 预览弹层键盘支持：打开时焦点移入关闭按钮，Esc 关闭。
+  // 此前只能点击遮罩/按钮关闭，键盘用户无法退出预览。
+  useEffect(() => {
+    if (!previewUrl) return;
+    previewCloseRef.current?.focus();
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setPreviewUrl(null);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [previewUrl]);
 
   const load = useCallback(
     async (p = page, u = usage) => {
@@ -320,13 +334,17 @@ export default function MediaPanel() {
           </div>
         )}
 
-        {/* 预览大图 */}
+        {/* 预览大图：对话框语义 + Esc 关闭 + 打开时焦点移入关闭按钮 */}
         {previewUrl && (
           <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="图片预览"
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6 backdrop-blur-sm"
             onClick={() => setPreviewUrl(null)}
           >
             <button
+              ref={previewCloseRef}
               className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
               aria-label="关闭预览"
               onClick={() => setPreviewUrl(null)}

@@ -166,45 +166,22 @@ describe("profileSchema", () => {
     });
   });
 
-  describe("艺术字体 logoFont", () => {
-    it("19 种双语字体值全部合法", () => {
-      const fonts = [
-        "ma-shan-zheng",
-        "zcool-kuail",
-        "long-cang",
-        "zcool-xiaowei",
-        "zcool-qingke",
-        "liu-jian-mao-cao",
-        "zhi-mang-xing",
-        "noto-serif-sc",
-        "smiley-sans",
-        "maoken-sans",
-        "yozai",
-        "lxgw-wen-kai",
-        "alimama-daka",
-        "dingtalk-jinbuti",
-        "hongleixingshu",
-        "xiaolai",
-        "slidefu",
-        "slideqiuhong",
-        "nowar-rounded",
-      ];
-      for (const f of fonts) {
-        const result = profileSchema.safeParse({ logoFont: f });
-        expect(result.success).toBe(true);
-      }
-    });
-
-    it("缺省时默认站酷快乐体", () => {
+  describe("艺术字体（logoFont 已下线，仅保留 logoArtFont 开关）", () => {
+    it("logoArtFont 缺省为 true（启用内置艺术字体）", () => {
       const result = profileSchema.safeParse({});
       if (result.success) {
-        expect(result.data.logoFont).toBe("zcool-kuail");
+        expect(result.data.logoArtFont).toBe(true);
       }
     });
 
-    it("非法字体值校验失败", () => {
-      const result = profileSchema.safeParse({ logoFont: "pacifico" });
-      expect(result.success).toBe(false);
+    it("logoFont 已不是 schema 字段：传入被剥离，不写入数据", () => {
+      // 该字段历史上允许 19 种字体，但前台只实现了一款，且后台已无选择控件，
+      // 属于"存了值也没有效果"的幽灵字段，故整体下线。
+      const result = profileSchema.safeParse({ logoFont: "zcool-kuail" });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect("logoFont" in result.data).toBe(false);
+      }
     });
   });
 

@@ -2,9 +2,16 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
 import { resetRateLimiter } from "@/lib/server";
 
-/** 构造统计上报请求（可携带 UV Cookie） */
-function makeRequest(cookie?: string): NextRequest {
-  const headers: Record<string, string> = cookie ? { Cookie: cookie } : {};
+/** 真实浏览器 UA：路由会过滤爬虫/探针，测试必须携带人类 UA 才会真正计数 */
+const REAL_UA =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
+/** 爬虫 UA（用于验证过滤逻辑） */
+const BOT_UA = "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)";
+
+/** 构造统计上报请求（可携带 UV Cookie；默认带真实浏览器 UA） */
+function makeRequest(cookie?: string, ua: string = REAL_UA): NextRequest {
+  const headers: Record<string, string> = { "user-agent": ua };
+  if (cookie) headers.Cookie = cookie;
   return new NextRequest("http://localhost/api/stats", {
     method: "POST",
     headers,
@@ -16,6 +23,7 @@ const mocks = {
   findUnique: vi.fn(),
   aggregate: vi.fn(),
   upsert: vi.fn(),
+  visitRecordCreate: vi.fn(),
 };
 
 vi.mock("@/lib/db", () => ({
@@ -28,7 +36,7 @@ vi.mock("@/lib/db", () => ({
     // POST 明细写入（visitRecord.create）需 mock，否则路由内层 try/catch
     // 会吞掉 TypeError 并打印大量噪音日志（生产 schema 已含该模型，此仅为测试补齐）
     visitRecord: {
-      create: vi.fn().mockResolvedValue({}),
+      create: (...args: unknown[]) => mocks.visitRecordCreate(...args),
     },
   },
 }));
@@ -158,6 +166,29 @@ describe("stats API", () => {
       });
       // 老访客不再重复签发 Cookie
       expect(res.cookies.get("home-lb-uv")).toBeUndefined();
+    });
+
+    it("爬虫 UA 不计入统计：仅返回结果，不写库也不签发 Cookie", async () => {
+      mocks.upsert.mockResolvedValue({});
+
+      const res = await POST(makeRequest(undefined, BOT_UA)) as NextResponse;
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.ok).toBe(true);
+      // 关键：不写汇总、不写明细、不签发 UV Cookie（避免蜘蛛刷高 PV/UV 与设备分布）
+      expect(mocks.upsert).not.toHaveBeenCalled();
+      expect(mocks.visitRecordCreate).not.toHaveBeenCalled();
+      expect(res.cookies.get("home-lb-uv")).toBeUndefined();
+    });
+
+    it("空 UA 视为非人类流量，同样不计入", async () => {
+      mocks.upsert.mockResolvedValue({});
+
+      const res = await POST(makeRequest(undefined, "")) as NextResponse;
+
+      expect(res.status).toBe(200);
+      expect(mocks.upsert).not.toHaveBeenCalled();
     });
 
     it("同一 IP 高频请求触发限流（429），且不再写库", async () => {

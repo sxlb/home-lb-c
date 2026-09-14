@@ -25,6 +25,7 @@ import {
   type PlayMode,
 } from "@/components/useAudioPlayer";
 import Hitokoto from "@/components/Hitokoto";
+import SidebarMusicPlayer from "@/components/SidebarMusicPlayer";
 
 // 播放模式元信息（图标 + 提示文案）
 const PLAY_MODE_META: Record<PlayMode, { label: string; Icon: LucideIcon }> = {
@@ -552,7 +553,7 @@ export function MusicCard({ hitokotoType = "" }: { hitokotoType?: string }) {
 export default function MusicProvider({
   children,
   ...props
-}: UseAudioPlayerProps & { children: React.ReactNode }) {
+}: UseAudioPlayerProps & { children: React.ReactNode; musicPlayerMode?: string }) {
   const {
     isPlaying,
     setIsPlaying,
@@ -574,6 +575,9 @@ export default function MusicProvider({
     audioEl,
     setAudioEl,
   } = useAudioPlayer(props);
+
+  // 获取播放器显示模式（默认内嵌卡片）
+  const musicPlayerMode = (props as Record<string, unknown>).musicPlayerMode as string || "card";
 
   const [panelOpen, setPanelOpen] = useState(false);
   const [boxOpen, setBoxOpen] = useState(false);
@@ -673,6 +677,8 @@ export default function MusicProvider({
         onPause={() => setIsPlaying(false)}
       />
       {boxOpen && <MusicModal />}
+      {/* 侧边栏播放器模式：右侧浮动面板，共享同 Audio Context */}
+      {musicPlayerMode === "side" && <SidebarMusicPlayer />}
       {children}
     </MusicContext.Provider>
   );

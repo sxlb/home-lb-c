@@ -33,7 +33,6 @@ export function useProfileForm(
   const [loading, setLoading] = useState(!hasCachedProfile());
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
-  const formRef = useRef<HTMLFormElement>(null);
   /** 载入时的基线快照：用于计算「本面板改动了哪些字段」 */
   const baselineRef = useRef<ProfileShape | null>(null);
   const { markEdited, isStale, currentRevision } = useEditRevision();
@@ -131,5 +130,5 @@ export function useProfileForm(
     validate: () => validate?.() ?? null,
   });
 
-  return { profile, loading, saving, dirty, set, save, formRef };
+  return { profile, loading, saving, dirty, set, save };
 }

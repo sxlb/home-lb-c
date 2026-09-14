@@ -14,10 +14,7 @@ interface EffectsProps {
   consoleEgg?: boolean;
   dynamicTitle?: boolean;
   topProgressBar?: boolean;
-  welcomeEnabled?: boolean;
   siteName?: string;
-  welcomeMessages?: string;
-  welcomeIndex?: number;
 }
 
 /** 客户端包装器：允许在 Server Component 中引用 ssr:false 的装饰特效动态导入 */

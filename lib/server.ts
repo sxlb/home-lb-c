@@ -1,11 +1,13 @@
 import { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { authOptions, validateAuthEnv } from "@/lib/auth";
+import { authOptions, validateAuthEnv, isSessionRevoked } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { profileSchema } from "@/lib/validation";
+import { syncByUpsert } from "@/lib/upsert";
 import { extractForwardedIp, extractRealIp, isValidIp } from "@/lib/ip";
-import type { z, ZodTypeAny } from "zod";
+import { z } from "zod";
+import type { ZodTypeAny } from "zod";
 
 /**
  * 服务端 API 工具集：统一放行"响应封装 + 会话校验 + 请求体解析 + 操作日志 + 限流"，
@@ -47,12 +49,18 @@ export function internalError(message = "服务器错误", e?: unknown) {
 }
 
 /**
- * 要求已登录：校验认证环境并获取会话（API 路由认证样板）。
- * 未登录返回 null，调用方应返回 401。
+ * 要求已登录：校验认证环境、获取会话，并确认会话未被吊销。
+ * 未登录（或已被吊销）返回 null，调用方应返回 401。
+ *
+ * 吊销校验的意义：JWT 策略下 token 默认 30 天有效，改密码并不会让它失效。
+ * 这里比对 User.sessionVersion，使「改密 / 重置默认」能立即踢掉所有其它设备。
  */
 export async function requireSession() {
   validateAuthEnv();
-  return getServerSession(authOptions);
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.name) return session;
+  if (await isSessionRevoked(session)) return null;
+  return session;
 }
 
 /**
@@ -80,7 +88,6 @@ type LogModule =
   | "site-links"
   | "friend-links"
   | "account"
-  | "weather-setting"
   | "backup"
   | "announcements"
   | "logs" // 操作日志自身：导出 / 清理审计
@@ -88,7 +95,7 @@ type LogModule =
   | "update" // 系统更新：检查 / 更新 / 回滚
   | "projects" // 作品集：批量保存
   | "skills" // 技能云：批量保存
-  | "articles"; // 随笔/文章：增删改
+  | "system"; // 系统：重置默认、权限变更等
 
 interface LogInput {
   module: LogModule;
@@ -322,25 +329,49 @@ export function resetRateLimiter(): void {
 /* ==================== 链接列表路由工厂 ==================== */
 
 /**
- * 链接列表路由所需的 Prisma 委托（结构兼容 socialLink / siteLink 两个模型）。
- * 仅声明工厂实际用到的方法，避免依赖具体 Prisma 类型。
+ * 链接列表路由所需的 Prisma 委托（结构兼容 socialLink / siteLink / friendLink 三个模型）。
+ * 由 toLinkDelegate 适配产出，只暴露工厂实际用到的方法。
  */
 interface LinkDelegate {
   findMany(args: {
     orderBy: { sort?: "asc" | "desc"; id?: "asc" | "desc" }[];
   }): Promise<LinkItem[]>;
+  /** 库中全部行的 id（用于计算哪些行需要删除） */
+  listIds(): Promise<number[]>;
   create(args: { data: Record<string, unknown> }): Promise<LinkItem>;
-  deleteMany(): Promise<{ count: number }>;
-  createMany(args: { data: Record<string, unknown>[] }): Promise<{ count: number }>;
+  /** 按 id 更新（保持自增 id 不变，点击统计因此不会脱钩） */
+  update(args: { where: { id: number }; data: Record<string, unknown> }): Promise<LinkItem>;
+  /** 按 id 批量删除，返回删除行数 */
+  deleteManyByIds(ids: number[]): Promise<number>;
 }
 
 /**
- * 将 Prisma 模型委托（如 prisma.socialLink）适配为 LinkDelegate。
- * Prisma 生成类型的参数类型更具体，与手写的最小接口在 TS 逆变规则下不直接兼容，
- * 但运行时二者完全匹配（数据已由 zod schema 校验），此适配仅在类型层面收窄。
+ * 把 Prisma 模型委托（如 prisma.socialLink）适配为 LinkDelegate。
+ *
+ * 这里刻意返回**真实适配对象**而不是直接做类型断言：断言只能骗过编译器，
+ * 而 listIds / deleteManyByIds 是 Prisma 原生不存在的方法，必须在运行时真正实现。
  */
-export function toLinkDelegate<T>(delegate: T): LinkDelegate {
-  return delegate as unknown as LinkDelegate;
+export function toLinkDelegate(delegate: unknown): LinkDelegate {
+  const d = delegate as {
+    findMany(args?: unknown): Promise<unknown[]>;
+    create(args: { data: Record<string, unknown> }): Promise<unknown>;
+    update(args: { where: { id: number }; data: Record<string, unknown> }): Promise<unknown>;
+    deleteMany(args: { where: { id: { in: number[] } } }): Promise<{ count: number }>;
+  };
+  return {
+    findMany: (args) => d.findMany(args) as Promise<LinkItem[]>,
+    listIds: async () => {
+      const rows = (await d.findMany({ select: { id: true } })) as { id: number }[];
+      return rows.map((r) => r.id);
+    },
+    create: (args) => d.create(args) as Promise<LinkItem>,
+    update: (args) => d.update(args) as Promise<LinkItem>,
+    deleteManyByIds: async (ids) => {
+      if (ids.length === 0) return 0;
+      const result = await d.deleteMany({ where: { id: { in: ids } } });
+      return result.count;
+    },
+  };
 }
 
 interface LinkRouteConfig<S extends ZodTypeAny> {
@@ -371,6 +402,14 @@ export function createLinkListApi<S extends ZodTypeAny>({
   type Item = z.infer<S>;
   // 仅对字面量使用 as const（保留可写数组类型，满足 Prisma 参数要求）
   const ORDER = { orderBy: [{ sort: "asc" as const }, { id: "asc" as const }] };
+  // 批量保存用 schema：在单条 schema 上追加可选 id。
+  // 带 id 的条目按 id 原地更新（**自增 id 保持不变**），否则新增。
+  // id 稳定是点击统计正确性的前提：SiteLinkClick 以 linkId 为唯一键聚合，
+  // 若每次保存都重建行、id 全变，历史点击会变成孤儿行并在「热门链接」里重复出现。
+  const batchSchema = (schema as unknown as z.ZodObject<z.ZodRawShape>).extend({
+    id: z.number().int().positive().optional(),
+  });
+  type BatchItem = Item & { id?: number };
 
   async function GET() {
     try {
@@ -408,7 +447,18 @@ export function createLinkListApi<S extends ZodTypeAny>({
     }
   }
 
+  /** 去掉 id 字段：Prisma 的 create / update 不接受把主键写进 data */
+  function stripId(data: BatchItem): Record<string, unknown> {
+    const rest: Record<string, unknown> = { ...data };
+    delete rest.id;
+    return rest;
+  }
+
   // 批量更新（用于后台保存整个列表）
+  //
+  // 采用「按 id 增量同步」而非「清空 + 重插」：后者会让所有行的自增 id 每次保存都变化，
+  // 而 SiteLinkClick.linkId 依赖该 id 聚合点击量 —— id 一变，历史点击立刻与新行脱钩，
+  // 「热门链接」会出现同名多行、计数被永久拆散。此处与项目 / 技能面板共用 syncByUpsert。
   async function PUT(request: NextRequest) {
     try {
       const session = await requireSession();
@@ -425,27 +475,27 @@ export function createLinkListApi<S extends ZodTypeAny>({
         return error("请求体必须为数组");
       }
 
-      // 逐条校验并收集清洗后的数据
-      const items: Item[] = [];
+      // 逐条校验并收集清洗后的数据（batchSchema 允许携带可选 id）
+      const items: BatchItem[] = [];
       for (const item of json) {
-        const parsed = schema.safeParse(item);
+        const parsed = batchSchema.safeParse(item);
         if (!parsed.success) {
           return error(`参数校验失败：${formatZodError(parsed.error)}`);
         }
-        items.push(parsed.data);
+        items.push(parsed.data as BatchItem);
       }
 
       // 批量保存前：获取旧列表，用于生成操作日志的变更摘要
       const before = await delegate.findMany(ORDER);
 
-      // 使用事务清空并重新插入
-      const result = await prisma.$transaction(async (tx) => {
+      const counts = await prisma.$transaction(async (tx) => {
         const d = txDelegate(tx);
-        await d.deleteMany();
-        // 空列表（用户删除了全部链接）时跳过 createMany：
-        // Prisma 的 createMany 不允许空数组，直接调用会抛错导致保存失败。
-        if (items.length === 0) return { count: 0 };
-        return d.createMany({ data: items });
+        return syncByUpsert(items, {
+          listIds: () => d.listIds(),
+          updateById: (id, data) => d.update({ where: { id }, data: stripId(data) }),
+          create: (data) => d.create({ data: stripId(data) }),
+          deleteMissing: (ids) => d.deleteManyByIds(ids),
+        });
       });
 
       // 记录操作日志（失败不影响主操作）
@@ -460,7 +510,12 @@ export function createLinkListApi<S extends ZodTypeAny>({
         ip: getClientIp(request),
       });
 
-      return NextResponse.json({ count: result.count });
+      return NextResponse.json({
+        count: counts.createdCount + counts.updatedCount,
+        created: counts.createdCount,
+        updated: counts.updatedCount,
+        deleted: counts.deletedCount,
+      });
     } catch (e) {
       return internalError(`[PUT ${label}] 保存失败`, e);
     }

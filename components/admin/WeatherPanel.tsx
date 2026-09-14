@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,8 +8,21 @@ import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Loader2, MapPin, Cloud, Eye, EyeOff, Check, Settings2 } from "lucide-react";
 import { LoadingPlaceholder } from "./LinksPanel";
+import { useRegisterSave } from "./GlobalSave";
 
 type Provider = "amap" | "tencent" | "tencent-key";
+
+/** 表单快照键：用于判断是否存在未保存改动（字段间用不可见字符分隔，避免拼接歧义） */
+function formSnapshot(v: {
+  provider: string;
+  amapKey: string;
+  amapSecretKey: string;
+  txWeatherKey: string;
+  txWeatherSk: string;
+  weatherCity: string;
+}): string {
+  return [v.provider, v.amapKey, v.amapSecretKey, v.txWeatherKey, v.txWeatherSk, v.weatherCity].join("\u0000");
+}
 
 const PROVIDERS: { id: Provider; name: string; desc: string; icon: typeof Cloud }[] = [
   { id: "tencent", name: "腾讯天气", desc: "免费无需 Key，需填写城市", icon: Cloud },
@@ -30,23 +43,46 @@ export default function WeatherPanel() {
   const [showTxSk, setShowTxSk] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  /** 是否存在未保存改动：驱动「保存全部修改」是否纳入本面板 */
+  const [dirty, setDirty] = useState(false);
+  /** 载入 / 保存成功时的基线快照 */
+  const baselineRef = useRef<string>("");
+
+  /** 当前表单快照 */
+  const snapshot = formSnapshot({ provider, amapKey, amapSecretKey, txWeatherKey, txWeatherSk, weatherCity });
+
+  useEffect(() => {
+    if (loading) return;
+    setDirty(snapshot !== baselineRef.current);
+  }, [snapshot, loading]);
 
   useEffect(() => {
     let cancelled = false;
     async function load() {
       try {
+        // 统一从 /api/profile 读取天气配置（与 ProfilePanel 共享同一数据源）
         const res = await fetch("/api/profile");
         if (cancelled) return;
         if (res.ok) {
           const data = await res.json();
           // 兼容历史配置：wttr / uapis 已下线，落到默认腾讯天气
           const wp: string = data.weatherProvider || "tencent";
-          setProvider((["amap", "tencent", "tencent-key"].includes(wp) ? wp : "tencent") as Provider);
-          setAmapKey(data.amapKey || "");
-          setAmapSecretKey(data.amapSecretKey || "");
-          setTxWeatherKey(data.txWeatherKey || "");
-          setTxWeatherSk(data.txWeatherSk || "");
-          setWeatherCity(data.weatherCity || "");
+          const loaded = {
+            provider: (["amap", "tencent", "tencent-key"].includes(wp) ? wp : "tencent") as Provider,
+            amapKey: (data.amapKey as string) || "",
+            amapSecretKey: (data.amapSecretKey as string) || "",
+            txWeatherKey: (data.txWeatherKey as string) || "",
+            txWeatherSk: (data.txWeatherSk as string) || "",
+            weatherCity: (data.weatherCity as string) || "",
+          };
+          setProvider(loaded.provider);
+          setAmapKey(loaded.amapKey);
+          setAmapSecretKey(loaded.amapSecretKey);
+          setTxWeatherKey(loaded.txWeatherKey);
+          setTxWeatherSk(loaded.txWeatherSk);
+          setWeatherCity(loaded.weatherCity);
+          // 记录基线：此后与快照比对即可判断是否有未保存改动
+          baselineRef.current = formSnapshot(loaded);
         } else {
           toast.error("加载配置失败");
         }
@@ -62,19 +98,21 @@ export default function WeatherPanel() {
     };
   }, []);
 
-  async function save() {
+  /** 保存前本地校验：返回文案表示阻止保存（手动保存与「保存全部修改」共用） */
+  function validateWeather(): string | null {
+    if (provider === "amap" && !amapKey.trim()) return "请填写高德 API Key";
+    if (provider === "tencent-key" && !txWeatherKey.trim()) return "请填写腾讯位置服务 Key";
+    if (provider === "tencent" && !weatherCity.trim()) return "请填写城市名称";
+    return null;
+  }
+
+  /** 保存天气配置到统一 /api/profile 端点；返回是否成功（供全局保存判断） */
+  async function save(): Promise<boolean> {
     // 前端校验：高德需 Key，腾讯 Key 版需腾讯位置服务 Key，腾讯免费版需城市
-    if (provider === "amap" && !amapKey.trim()) {
-      toast.error("请填写高德 API Key");
-      return;
-    }
-    if (provider === "tencent-key" && !txWeatherKey.trim()) {
-      toast.error("请填写腾讯位置服务 Key");
-      return;
-    }
-    if (provider === "tencent" && !weatherCity.trim()) {
-      toast.error("请填写城市名称");
-      return;
+    const invalid = validateWeather();
+    if (invalid) {
+      toast.error(invalid);
+      return false;
     }
     // 签名密钥为条件必填（控制台开启数字签名时）：系统无法感知是否开启，
     // 此处做提示性校验，避免"开启签名却漏填密钥导致接口签名失败"的静默故障
@@ -87,7 +125,8 @@ export default function WeatherPanel() {
 
     setSaving(true);
     try {
-      const res = await fetch("/api/weather-setting", {
+      // 【关键修改】统一写入 /api/profile，与 ProfilePanel 走同一数据路径，消除双写不一致风险
+      const res = await fetch("/api/profile", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -101,16 +140,37 @@ export default function WeatherPanel() {
       });
       if (res.ok) {
         toast.success("天气配置已保存");
-      } else {
-        const data = await res.json();
-        toast.error(data.error || "保存失败");
+        // 基线推进到「已落库的内容」，脏标记随之清零
+        baselineRef.current = formSnapshot({
+          provider,
+          amapKey,
+          amapSecretKey,
+          txWeatherKey,
+          txWeatherSk,
+          weatherCity,
+        });
+        setDirty(false);
+        return true;
       }
+      const data = await res.json().catch(() => null);
+      toast.error(data?.error || "保存失败");
+      return false;
     } catch {
       toast.error("网络错误");
+      return false;
     } finally {
       setSaving(false);
     }
   }
+
+  // 注册到「保存全部修改」：此前本面板未注册，用户在天气面板改完再点全局保存会漏存
+  useRegisterSave({
+    id: "weather",
+    label: "天气设置",
+    dirty,
+    save,
+    validate: validateWeather,
+  });
 
   if (loading) {
     return <LoadingPlaceholder />;

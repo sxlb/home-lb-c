@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, lazy, Suspense, memo } from "react";
+import { useEffect, useState, useCallback, useRef, lazy, Suspense, memo } from "react";
 import { useRouter } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import { Button } from "@/components/ui/button";
@@ -31,14 +31,13 @@ import {
   Rocket,
   FolderGit2,
   Sparkles,
-  Newspaper,
 } from "lucide-react";
 
 // 面板组件懒加载：每个面板拆成独立 chunk，进入对应 tab 时才按需加载，
-// 避免后台首屏一次性打包全部 16 个面板及其重依赖（图表/Markdown 编辑器等）。
+// 避免后台首屏一次性打包全部面板及其重依赖（图表 / Markdown 渲染等）。
 // 后台固定 4 列等宽，面板间仅切换不销毁，加载一次后保持挂载，避免重复请求。
 const ProfilePanel = lazy(() => import("@/components/admin/ProfilePanel"));
-const LinksManager = lazy(() => import("@/components/admin/LinksManager"));
+const LinksManager = lazy(() => import("@/components/admin/LinksManagerWithGlobalSave"));
 const AccountPanel = lazy(() => import("@/components/admin/AccountPanel"));
 const OperationLogPanel = lazy(() => import("@/components/admin/OperationLogPanel"));
 const MediaPanel = lazy(() => import("@/components/admin/MediaPanel"));
@@ -52,7 +51,7 @@ const AnnouncementPanel = lazy(() => import("@/components/admin/AnnouncementPane
 const UpdatePanel = lazy(() => import("@/components/admin/UpdatePanel"));
 const ProjectsPanel = lazy(() => import("@/components/admin/ProjectsPanel"));
 const SkillsPanel = lazy(() => import("@/components/admin/SkillsPanel"));
-const ArticlesPanel = lazy(() => import("@/components/admin/ArticlesPanel"));
+
 
 type TabId =
   | "profile"
@@ -69,8 +68,7 @@ type TabId =
   | "media"
   | "update"
   | "projects"
-  | "skills"
-  | "articles";
+  | "skills";
 
 interface TabItem {
   id: TabId;
@@ -95,7 +93,6 @@ const NAV_GROUPS: NavGroup[] = [
       { id: "links", label: "链接管理", icon: Link2, description: "集中管理社交、网站与友情链接" },
       { id: "projects", label: "作品集", icon: FolderGit2, description: "管理展示的作品项目（含封面与置顶）" },
       { id: "skills", label: "技能云", icon: Sparkles, description: "管理技能标签与熟练度" },
-      { id: "articles", label: "随笔/文章", icon: Newspaper, description: "撰写与管理随笔文章（前台 /articles 阅读）" },
     ],
   },
   {
@@ -145,6 +142,7 @@ const NavItem = memo(function NavItem({
   return (
     <button
       onClick={() => onSelect(tab.id)}
+      aria-current={active ? "page" : undefined}
       className={`group relative flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-all duration-200 ease-out ${
         active
           ? "bg-primary/10 text-primary font-semibold"
@@ -229,11 +227,28 @@ export default function AdminPage() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   // 默认账号改密提示（本次会话内可关闭）
   const [hideDefaultWarning, setHideDefaultWarning] = useState(false);
-  // 站点首页地址（用于「打开主页 / 复制主页地址」，来源为站点信息配置，缺省回退到当前源）
-  const [siteUrl, setSiteUrl] = useState("");
-  // 已访问过的面板 tab 集合：首次进入后保持挂载（CSS 隐藏未激活者），
+  // 站点首页地址：通过 State 管理，服务端默认空字符串防 hydration 不匹配；客户端用 window.location.origin 兜底
+  const [homepageUrl, setHomepageUrl] = useState("");
+  // 已访问过的面板 tab 集合
   // 切换回来时保留表单输入/滚动/数据等全部状态，避免重复请求与重渲染
   const [mountedTabs, setMountedTabs] = useState<Set<TabId>>(new Set());
+  // 移动端抽屉：开启时把焦点移入关闭按钮，关闭后归还给菜单按钮（键盘可达性）
+  const navToggleRef = useRef<HTMLButtonElement>(null);
+  const navCloseRef = useRef<HTMLButtonElement>(null);
+
+  // 抽屉键盘支持：Esc 关闭并把焦点还给触发按钮
+  useEffect(() => {
+    if (!mobileNavOpen) return;
+    navCloseRef.current?.focus();
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setMobileNavOpen(false);
+        navToggleRef.current?.focus();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [mobileNavOpen]);
 
   // 切换分类：桌面端直接切换；移动端切换后关闭抽屉
   // 目标 tab 首次被选中即标记为已挂载，此后切换回来不再重载
@@ -245,11 +260,16 @@ export default function AdminPage() {
   }, []);
 
   useEffect(() => {
-    // 复用 profileShared 的 loadProfile：与默认面板共享 inflight 去重，避免重复 GET /api/profile
+    if (typeof window !== "undefined") {
+      setHomepageUrl(window.location.origin);
+    }
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
     loadProfile()
       .then((d) => {
-        if (!cancelled && d?.siteUrl) setSiteUrl(d.siteUrl);
+        if (!cancelled && d?.siteUrl) setHomepageUrl(d.siteUrl);
       })
       .catch(() => {});
     return () => {
@@ -257,10 +277,9 @@ export default function AdminPage() {
     };
   }, []);
 
-  const homepageUrl = siteUrl || (typeof window !== "undefined" ? window.location.origin : "");
   async function copyHomepage() {
     try {
-      await navigator.clipboard.writeText(homepageUrl);
+      await navigator.clipboard.writeText(homepageUrl || window?.location.origin || "");
       toast.success("主页地址已复制");
     } catch {
       toast.error("复制失败，请重试");
@@ -358,8 +377,11 @@ export default function AdminPage() {
         {/* 顶部栏 */}
         <header className="sticky top-0 z-30 flex w-full shrink-0 items-center justify-between border-b bg-background/90 px-3 py-2.5 backdrop-blur-md md:hidden">
           <button
+            ref={navToggleRef}
             onClick={() => setMobileNavOpen(true)}
             aria-label="打开菜单"
+            aria-haspopup="dialog"
+            aria-expanded={mobileNavOpen}
             className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-accent"
           >
             <Menu className="h-5 w-5" />
@@ -379,9 +401,11 @@ export default function AdminPage() {
           </button>
         </header>
 
-        {/* 抽屉遮罩 */}
+        {/* 抽屉遮罩：鼠标点击的便捷关闭入口；键盘关闭走 Esc 或抽屉内的关闭按钮，
+            因此对辅助技术隐藏，避免被读成无意义的可交互元素 */}
         {mobileNavOpen && (
           <div
+            aria-hidden="true"
             className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm transition-opacity duration-200 md:hidden"
             onClick={() => setMobileNavOpen(false)}
           />
@@ -389,6 +413,10 @@ export default function AdminPage() {
 
         {/* 抽屉侧边栏 */}
         <aside
+          role="dialog"
+          aria-modal="true"
+          aria-label="后台导航菜单"
+          inert={!mobileNavOpen}
           className={`fixed inset-y-0 left-0 z-50 w-64 transform shadow-2xl transition-transform duration-300 ease-out md:hidden ${
             mobileNavOpen
               ? "translate-x-0 pointer-events-auto"
@@ -399,7 +427,11 @@ export default function AdminPage() {
             <div className="flex items-center justify-between">
               <BrandHeader username={username} compact />
               <button
-                onClick={() => setMobileNavOpen(false)}
+                ref={navCloseRef}
+                onClick={() => {
+                  setMobileNavOpen(false);
+                  navToggleRef.current?.focus();
+                }}
                 aria-label="关闭菜单"
                 className="mr-3 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-accent"
               >
@@ -583,11 +615,6 @@ export default function AdminPage() {
               {mountedTabs.has("skills") && (
                 <PanelSlot active={activeTab === "skills"}>
                   <SkillsPanel />
-                </PanelSlot>
-              )}
-              {mountedTabs.has("articles") && (
-                <PanelSlot active={activeTab === "articles"}>
-                  <ArticlesPanel />
                 </PanelSlot>
               )}
             </div>

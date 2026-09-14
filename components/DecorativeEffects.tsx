@@ -433,7 +433,7 @@ export function EggPanel({ enabled = true, siteName = "" }: EggPanelProps) {
   const tip = EGG_TIPS[Math.floor(Math.random() * EGG_TIPS.length)];
 
   return (
-    <div className="fixed inset-0 z-[85] flex items-center justify-center p-4" role="dialog" aria-modal="false" aria-label="隐藏彩蛋">
+    <div className="fixed inset-0 z-[85] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="隐藏彩蛋">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={() => setOpen(false)} aria-hidden />
       <div
         className="animate-notice-center relative w-72 overflow-hidden rounded-2xl border border-white/20 bg-gradient-to-br from-[#1b2440]/95 via-[#161d33]/92 to-[#101627]/95 shadow-2xl shadow-black/50 backdrop-blur-xl"

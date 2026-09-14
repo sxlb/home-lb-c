@@ -73,12 +73,20 @@ export async function PUT(request: NextRequest) {
     }
 
     // 执行更新（仅写入实际变更的字段）
-    const updateData: { username?: string; password?: string; mustChangePassword?: boolean } = {};
+    const updateData: {
+      username?: string;
+      password?: string;
+      mustChangePassword?: boolean;
+      // 改密时自增会话版本号：使其它设备上已签发的旧 JWT 立即失效
+      sessionVersion?: { increment: number };
+    } = {};
     if (username && username !== user.username) updateData.username = username;
     if (newPassword) {
       updateData.password = await bcrypt.hash(newPassword, 10);
       // 已修改密码：清除"强制改密"标记，使后台改密提示消失
       updateData.mustChangePassword = false;
+      // 改密后踢出其它设备：旧 token 携带的版本号与库中不一致，随后被判定为已吊销
+      updateData.sessionVersion = { increment: 1 };
     }
 
     if (Object.keys(updateData).length === 0) {

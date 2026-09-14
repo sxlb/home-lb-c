@@ -30,6 +30,7 @@ model Profile {
   songApi              String   @default("")
   songServer           String   @default("netease")
   songId               String   @default("")
+  musicPlayerMode      String   @default("card") // 播放器样式：card(内嵌卡片) | side(右侧浮动面板)
   siteUrl              String   @default("")
   siteIcp              String   @default("")
   siteMps              String   @default("")
@@ -39,7 +40,6 @@ model Profile {
   friendLinksTitle     String   @default("友情链接")
   iconfontUrl          String   @default("") // 阿里云矢量图标库 symbol 模式脚本地址（https://at.alicdn.com/...），供社交/网站链接选择图标
   logoArtFont          Boolean  @default(true)
-  logoFont             String   @default("zcool-kuail")
   customFontEnabled      Boolean  @default(false) // 自定义字体总开关
   customFontFamily       String   @default("") // 自定义字体名（CSS font-family，如 "PingFang SC"）
   customFontScope        String   @default("nickname") // 自定义字体应用范围：nickname / all
@@ -48,8 +48,10 @@ model Profile {
   consoleEgg           Boolean  @default(true)
   showStats            Boolean  @default(true)
   dynamicTitle         Boolean  @default(true)
-  topProgressBar         Boolean  @default(true)
-  useRandomAvatar        Boolean  @default(false)
+  topProgressBar       Boolean  @default(true)
+  seasonalEffectEnabled Boolean  @default(false) // 季节装饰特效开关（萤火虫/雪花/灯笼）
+  useRandomAvatar      Boolean  @default(false)
+  commandPalette       Boolean  @default(true) // 全局命令面板（Ctrl/Cmd+K 呼出）
   welcomeEnabled         Boolean  @default(true)
   welcomeIndex           Int      @default(0)
   welcomeMessages        String   @default("[\"欢迎来到本站～\",\"很高兴遇见你，祝你愉快！\",\"愿时光温柔，伴你左右\",\"相逢即是缘分，欢迎光临\",\"欢迎回来，好久不见\"]")
@@ -81,6 +83,9 @@ model User {
   mustChangePassword Boolean  @default(false) // 是否需强制改密（默认账号首次登录提示改密，改密成功后置 false）
   twoFactorSecret    String   @default("") // TOTP 密钥（base32，开启 2FA 时生成）
   twoFactorEnabled   Boolean  @default(false) // 是否启用两步验证
+  // 会话版本号：改密 / 重置默认时自增，使已签发的旧 JWT 全部失效
+  // （JWT 策略下 token 默认 30 天有效，没有该字段就无法"改密后踢出其它设备"）
+  sessionVersion     Int      @default(0)
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 }
@@ -141,23 +146,6 @@ model Skill {
   sort      Int      @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-}
-
-// 随笔/文章（前台 /articles 列表 + /articles/[slug] 阅读页，后台可管理）
-model Article {
-  id          Int      @id @default(autoincrement())
-  title       String
-  slug        String   @unique // URL 友好标识（前台路由用）
-  content     String   @default("") // Markdown 正文
-  excerpt     String   @default("") // 摘要（空则自动截取正文）
-  cover       String   @default("") // 封面图（媒体库相对路径或 http 外链）
-  tags        String   @default("") // 逗号分隔标签
-  published   Boolean  @default(false) // 是否公开发布
-  pinned      Boolean  @default(false) // 是否置顶
-  viewCount   Int      @default(0) // 阅读量
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  publishedAt DateTime @default(now()) // 发布时间（用于排序与社交卡片）
 }
 
 model OperationLog {

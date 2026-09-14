@@ -6,8 +6,8 @@ import { ChevronDown } from "lucide-react";
 import { selectClass } from "./profileShared";
 import { cn } from "@/lib/utils";
 
-/** 主流邮箱后缀（按国内使用频率排序） */
-export const EMAIL_DOMAINS = [
+/** 主流邮箱后缀（按国内使用频率排序，仅本组件内部使用） */
+const EMAIL_DOMAINS = [
   "qq.com",
   "163.com",
   "126.com",

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 const EVENT_ATTR_RE = /^on/i;
 const UNSAFE_URL_RE = /^\s*(javascript|vbscript|data):/i;
@@ -45,6 +45,11 @@ export default function ScriptInjector({
   /** 延迟到浏览器空闲时段注入的代码片段（如统计脚本） */
   deferScripts?: string[];
 }) {
+  // 持久化已注入的 deferred 节点：当 deferScripts 从非空变为空时，
+  // 需要清除此前已追加到 DOM 中的 deferred 节点
+  const deferredRef = useRef<Element[]>([]);
+  const nodesRef = useRef<Element[]>([]);
+
   useEffect(() => {
     const nodes: Element[] = [];
     const deferred: Element[] = [];
@@ -57,6 +62,7 @@ export default function ScriptInjector({
     for (const node of nodes) {
       document.head.appendChild(node);
     }
+    nodesRef.current = nodes;
 
     // 延迟注入：统计代码等非关键资源（requestIdleCallback，回退 2s 定时器）
     if (deferScripts.length > 0) {
@@ -78,6 +84,8 @@ export default function ScriptInjector({
         cancel = () => window.clearTimeout(id);
       }
 
+      deferredRef.current = deferred;
+
       return () => {
         cancelled = true;
         cancel();
@@ -87,8 +95,16 @@ export default function ScriptInjector({
       };
     }
 
+    // deferScripts 为空：清理上一次 render 中已注入的 deferred 节点（从非空→空的变化）
+    const prevDeferred = deferredRef.current;
+    deferredRef.current = [];
+
     return () => {
       for (const node of nodes) {
+        node.parentNode?.removeChild(node);
+      }
+      // 清理上一次的 deferred 节点（在 effect teardown 时执行，确保变更生效）
+      for (const node of prevDeferred) {
         node.parentNode?.removeChild(node);
       }
     };

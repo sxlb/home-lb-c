@@ -11,7 +11,7 @@ import { useCallback, useRef } from "react";
  *   2. 吞输入：本地状态被服务端结果覆盖，刚敲的内容当场消失。
  *
  * 用法：改动数据时调用 markEdited()（与 setDirty(true) 成对出现），保存前记录
- * revisionRef.current，保存成功后用 isStale(savedRevision) 判断：
+ * currentRevision()，保存成功后用 isStale(savedRevision) 判断：
  *   - false（期间没有新改动）：本次提交覆盖了全部改动 → 可清脏标记、可用服务端结果同步本地；
  *   - true（期间又有新改动）：保留脏标记与本地输入，提示用户再保存一次。
  */
@@ -29,5 +29,5 @@ export function useEditRevision() {
   /** 供全局保存注册中心读取当前修订号 */
   const currentRevision = useCallback(() => revisionRef.current, []);
 
-  return { revisionRef, markEdited, isStale, currentRevision };
+  return { markEdited, isStale, currentRevision };
 }

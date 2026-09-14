@@ -1,6 +1,10 @@
 import { NextResponse, NextRequest } from "next/server";
+import path from "node:path";
+import { promises as fs } from "node:fs";
 import { prisma } from "@/lib/db";
-import { requireSession, error, internalError, getClientIp, writeOperationLog } from "@/lib/server";
+import { requireSession, error, internalError, getClientIp, writeOperationLog, parseJsonBody } from "@/lib/server";
+import { recordFailedAttempt, getLoginRateLimitKey } from "@/lib/auth";
+import { getUploadsDir } from "@/lib/uploads";
 import bcrypt from "bcryptjs";
 
 export const dynamic = "force-dynamic";
@@ -30,7 +34,6 @@ const MODEL_MAP: Array<{ dbTable: string; modelKey: string }> = [
   { dbTable: "SiteLinkClick", modelKey: "siteLinkClick" },
   { dbTable: "OperationLog", modelKey: "operationLog" },
   { dbTable: "UpdateRecord", modelKey: "updateRecord" },
-  { dbTable: "Article", modelKey: "article" },
   { dbTable: "SiteAnnouncement", modelKey: "siteAnnouncement" },
   { dbTable: "ImageAsset", modelKey: "imageAsset" },
   { dbTable: "Project", modelKey: "project" },
@@ -41,31 +44,47 @@ const MODEL_MAP: Array<{ dbTable: string; modelKey: string }> = [
   { dbTable: "VisitStat", modelKey: "visitStat" },
 ];
 
-type ResetStats = { cleared: Record<string, number>; seedsCreated: Record<string, number> };
+type ResetStats = {
+  cleared: Record<string, number>;
+  seedsCreated: Record<string, number>;
+  /** 已删除的孤儿上传文件数（仅统计成功删除的） */
+  removedFiles: number;
+};
 
-/** 通过事务内 prisma 实例清空某表并返回被删数量 */
-async function clearModel(
-  txClient: Record<string, unknown>,
-  modelKey: string,
-  countFn?: () => Promise<number>
-): Promise<number> {
-  const m = txClient[modelKey];
-  if (!m) return 0;
+/**
+ * 清空 uploads 目录中的全部上传文件。
+ *
+ * 重置会清空 ImageAsset 表，若不同步删除物理文件，这些图片将永远无法从界面触及，
+ * 成为只占磁盘的孤儿文件。仅处理 uploads 目录（壁纸缓存位于 wallpapers，不受影响），
+ * 且失败不影响主流程（返回成功删除的数量）。
+ */
+async function purgeUploadedFiles(): Promise<number> {
+  const dir = getUploadsDir();
+  let removed = 0;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const typedM = m as any;
-    if (countFn) {
-      const c = await countFn();
-      await typedM.deleteMany?.();
-      return typeof c === "number" ? c : Number(c);
+    const entries = await fs.readdir(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isFile()) continue;
+      try {
+        await fs.unlink(path.join(dir, entry.name));
+        removed += 1;
+      } catch {
+        /* 单个文件删除失败（占用/权限）不影响其余文件 */
+      }
     }
-    await typedM.deleteMany?.();
-    return 1;
   } catch {
-    return 0;
+    /* 目录不存在视为无需清理 */
   }
+  return removed;
 }
 
+/**
+ * 恢复默认状态：清空全部业务数据并重建种子默认值。危险操作，需三重确认：
+ * 1) 已登录会话；2) 请求体 confirm=true；3) **校验当前登录密码**。
+ *
+ * 第 3 点是必需的：本操作会把管理员密码重置为默认弱口令 123456，
+ * 若仅凭会话即可执行，攻击者一旦窃取会话就能把账号降级到已知口令完成持久化。
+ */
 export async function POST(request: NextRequest) {
   try {
     const session = await requireSession();
@@ -73,17 +92,36 @@ export async function POST(request: NextRequest) {
       return error("未授权", 401);
     }
 
-    // 解析 confirmReset 参数
-    const searchParams = new URL(request.url).searchParams;
-    const qParam = searchParams.get("confirm");
-    const confirm = qParam === "true";
-
-    if (!confirm) {
-      return error("请传递 confirm=true 确认重置操作（危险！）");
+    const body = await parseJsonBody<{ confirm?: boolean; password?: string }>(request);
+    if (body === null) {
+      return error("请求体格式错误，需为合法 JSON");
+    }
+    if (body.confirm !== true) {
+      return error("请确认后执行重置操作（危险！）");
     }
 
-    const username = session.user?.name || "unknown";
-    const stats: ResetStats = { cleared: {}, seedsCreated: {} };
+    const password = typeof body.password === "string" ? body.password : "";
+    if (!password) {
+      return error("请输入当前登录密码以确认身份");
+    }
+
+    // 二次验证当前密码（与「账号与安全」改密同级强度）
+    const username = session.user?.name;
+    const currentUser = username
+      ? await prisma.user.findUnique({ where: { username } })
+      : null;
+    if (!currentUser) {
+      return error("用户不存在", 404);
+    }
+    const passwordOk = await bcrypt.compare(password, currentUser.password);
+    if (!passwordOk) {
+      // 计入登录限流：防止用重置接口暴力猜解当前密码
+      recordFailedAttempt(getLoginRateLimitKey(request.headers));
+      return error("当前密码不正确", 403);
+    }
+
+    const operator = username || "unknown";
+    const stats: ResetStats = { cleared: {}, seedsCreated: {}, removedFiles: 0 };
 
     // 使用事务确保原子性：要么全部成功，要么全部回滚
     await prisma.$transaction(async (tx) => {
@@ -111,11 +149,13 @@ export async function POST(request: NextRequest) {
 
       // 手动处理 Profile（count+delete 而非 deleteMany）
       try {
-        const profile = txMap.profile as { findFirst?(): Promise<null | { id: number }>; delete?(params: { where: { id: number } }): Promise<void> };
-        const existingProfile = await profile?.findFirst?.({ orderBy: { id: "asc" } });
+        const profile = txMap.profile as Record<string, unknown>;
+        const findFirstFn = typeof profile?.findFirst === "function" ? profile.findFirst.bind(profile) : undefined;
+        const existingProfile = await findFirstFn?.({ orderBy: { id: "asc" } }) as { id: number } | null;
         if (existingProfile) {
           (stats.cleared as Record<string, number>)["Profile"] = 1;
-          await profile!.delete!({ where: { id: existingProfile.id } });
+          const deleteFn = typeof profile?.delete === "function" ? (profile.delete as (params: { where: { id: number } }) => Promise<void>).bind(profile) : undefined;
+          await deleteFn?.({ where: { id: existingProfile.id } });
         } else {
           (stats.cleared as Record<string, number>)["Profile"] = 0;
         }
@@ -143,23 +183,31 @@ export async function POST(request: NextRequest) {
       stats.seedsCreated["SiteLink"] = DEFAULT_SITE_LINKS.length;
 
       // ===== 第三阶段：用户账号处理 =====
-      const adminUser = await (txMap.user as { findUnique?(where: { username: string }): Promise<null | { id: number }> })?.findUnique?.({ where: { username: "admin" } }) as { id: number } | null;
+      const user = txMap.user as Record<string, unknown>;
+      const findUniqueFn = typeof user?.findUnique === "function" ? (user.findUnique as (where: { username: string }) => Promise<{ id: number } | null>).bind(user) : undefined;
+      const adminUser = await findUniqueFn?.({ username: "admin" });
       if (adminUser) {
         const hashed = await bcrypt.hash("123456", 10);
-        await (txMap.user as { update?(params: { where: { id: number }; data: Record<string, unknown> }): Promise<unknown> }).update!({
+        const updateFn = typeof user?.update === "function" ? (user.update as (params: { where: { id: number }; data: Record<string, unknown> }) => Promise<void>).bind(user) : undefined;
+        // sessionVersion 自增：让重置前签发的全部 JWT 立即失效，
+        // 避免攻击者持有的旧会话在密码被降级后仍可继续使用
+        await updateFn?.({
           where: { id: adminUser.id },
-          data: { password: hashed, mustChangePassword: true },
+          data: { password: hashed, mustChangePassword: true, sessionVersion: { increment: 1 } },
         });
         stats.seedsCreated["User"] = 1;
       }
     });
 
-    // 记录操作日志
+    // 事务成功后清理孤儿上传文件（失败不影响主流程，仅不计数）
+    stats.removedFiles = await purgeUploadedFiles();
+
+    // 记录操作日志（失败不影响主操作）
     await writeOperationLog({
       module: "system",
       action: "reset_defaults",
-      username,
-      summary: "已重置全部业务数据为默认状态",
+      username: operator,
+      summary: `已重置全部业务数据为默认状态（含清理 ${stats.removedFiles} 个上传文件）`,
       detail: JSON.stringify(stats),
       ip: getClientIp(request),
     });
@@ -169,7 +217,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       ok: true,
-      message: `恢复默认成功：清空 ${totalCleared} 条记录，重建 ${totalSeeded} 条默认数据`,
+      message:
+        `恢复默认成功：清空 ${totalCleared} 条记录，重建 ${totalSeeded} 条默认数据` +
+        (stats.removedFiles > 0 ? `，清理 ${stats.removedFiles} 个上传文件` : ""),
       stats,
     });
   } catch (e) {

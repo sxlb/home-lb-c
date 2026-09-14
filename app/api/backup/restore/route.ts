@@ -35,12 +35,17 @@ export async function POST(request: NextRequest) {
     }
 
     // 记录操作日志（失败不影响主操作）
+    const c = result.count;
     const username = session.user?.name || "unknown";
     await writeOperationLog({
       module: "backup",
       action: "restore",
       username,
-      summary: `恢复备份：配置 ${result.count.profile ? "创建" : "更新"}，社交 ${result.count.socialLinks} 条、网站 ${result.count.siteLinks} 条、友情 ${result.count.friendLinks} 条`,
+      summary:
+        `恢复备份：配置 ${c.profile ? "创建" : "更新"}，` +
+        `社交 ${c.socialLinks} 条、网站 ${c.siteLinks} 条、友情 ${c.friendLinks} 条、` +
+        `作品 ${c.projects} 条、技能 ${c.skills} 条、公告 ${c.announcements} 条、` +
+        `媒体记录 ${c.media} 条、链接点击 ${c.linkClicks} 条`,
       ip: getClientIp(request),
     });
 

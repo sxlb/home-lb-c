@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -54,6 +54,10 @@ interface LinksPanelProps {
   urlPlaceholder?: string;
   /** Tab 名称（用于保存按钮 aria-label，便于区分社交/网站链接） */
   tabLabel?: string;
+  /** dirty 状态变更通知 */
+  dirtyChange?: (dirty: boolean) => void;
+  /** 向父组件注册本面板的 save 方法引用（用于全局保存） */
+  registerSaveRef?: (saveFn: (() => Promise<boolean>) | undefined) => void;
 }
 
 /** LinkRow 组件 props */
@@ -87,6 +91,8 @@ export default function LinksPanel({
   iconPlaceholder = "如 github, globe, link",
   urlPlaceholder = "https://example.com",
   tabLabel,
+  dirtyChange,
+  registerSaveRef,
 }: LinksPanelProps) {
   const emptyItem: LinkItem = {
     name: "",
@@ -103,9 +109,17 @@ export default function LinksPanel({
     { requireIcon: true, label: tabLabel }
   );
 
+  // 通知父组件 dirty 状态变化（用于 GlobalSave）
+  const lastDirtyRef = useRef<boolean | null>(null);
+  useEffect(() => {
+    if (dirtyChange && dirty !== lastDirtyRef.current) {
+      dirtyChange(dirty);
+      lastDirtyRef.current = dirty;
+    }
+  }, [dirty, dirtyChange]);
+
   // 同一时间只展开一行（-1 表示全部收起）
   const [expandedIndex, setExpandedIndex] = useState(-1);
-  // 脏状态由 useLinkList 统一维护（增删改内部即置脏），此处不再重复维护
 
   const handleAdd = () => {
     addItem();
@@ -144,6 +158,14 @@ export default function LinksPanel({
     await save();
     setExpandedIndex(-1);
   };
+
+  // 向父组件注册本面板的 save 方法（用于全局保存汇总）
+  useEffect(() => {
+    registerSaveRef?.(save);
+    return () => {
+      registerSaveRef?.(undefined);
+    };
+  }, [registerSaveRef, save]);
 
   if (loading) {
     return <LoadingPlaceholder />;

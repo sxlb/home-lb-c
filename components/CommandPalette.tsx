@@ -66,7 +66,10 @@ export default function CommandPalette({ siteLinks = [], friendLinks = [], siteT
       }
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    // 清理函数确保在组件 unmount 或依赖变化时移除旧监听器
+    return () => {
+      window.removeEventListener("keydown", onKey);
+    };
   }, [open]);
 
   // 打开时聚焦输入框并重置查询

@@ -1,7 +1,7 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { internalError, isRateLimited, getClientIp } from "@/lib/server";
-import { parseUserAgent, extractReferrerDomain, nowHour } from "@/lib/ua";
+import { parseUserAgent, extractReferrerDomain, nowHour, isBotUserAgent } from "@/lib/ua";
 import { serialized } from "@/lib/serialize";
 
 export const dynamic = "force-dynamic";
@@ -56,37 +56,44 @@ export async function POST(request: NextRequest) {
     }
 
     const today = todayStr();
-    // 首次访问（无 Cookie）计为新访客，同时签发 UV Cookie
-    const isNew = !request.cookies.get(UV_COOKIE);
 
-    // 汇总计数 + 明细写入均放入串行队列：SQLite 单写者限制下，
-    // 同一进程并发写会触发 SQLITE_BUSY，串行后从根源消除写竞争
-    await serialized(async () => {
-      // 汇总计数（PV + 新访客则 UV+1）
-      await prisma.visitStat.upsert({
-        where: { date: today },
-        update: { pv: { increment: 1 }, ...(isNew ? { uv: { increment: 1 } } : {}) },
-        create: { date: today, pv: 1, uv: isNew ? 1 : 0 },
-      });
+    // 爬虫 / 机器人 / 探针不计入统计：它们会污染 PV、UV、设备分布与地域分布，
+    // 使后台数字与实际访客量系统性偏高。此处仍返回现有统计供前端正常展示。
+    const ua = request.headers.get("user-agent") || "";
+    const isBot = isBotUserAgent(ua);
+    // 首次访问（无 Cookie）计为新访客，同时签发 UV Cookie；机器人不签发
+    const isNew = !isBot && !request.cookies.get(UV_COOKIE);
 
-      // 明细记录：来源域名 + 设备/系统/浏览器 + 时段，供统计增强看板聚合（失败不影响主统计）
-      try {
-        const { device, os, browser } = parseUserAgent(request.headers.get("user-agent") || "");
-        await prisma.visitRecord.create({
-          data: {
-            date: today,
-            hour: nowHour(),
-            ip,
-            referrerDomain: extractReferrerDomain(request.headers.get("referer") || ""),
-            device,
-            os,
-            browser,
-          },
+    if (!isBot) {
+      // 汇总计数 + 明细写入均放入串行队列：SQLite 单写者限制下，
+      // 同一进程并发写会触发 SQLITE_BUSY，串行后从根源消除写竞争
+      await serialized(async () => {
+        // 汇总计数（PV + 新访客则 UV+1）
+        await prisma.visitStat.upsert({
+          where: { date: today },
+          update: { pv: { increment: 1 }, ...(isNew ? { uv: { increment: 1 } } : {}) },
+          create: { date: today, pv: 1, uv: isNew ? 1 : 0 },
         });
-      } catch (e) {
-        console.error("[POST /api/stats] 记录访问明细失败:", e);
-      }
-    });
+
+        // 明细记录：来源域名 + 设备/系统/浏览器 + 时段，供统计增强看板聚合（失败不影响主统计）
+        try {
+          const { device, os, browser } = parseUserAgent(ua);
+          await prisma.visitRecord.create({
+            data: {
+              date: today,
+              hour: nowHour(),
+              ip,
+              referrerDomain: extractReferrerDomain(request.headers.get("referer") || ""),
+              device,
+              os,
+              browser,
+            },
+          });
+        } catch (e) {
+          console.error("[POST /api/stats] 记录访问明细失败:", e);
+        }
+      });
+    }
 
     // 上报成功后即返回统计结果，前端一次请求完成「记录 + 展示」，减少一次往返
     const todayRow = await prisma.visitStat.findUnique({ where: { date: today } });

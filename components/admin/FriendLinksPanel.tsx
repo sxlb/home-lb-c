@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -29,7 +29,14 @@ interface FriendLinkItem {
  * - 增/删/改单行 + 批量保存（useLinkList 统一状态管理）
  * - 字段：网站名称、网站地址、Logo URL、描述、排序
  */
-export default function FriendLinksPanel() {
+interface FriendLinkPanelProps {
+  /** dirty 状态变更通知 */
+  dirtyChange?: (dirty: boolean) => void;
+  /** 向父组件注册本面板的 save 方法引用（用于全局保存） */
+  registerSaveRef?: (saveFn: (() => Promise<boolean>) | undefined) => void;
+}
+
+export default function FriendLinksPanel({ dirtyChange, registerSaveRef }: FriendLinkPanelProps = {}) {
   const emptyItem: FriendLinkItem = {
     name: "",
     url: "",
@@ -44,6 +51,24 @@ export default function FriendLinksPanel() {
     // 友情链接仅允许 http(s)（后端 friendLinkSchema），icon 可空
     { urlPattern: /^https?:\/\//, label: "友情链接" }
   );
+
+  // 通知父组件 dirty 状态变化（用于 GlobalSave）
+  const lastDirtyRef = useRef<boolean | null>(null);
+  useEffect(() => {
+    if (dirtyChange && dirty !== lastDirtyRef.current) {
+      dirtyChange(dirty);
+      lastDirtyRef.current = dirty;
+    }
+  }, [dirty, dirtyChange]);
+
+  // 向父组件注册本面板的 save 方法（用于全局保存汇总）
+  useEffect(() => {
+    registerSaveRef?.(save);
+    return () => {
+      registerSaveRef?.(undefined);
+    };
+  }, [registerSaveRef, save]);
+
   // 「从网站获取」探测中的行号（-1 表示无）
   const [fetchingIconIndex, setFetchingIconIndex] = useState(-1);
 

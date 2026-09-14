@@ -22,7 +22,7 @@ import { loadProfile, setCachedProfile, type ProfileShape } from "./profileShare
  * 因此这里统一注册各面板的保存能力：
  * - profile 类面板（站点信息/主题/音乐）提供 profilePatch()，全局保存时**合并成一次 PUT**，
  *   彻底避免互相覆盖；patch 只包含该面板真正改动过的字段。
- * - 自带 API 的面板（链接/技能/作品/随笔/公告）提供 save()，全局保存时串行执行。
+ * - 自带 API 的面板（链接/技能/作品/公告）提供 save()，全局保存时串行执行。
  */
 export interface SaveEntry {
   /** 面板唯一标识 */

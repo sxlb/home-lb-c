@@ -83,3 +83,23 @@ export function nowHour(): number {
   const now = new Date(Date.now() + 8 * 60 * 60 * 1000);
   return now.getUTCHours();
 }
+
+/**
+ * 常见爬虫 / 机器人 / 探针的 UA 特征。
+ * 覆盖：搜索引擎蜘蛛、社交平台抓取、SEO 工具、监控探活、脚本客户端与无头浏览器。
+ */
+const BOT_UA_RE =
+  /(bot\b|bots\b|crawler|spider|crawling|slurp|facebookexternalhit|embedly|quora link preview|pinterest|bitlybot|vkshare|whatsapp|telegrambot|discordbot|googlebot|bingbot|baiduspider|yandexbot|sogou|360spider|bytespider|petalbot|applebot|semrush|ahrefs|mj12bot|dotbot|uptimerobot|pingdom|statuscake|headlesschrome|lighthouse|pagespeed|python-requests|python-urllib|aiohttp|httpx|curl\/|wget\/|go-http-client|java\/|okhttp|axios\/|node-fetch|undici|libwww-perl|monitor|probe|scanner)/i;
+
+/**
+ * 判断 UA 是否属于爬虫 / 机器人 / 探针。
+ *
+ * 用于统计采集侧过滤：若不区分，搜索引擎蜘蛛、监控探活与各类扫描器都会被计入
+ * PV / UV，并被归类进「设备分布」「地域分布」，使后台数字与实际访客量系统性偏离。
+ * 空 UA 同样视为非人类流量（正常浏览器必带 UA）。
+ */
+export function isBotUserAgent(ua: string): boolean {
+  const value = (ua || "").trim();
+  if (!value) return true;
+  return BOT_UA_RE.test(value);
+}
