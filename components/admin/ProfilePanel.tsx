@@ -13,8 +13,6 @@ import { LoadingPlaceholder } from "./LinksPanel";
 import { loadProfile, setCachedProfile, hasCachedProfile, profileFieldPatch, selectClass } from "./profileShared";
 import { useGlobalSaveState, useRegisterSave, type SaveOutcome } from "./GlobalSave";
 import { useEditRevision } from "./useEditRevision";
-import GithubUserField from "./GithubUserField";
-import EmailField from "./EmailField";
 import UploadButton from "./UploadButton";
 
 interface Profile {
@@ -32,7 +30,6 @@ interface Profile {
   songApi: string;
   songServer: string;
   songId: string;
-  musicPlayerMode: string;
   siteUrl: string;
   siteIcp: string;
   siteMps: string;
@@ -97,7 +94,6 @@ const INITIAL: Profile = {
   songApi: "https://api.injahow.cn/meting",
   songServer: "netease",
   songId: "3778678",
-  musicPlayerMode: "card",
   siteUrl: "",
   siteIcp: "",
   siteMps: "",
@@ -185,8 +181,6 @@ export default function ProfilePanel() {
   const [saving, setSaving] = useState(false);
   // 是否存在未保存的修改：控制右下角悬浮保存按钮的显隐
   const [dirty, setDirty] = useState(false);
-  // GitHub 用户名校验错误：非空时阻止保存，避免把不存在的账号写进配置
-  const [githubError, setGithubError] = useState<string | null>(null);
   // 载入时的基线快照：用于向全局保存上报「本面板改动了哪些字段」
   const baselineRef = useRef<Profile | null>(null);
   const { markEdited, isStale, currentRevision } = useEditRevision();
@@ -228,10 +222,6 @@ export default function ProfilePanel() {
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (githubError) {
-      toast.error(`GitHub 账号：${githubError}`);
-      return;
-    }
     setSaving(true);
     try {
       // 以服务端最新配置为基线，只提交本面板改动过的字段：
@@ -287,7 +277,7 @@ export default function ProfilePanel() {
     profilePatch: () => profileFieldPatch(profile, baselineRef.current),
     revision: currentRevision,
     markClean: applySaveOutcome,
-    validate: () => githubError,
+    validate: undefined,
   });
 
   if (loading) {
@@ -553,23 +543,6 @@ export default function ProfilePanel() {
                   ))}
                 </div>
 
-                {/* 播放器显示模式（快捷切换，也可在「音乐设置」面板完整配置） */}
-                <div className="space-y-2">
-                  <Label htmlFor="musicPlayerMode">音乐播放器样式</Label>
-                  <select
-                    id="musicPlayerMode"
-                    className={selectClass}
-                    value={profile.musicPlayerMode}
-                    onChange={(e) => set("musicPlayerMode", e.target.value)}
-                  >
-                    <option value="card">内嵌卡片面板（默认）</option>
-                    <option value="side">侧边栏浮窗</option>
-                  </select>
-                  <p className="text-xs text-muted-foreground">
-                    切换后全局生效，刷新页面可见效果。完整歌单/API 源配置请在「音乐设置」面板操作。
-                  </p>
-                </div>
-
                 <div className="space-y-2">
                   <Label htmlFor="bio">个性签名</Label>
                   <Textarea
@@ -581,31 +554,9 @@ export default function ProfilePanel() {
                   />
                 </div>
 
-                <div className="grid gap-3 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="github">GitHub 账号</Label>
-                    <GithubUserField
-                      id="github"
-                      value={profile.github}
-                      onChange={(v) => set("github", v)}
-                      onValidityChange={setGithubError}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      只填用户名即可，链接自动补全为 https://github.com/用户名；失焦后自动校验是否存在
-                    </p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="email">邮箱</Label>
-                    <EmailField
-                      id="email"
-                      value={profile.email}
-                      onChange={(v) => set("email", v)}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      只填账号部分，后缀从下拉选择；非常规邮箱可切换「自定义」手填完整地址
-                    </p>
-                  </div>
-                </div>
+                <p className="text-xs text-muted-foreground">
+                  GitHub、邮箱等主页入口请在「链接管理 → 社交链接」中添加，避免与站点信息重复配置。
+                </p>
               </div>
 
               {/* ---- 欢迎通知 ---- */}
