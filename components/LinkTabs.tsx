@@ -202,7 +202,7 @@ export default function LinkTabs({
         tabIndex={0}
         className="select-none outline-none focus-visible:ring-2 focus-visible:ring-white/30"
       >
-        <div key={currentPage} className={`animate-fade-in grid gap-4 ${isProject || isFriend ? "grid-cols-1" : "grid-cols-3"}`}>
+        <div key={currentPage} className={`animate-fade grid gap-4 ${isProject || isFriend ? "grid-cols-1" : "grid-cols-3"}`}>
           {Array.from({ length: isProject || isFriend ? PROJECT_PAGE_SIZE : PAGE_SIZE }, (_, i) => {
             const item = pages[currentPage][i];
             if (!item) {
