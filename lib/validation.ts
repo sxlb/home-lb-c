@@ -180,13 +180,6 @@ export const profileSchema = z.object({
     .max(64, "歌单 ID 过长")
     .optional()
     .default(""),
-  // 播放器显示模式：card(内嵌卡片) | side(侧边栏浮窗)
-  musicPlayerMode: z
-    .enum(["card", "side"], {
-      errorMap: () => ({ message: "播放器样式必须是 card / side" }),
-    })
-    .optional()
-    .default("card"),
   // 页脚配置
   siteUrl: z
     .string()

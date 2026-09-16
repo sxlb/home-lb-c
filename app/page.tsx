@@ -111,7 +111,6 @@ export default async function Home() {
         songApi={d.songApi}
         songServer={d.songServer}
         songId={d.songId}
-        profile={profile ?? undefined}
       >
         {/* 桌面端 main 最小一屏高（md:min-h-dvh）：内容不足一屏时仍整体垂直居中，页脚贴底；
             内容超高（如并入技能云后）自然增长而非裁切，仅超高部分滚动。

@@ -7,8 +7,6 @@ import {
   Pause,
   SkipBack,
   SkipForward,
-  Volume2,
-  VolumeX,
   Music2,
   X,
   Repeat,
@@ -19,13 +17,13 @@ import {
 } from "lucide-react";
 import {
   useAudioPlayer,
-  formatTime,
   type Track,
   type UseAudioPlayerProps,
   type PlayMode,
 } from "@/components/useAudioPlayer";
 import Hitokoto from "@/components/Hitokoto";
-import SidebarMusicPlayer from "@/components/SidebarMusicPlayer";
+import { ProgressBar } from "@/components/music/ProgressBar";
+import { VolumeSlider } from "@/components/music/VolumeSlider";
 
 // 播放模式元信息（图标 + 提示文案）
 const PLAY_MODE_META: Record<PlayMode, { label: string; Icon: LucideIcon }> = {
@@ -50,6 +48,7 @@ interface MusicContextValue {
   muted: boolean;
   toggleMuted: () => void;
   duration: number;
+  currentTime: number;
   loading: boolean;
   error: string;
   playNext: () => void;
@@ -69,121 +68,6 @@ export function useMusic(): MusicContextValue {
   const ctx = useContext(MusicContext);
   if (!ctx) throw new Error("useMusic 必须在 MusicProvider 内使用");
   return ctx;
-}
-
-/* ===== 播放进度条（独立监听 audio，不随父组件高频重渲染） ===== */
-function ProgressBar({
-  audioEl,
-  duration,
-  loading,
-}: {
-  audioEl: HTMLAudioElement | null;
-  duration: number;
-  loading: boolean;
-}) {
-  const [progress, setProgress] = useState(0);
-  const draggingRef = useRef(false);
-
-  useEffect(() => {
-    const audio = audioEl;
-    if (!audio) return;
-    const update = () => {
-      if (!draggingRef.current) setProgress(audio.currentTime);
-    };
-    const reset = () => setProgress(0);
-    audio.addEventListener("timeupdate", update);
-    audio.addEventListener("loadedmetadata", reset);
-    return () => {
-      audio.removeEventListener("timeupdate", update);
-      audio.removeEventListener("loadedmetadata", reset);
-    };
-  }, [audioEl]);
-
-  const pct = duration > 0 ? Math.min(100, Math.max(0, (progress / duration) * 100)) : 0;
-  const fill = `linear-gradient(to right, #a855f7 0%, #ec4899 ${pct}%, rgba(255,255,255,0.15) ${pct}%, rgba(255,255,255,0.15) 100%)`;
-
-  return (
-    <div className="flex flex-1 items-center gap-2">
-      <span className="min-w-[36px] text-sm text-white/80 md:min-w-[40px] md:text-base">
-        {formatTime(progress)}
-      </span>
-      <input
-        type="range"
-        id="music-progress"
-        min={0}
-        max={duration || 0}
-        step={0.1}
-        value={progress}
-        disabled={!duration}
-        onPointerDown={() => {
-          draggingRef.current = true;
-        }}
-        onPointerUp={() => {
-          draggingRef.current = false;
-        }}
-        onPointerCancel={() => {
-          draggingRef.current = false;
-        }}
-        onInput={(e) => {
-          const v = Number(e.currentTarget.value);
-          setProgress(v);
-          if (audioEl) audioEl.currentTime = v;
-        }}
-        style={{ background: fill }}
-        className="music-range h-1 flex-1 cursor-pointer rounded-full"
-        aria-label="播放进度"
-      />
-      <span className="min-w-[36px] text-sm text-white/80 md:min-w-[40px] md:text-base">
-        {formatTime(duration)}
-      </span>
-      {loading && <span className="text-sm text-white/70 md:text-base">加载中...</span>}
-    </div>
-  );
-}
-
-/* ===== 音量控制（桌面显示滑条） ===== */
-function VolumeControl({
-  volume,
-  muted,
-  onChange,
-  onToggleMuted,
-}: {
-  volume: number;
-  muted: boolean;
-  onChange: (v: number) => void;
-  onToggleMuted: () => void;
-}) {
-  const pct = muted ? 0 : volume * 100;
-  const fill = `linear-gradient(to right, #a855f7 0%, #ec4899 ${pct}%, rgba(255,255,255,0.15) ${pct}%, rgba(255,255,255,0.15) 100%)`;
-
-  return (
-    <div className="flex items-center gap-2">
-      <button
-        onClick={onToggleMuted}
-        className="p-1.5 text-white/70 hover:text-white md:p-2"
-        title={muted ? "取消静音" : "静音"}
-        aria-label={muted ? "取消静音" : "静音"}
-      >
-        {muted || volume === 0 ? (
-          <VolumeX className="h-4 w-4 md:h-5 md:w-5" />
-        ) : (
-          <Volume2 className="h-4 w-4 md:h-5 md:w-5" />
-        )}
-      </button>
-      <input
-        type="range"
-        id="music-volume"
-        min={0}
-        max={1}
-        step={0.01}
-        value={muted ? 0 : volume}
-        onChange={(e) => onChange(Number(e.target.value))}
-        style={{ background: fill }}
-        className="music-range hidden h-1 w-20 cursor-pointer rounded-full md:block"
-        aria-label="音量"
-      />
-    </div>
-  );
 }
 
 /* ===== 播放列表（memo：仅当歌单或当前曲目变化时重渲染） ===== */
@@ -297,10 +181,15 @@ function Lyrics({ audioEl, lrc }: { audioEl: HTMLAudioElement | null; lrc?: stri
     if (!audio || lines.length === 0) return;
     const update = () => {
       const t = audio.currentTime;
+      let low = 0;
+      let high = lines.length - 1;
       let idx = -1;
-      for (let i = 0; i < lines.length; i++) {
-        if (t >= lines[i].time) idx = i;
-        else break;
+      while (low <= high) {
+        const mid = Math.floor((low + high) / 2);
+        if (lines[mid].time <= t) {
+          idx = mid;
+          low = mid + 1;
+        } else high = mid - 1;
       }
       setCurrent(idx);
     };
@@ -351,14 +240,28 @@ function Lyrics({ audioEl, lrc }: { audioEl: HTMLAudioElement | null; lrc?: stri
  */
 function MusicPanel() {
   const m = useMusic();
-  const [volumeShow, setVolumeShow] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
 
   return (
     <div
-      className="card-glass card-func flex h-full w-full flex-col justify-between p-4"
-      onMouseEnter={() => setVolumeShow(true)}
-      onMouseLeave={() => setVolumeShow(false)}
+      className={`card-glass card-func music-dark-scope flex h-full flex-col justify-between overflow-hidden p-3 transition-[width] duration-300 ${
+        collapsed ? "w-16" : "w-full"
+      }`}
     >
+      {collapsed ? (
+        <div className="flex h-full flex-col items-center justify-between gap-2">
+          <button type="button" onClick={() => setCollapsed(false)} className={`h-10 w-10 overflow-hidden rounded-full bg-white/10 ${m.isPlaying ? "animate-spin" : ""}`} style={{ animationDuration: "8s" }} aria-label="展开音乐播放器">
+            {m.currentTrack?.cover ? <img src={m.currentTrack.cover} alt="" className="h-full w-full object-cover" /> : <Music2 className="m-auto h-5 w-5" />}
+          </button>
+          <button type="button" onClick={m.togglePlay} disabled={!m.playlist.length} aria-label={m.isPlaying ? "暂停" : "播放"} className="rounded-full bg-white/20 p-2">
+            {m.isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+          </button>
+          <button type="button" onClick={() => setCollapsed(false)} className="max-h-20 overflow-hidden text-xs [writing-mode:vertical-rl] text-white/80">
+            {m.currentTrack?.name || "音乐"}
+          </button>
+        </div>
+      ) : (
+        <>
       {/* 顶部：音乐列表 / 回到一言 */}
       <div className="flex items-center justify-between text-xs">
         <button
@@ -406,15 +309,17 @@ function MusicPanel() {
         </button>
       </div>
 
-      {/* 底部：歌名 / 音量（hover 切换） */}
-      {volumeShow ? (
-        <div className="flex items-center justify-center">
-          <VolumeControl volume={m.volume} muted={m.muted} onChange={m.changeVolume} onToggleMuted={m.toggleMuted} />
+      {/* 底部：歌名-歌手，鼠标悬停切换为音量滑杆 */}
+      <div className="group relative flex h-8 items-center justify-center">
+        <div className="truncate px-2 text-center text-sm text-white/80 transition-opacity group-hover:opacity-0">
+          {m.currentTrack ? `${m.currentTrack.name} - ${m.currentTrack.artist}` : "未选择歌曲"}
         </div>
-      ) : (
-        <div className="truncate text-center text-sm text-white/90 font-medium">
-          {m.currentTrack ? `${m.currentTrack.name} - ${m.currentTrack.artist}` : "选择一首歌曲"}
+        <div className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity group-hover:opacity-100">
+          <VolumeSlider volume={m.volume} muted={m.muted} onChange={m.changeVolume} onToggleMuted={m.toggleMuted} />
         </div>
+      </div>
+      <button type="button" onClick={() => setCollapsed(true)} className="mt-2 text-center text-[11px] text-white/50 hover:text-white">收起</button>
+        </>
       )}
     </div>
   );
@@ -433,14 +338,14 @@ function MusicModal() {
 
   return (
     <div
-      className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-[200] flex items-end justify-center bg-black/60 p-0 backdrop-blur-sm md:items-center md:p-4"
       onClick={close}
       role="dialog"
       aria-modal="true"
       aria-label="音乐列表"
     >
       <div
-        className="music-scrollbar relative flex max-h-[85vh] w-full max-w-[640px] flex-col overflow-y-auto rounded-xl border border-white/15 bg-[#0f0f1a] p-5 shadow-2xl"
+        className="music-scrollbar music-dark-scope relative flex max-h-[90vh] w-full max-w-[640px] flex-col overflow-y-auto rounded-t-2xl border border-white/15 bg-[#0f0f1a] p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-2xl md:max-h-[85vh] md:rounded-xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* 关闭 */}
@@ -455,6 +360,11 @@ function MusicModal() {
         {/* 错误提示 */}
         {m.error && (
           <div className="mb-3 rounded-md bg-red-500/15 px-3 py-2 text-sm text-red-300">{m.error}</div>
+        )}
+        {!m.currentTrack && m.playlist.length === 0 && (
+          <div className="mb-3 rounded-md bg-white/5 px-3 py-2 text-sm text-white/60">
+            尚未配置音乐歌单，请在后台音乐设置中填写接口地址和歌单 ID。
+          </div>
         )}
 
         {/* 封面 + 当前歌曲 */}
@@ -518,7 +428,7 @@ function MusicModal() {
               <ModeIcon className="h-5 w-5" />
             </button>
           </div>
-          <VolumeControl volume={m.volume} muted={m.muted} onChange={m.changeVolume} onToggleMuted={m.toggleMuted} />
+          <VolumeSlider volume={m.volume} muted={m.muted} onChange={m.changeVolume} onToggleMuted={m.toggleMuted} />
         </div>
 
         {/* 进度条 */}
@@ -553,7 +463,7 @@ export function MusicCard({ hitokotoType = "" }: { hitokotoType?: string }) {
 export default function MusicProvider({
   children,
   ...props
-}: UseAudioPlayerProps & { children: React.ReactNode; musicPlayerMode?: string }) {
+}: UseAudioPlayerProps & { children: React.ReactNode }) {
   const {
     isPlaying,
     setIsPlaying,
@@ -567,6 +477,7 @@ export default function MusicProvider({
     muted,
     toggleMuted,
     duration,
+    currentTime,
     loading,
     error,
     playNext,
@@ -575,9 +486,6 @@ export default function MusicProvider({
     audioEl,
     setAudioEl,
   } = useAudioPlayer(props);
-
-  // 获取播放器显示模式（默认内嵌卡片）
-  const musicPlayerMode = (props as Record<string, unknown>).musicPlayerMode as string || "card";
 
   const [panelOpen, setPanelOpen] = useState(false);
   const [boxOpen, setBoxOpen] = useState(false);
@@ -589,7 +497,9 @@ export default function MusicProvider({
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
-      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
+      // 输入控件与按钮聚焦时放行原生行为：Space 激活按钮、PageUp/Down 操作下拉，
+      // 否则 Tab 聚焦到「音乐列表」等按钮后按空格只会切歌，无法激活按钮
+      if (target && (["INPUT", "TEXTAREA", "BUTTON", "SELECT"].includes(target.tagName) || target.isContentEditable)) return;
       switch (e.code) {
         case "Space":
           e.preventDefault(); // 阻止页面默认滚动
@@ -634,13 +544,38 @@ export default function MusicProvider({
     ms.setActionHandler("pause", togglePlay);
     ms.setActionHandler("nexttrack", playNext);
     ms.setActionHandler("previoustrack", playPrev);
+    ms.setActionHandler("seekbackward", (details) => {
+      if (audioEl) audioEl.currentTime = Math.max(0, audioEl.currentTime - (details.seekOffset || 10));
+    });
+    ms.setActionHandler("seekforward", (details) => {
+      if (audioEl) audioEl.currentTime = Math.min(audioEl.duration || Infinity, audioEl.currentTime + (details.seekOffset || 10));
+    });
+    ms.setActionHandler("seekto", (details) => {
+      if (audioEl && details.seekTime != null) audioEl.currentTime = details.seekTime;
+    });
     return () => {
       ms.setActionHandler("play", null);
       ms.setActionHandler("pause", null);
       ms.setActionHandler("nexttrack", null);
       ms.setActionHandler("previoustrack", null);
+      ms.setActionHandler("seekbackward", null);
+      ms.setActionHandler("seekforward", null);
+      ms.setActionHandler("seekto", null);
     };
-  }, [togglePlay, playNext, playPrev]);
+  }, [audioEl, togglePlay, playNext, playPrev]);
+
+  useEffect(() => {
+    if (!("mediaSession" in navigator) || !audioEl || !Number.isFinite(duration) || duration <= 0) return;
+    try {
+      navigator.mediaSession.setPositionState({
+        duration,
+        playbackRate: audioEl.playbackRate || 1,
+        position: Math.min(currentTime, duration),
+      });
+    } catch {
+      // Browsers reject position state until metadata is available.
+    }
+  }, [audioEl, currentTime, duration]);
 
   const value: MusicContextValue = {
     isPlaying,
@@ -654,6 +589,7 @@ export default function MusicProvider({
     muted,
     toggleMuted,
     duration,
+    currentTime,
     loading,
     error,
     playNext,
@@ -677,8 +613,6 @@ export default function MusicProvider({
         onPause={() => setIsPlaying(false)}
       />
       {boxOpen && <MusicModal />}
-      {/* 侧边栏播放器模式：右侧浮动面板，共享同 Audio Context */}
-      {musicPlayerMode === "side" && <SidebarMusicPlayer />}
       {children}
     </MusicContext.Provider>
   );

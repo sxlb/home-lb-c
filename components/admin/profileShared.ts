@@ -20,8 +20,6 @@ export interface ProfileShape {
   songApi: string;
   songServer: string;
   songId: string;
-  /** 播放器显示形态：card(内嵌卡片) | side(侧边栏浮窗) */
-  musicPlayerMode: string;
   siteUrl: string;
   siteIcp: string;
   siteMps: string;
@@ -89,7 +87,6 @@ export const INITIAL_PROFILE: ProfileShape = {
   songApi: "https://api.injahow.cn/meting",
   songServer: "netease",
   songId: "3778678",
-  musicPlayerMode: "card",
   siteUrl: "",
   siteIcp: "",
   siteMps: "",

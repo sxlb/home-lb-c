@@ -30,7 +30,6 @@ model Profile {
   songApi              String   @default("")
   songServer           String   @default("netease")
   songId               String   @default("")
-  musicPlayerMode      String   @default("card") // 播放器样式：card(内嵌卡片) | side(右侧浮动面板)
   siteUrl              String   @default("")
   siteIcp              String   @default("")
   siteMps              String   @default("")

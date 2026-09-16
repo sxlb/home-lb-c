@@ -26,16 +26,10 @@ interface MusicProviderWrapperProps {
   children: ReactNode;
 }
 
-/** 获取后端配置的播放器样式（默认内嵌卡片） */
-function getMusicPlayerMode(profile?: Record<string, unknown>): string {
-  return (profile?.musicPlayerMode as string) || "card";
-}
-
 // 客户端包装器：允许在 Server Component 中使用 ssr: false 的动态导入
-export function MusicProviderLazy({ songApi, songServer, songId, profile, children }: MusicProviderWrapperProps & { profile?: Record<string, unknown> }) {
-  const musicPlayerMode = getMusicPlayerMode(profile);
+export function MusicProviderLazy({ songApi, songServer, songId, children }: MusicProviderWrapperProps) {
   return (
-    <MusicProvider songApi={songApi} songServer={songServer} songId={songId} musicPlayerMode={musicPlayerMode}>
+    <MusicProvider songApi={songApi} songServer={songServer} songId={songId}>
       {children}
     </MusicProvider>
   );

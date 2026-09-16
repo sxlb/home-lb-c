@@ -10,7 +10,7 @@ import { useProfileForm } from "./useProfileForm";
 import { SONG_SERVERS, SONG_API_PRESETS, selectClass } from "./profileShared";
 
 /**
- * 音乐设置面板：歌单 API 源、平台、播放器显示形态。
+ * 音乐设置面板：歌单 API 源、平台、歌单 ID。
  *
  * 保存走 useProfileForm（与「站点信息」「主题与壁纸」一致）：
  * 该 Hook 只提交本面板**改动过**的字段，再与服务端最新配置合并后 PUT。
@@ -24,20 +24,6 @@ const QUICK_PLAYLISTS = [
   { id: "2884035", name: "网易原创榜" },
   { id: "3779629", name: "新歌榜" },
   { id: "991319590", name: "华语金曲榜" },
-];
-
-/** 播放器显示形态：card=内嵌卡片 / side=侧边栏浮窗 */
-const PLAYER_MODES = [
-  {
-    value: "card",
-    label: "内嵌卡片面板（默认）",
-    desc: "音乐控制内嵌于首页功能卡组，与一言共用一张卡片",
-  },
-  {
-    value: "side",
-    label: "侧边栏浮窗",
-    desc: "右侧浮动播放器，支持收起控制条与展开完整面板",
-  },
 ];
 
 /** 歌单 API 地址本地校验（与后端 zod 一致），返回文案表示不通过 */
@@ -166,27 +152,6 @@ export default function MusicPanel() {
                   );
                 })}
               </div>
-            </div>
-
-            {/* ── 播放器显示形态 ── */}
-            <div className="space-y-2">
-              <Label htmlFor="musicPlayerMode">播放器显示模式</Label>
-              <select
-                id="musicPlayerMode"
-                className={selectClass}
-                value={profile.musicPlayerMode}
-                onChange={(e) => set("musicPlayerMode", e.target.value)}
-              >
-                {PLAYER_MODES.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
-              <p className="text-xs text-muted-foreground">
-                {PLAYER_MODES.find((o) => o.value === profile.musicPlayerMode)?.desc ||
-                  "切换后全局生效，刷新页面可见效果。"}
-              </p>
             </div>
           </div>
 
