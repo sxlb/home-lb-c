@@ -399,6 +399,7 @@ function LinkRow({
               value={link.icon}
               onChange={(v) => onUpdate("icon", v)}
               placeholder={iconPlaceholder}
+              iconOnly
             />
           </div>
         </div>
@@ -511,4 +512,3 @@ export function LinkIconPreview({ icon }: { icon: string }) {
 
   return <Globe className="h-5 w-5" />;
 }
-

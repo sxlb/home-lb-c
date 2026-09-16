@@ -55,6 +55,8 @@ interface Props {
   label?: string;
   /** 输入框 id（供 <Label htmlFor> 关联，提升可访问性） */
   id?: string;
+  /** 图标选择模式隐藏随机图和开放版权图片来源。 */
+  iconOnly?: boolean;
 }
 
 /** Openverse API 返回的图片结果 */
@@ -165,11 +167,13 @@ export default function MediaPicker({
   placeholder = "输入或选择图标/图片",
   label,
   id,
+  iconOnly = false,
 }: Props) {
-  const [tab, setTab] = useState<"url" | "iconfont" | "lucide" | "iconify" | "svg" | "random" | "openverse">(() => {
+  type PickerTab = "url" | "iconfont" | "lucide" | "iconify" | "svg" | "random" | "openverse";
+  const [tab, setTab] = useState<PickerTab>(() => {
     if (isInlineSvgValue(value)) return "svg";
     if (isIconifyValue(value)) return "iconify";
-    if (isRandomImageValue(value)) return "random";
+    if (isRandomImageValue(value)) return iconOnly ? "url" : "random";
     if (/^https?:\/\//i.test(value) || isLocalImagePath(value)) return "url";
     if (value.startsWith(LUCIDE_PREFIX)) return "lucide";
     return "iconfont";
@@ -177,7 +181,7 @@ export default function MediaPicker({
   const [randomKeyword, setRandomKeyword] = useState(() => extractRandomKeyword(value));
 
   /** 智能切换 Tab：若当前 value 不匹配目标 tab 的格式要求，则先清空再切换 */
-  const handleTabChange = (t: "url" | "iconfont" | "lucide" | "iconify" | "svg" | "random" | "openverse") => {
+  const handleTabChange = (t: PickerTab) => {
     const checker = TAB_VALID_VALUE_CHECKS[t];
     if (checker && !checker(value)) {
       // 当前 value 不符合该 tab 格式 → 先清空值（避免残留旧值导致渲染异常）
@@ -302,7 +306,7 @@ export default function MediaPicker({
 
       {/* Tab 选择器：移动端固定成三列，≥sm 四列（末项不会被拉伸成整行） */}
       <div className="flex flex-wrap gap-1.5 rounded-lg border bg-muted/30 p-1 sm:gap-1">
-        {(["url", "iconfont", "lucide", "iconify", "svg", "random", "openverse"] as const).map((t) => (
+        {(["url", "iconfont", "lucide", "iconify", "svg", ...(iconOnly ? [] : ["random", "openverse"])] as PickerTab[]).map((t) => (
           <button
             key={t}
             type="button"
@@ -424,7 +428,7 @@ export default function MediaPicker({
             )}
           </div>
         )}
-        {tab === "random" && (
+        {!iconOnly && tab === "random" && (
           <div className="space-y-2">
             <Input
               value={randomKeyword}
@@ -438,7 +442,7 @@ export default function MediaPicker({
             </p>
           </div>
         )}
-        {tab === "openverse" && (
+        {!iconOnly && tab === "openverse" && (
           <div className="space-y-3">
             <div className="flex flex-wrap gap-2">
               <Input
