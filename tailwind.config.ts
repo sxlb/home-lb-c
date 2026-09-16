@@ -1,4 +1,8 @@
 import type { Config } from "tailwindcss";
+// 必须用静态 import：本文件会被 Next 以 ESM 加载，ESM 作用域内没有 require，
+// 写成 require("tailwindcss-animate") 会在编译路由（如 /api/wallpaper）时抛
+// ReferenceError: require is not defined 并直接终止 dev server。
+import tailwindAnimate from "tailwindcss-animate";
 
 const config: Config = {
   content: [
@@ -78,7 +82,7 @@ const config: Config = {
       },
     },
   },
-  plugins: [require("tailwindcss-animate")],
+  plugins: [tailwindAnimate],
 };
 
 export default config;
