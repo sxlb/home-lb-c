@@ -64,6 +64,10 @@ export async function GET(req: NextRequest) {
             status: exec.lastResult.status === "running" ? "running" : exec.lastResult.status,
             message: exec.lastResult.message,
             finishedAt: exec.lastResult.status === "running" ? null : new Date(),
+            durationSeconds:
+              exec.lastResult.status === "running"
+                ? null
+                : Math.max(0, Math.round((Date.now() - open.createdAt.getTime()) / 1000)),
           },
         });
         records[records.findIndex((r) => r.id === open.id)] = finalized;

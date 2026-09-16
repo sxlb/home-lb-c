@@ -236,6 +236,8 @@ model UpdateRecord {
   message     String   @default("") // 结果说明（成功/失败原因）
   description String   @default("") // 更新日志 / 发布说明
   triggeredBy String   @default("") // 操作者
+  estimatedSeconds Int @default(0) // 预计耗时（秒）
+  durationSeconds Int? // 实际耗时（秒）
   createdAt   DateTime @default(now())
   finishedAt  DateTime?
 

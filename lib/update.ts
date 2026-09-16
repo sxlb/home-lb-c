@@ -28,6 +28,7 @@ export interface UpdateRequest {
   action: UpdateAction;
   method: UpdateMethod;
   version: string; // 发布 tag，如 v1.2.0 或 home-2026-8-26-01-19-01
+  estimatedSeconds?: number;
   requestedBy: string;
   createdAt: string; // ISO
 }

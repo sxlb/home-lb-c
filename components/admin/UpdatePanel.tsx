@@ -38,6 +38,8 @@ interface UpdateRecord {
   message: string;
   description: string;
   triggeredBy: string;
+  estimatedSeconds: number;
+  durationSeconds: number | null;
   createdAt: string;
   finishedAt: string | null;
 }
@@ -61,6 +63,7 @@ interface ExecState {
     action: string;
     method?: UpdateMethod;
     version: string;
+    estimatedSeconds?: number;
     requestedBy: string;
     createdAt: string;
   };
@@ -100,6 +103,13 @@ function formatTime(iso: string): string {
 }
 function formatTs(ts: number): string {
   return new Date(ts).toLocaleString("zh-CN", { hour12: false });
+}
+function formatDuration(seconds: number | null | undefined): string {
+  if (seconds == null || seconds <= 0) return "未完成";
+  if (seconds < 60) return `${seconds} 秒`;
+  const minutes = Math.floor(seconds / 60);
+  const rest = seconds % 60;
+  return rest ? `${minutes} 分 ${rest} 秒` : `${minutes} 分钟`;
 }
 
 const STATUS_MAP: Record<UpdateRecord["status"], { label: string; className: string }> = {
@@ -366,6 +376,7 @@ export default function UpdatePanel() {
   }
 
   const latest = data?.latestRelease;
+  const estimatedSeconds = method === "image" ? 90 : 300;
   const hostReady = data?.hostReady;
   const rollDone = data?.versions?.history?.length;
 
@@ -519,6 +530,9 @@ export default function UpdatePanel() {
                   )}
                   立即更新到 v{latest.version}
                 </Button>
+                <span className="text-xs text-muted-foreground">
+                  预计耗时约 {formatDuration(estimatedSeconds)}
+                </span>
                 <a
                   href={latest.htmlUrl}
                   target="_blank"
@@ -552,6 +566,9 @@ export default function UpdatePanel() {
                   {data.exec.request.action === "rollback" ? "回滚" : "更新"}到{" "}
                   <strong>{data.exec.request.version}</strong>
                   {data.exec.request.method ? `（${METHOD_MAP[data.exec.request.method].label}）` : null}
+                  {data.exec.request.estimatedSeconds
+                   ? `，预计 ${formatDuration(data.exec.request.estimatedSeconds)}`
+                   : ""}
                   ，发起人 {data.exec.request.requestedBy}，
                   提交于 {formatTime(data.exec.request.createdAt)}
                 </p>
@@ -839,7 +856,8 @@ export default function UpdatePanel() {
                     <th className="px-2 py-2 font-medium">版本</th>
                     <th className="px-2 py-2 font-medium">状态</th>
                     <th className="px-2 py-2 font-medium">操作者</th>
-                    <th className="px-2 py-2 font-medium">时间</th>
+                    <th className="px-2 py-2 font-medium">发起时间</th>
+                    <th className="px-2 py-2 font-medium">耗时</th>
                     <th className="px-2 py-2 font-medium">说明</th>
                   </tr>
                 </thead>
@@ -859,6 +877,9 @@ export default function UpdatePanel() {
                       <td className="px-2 py-2.5 text-muted-foreground">{r.triggeredBy}</td>
                       <td className="px-2 py-2.5 text-xs text-muted-foreground tabular-nums">
                         {formatTime(r.createdAt)}
+                      </td>
+                      <td className="px-2 py-2.5 text-xs text-muted-foreground tabular-nums">
+                        {formatDuration(r.durationSeconds)}
                       </td>
                       <td className="max-w-[220px] px-2 py-2.5">
                         <p className="line-clamp-2 text-xs leading-relaxed text-muted-foreground">

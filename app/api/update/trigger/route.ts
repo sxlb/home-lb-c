@@ -91,11 +91,13 @@ export async function POST(request: NextRequest) {
 
     const id = newId();
     const username = session.user?.name || "unknown";
+    const estimatedSeconds = method === "image" ? 90 : 300;
     const requestMeta = {
       id,
       action,
       method,
       version,
+      estimatedSeconds,
       requestedBy: username,
       createdAt: new Date().toISOString(),
     };
@@ -114,6 +116,7 @@ export async function POST(request: NextRequest) {
         message: "",
         description,
         triggeredBy: username,
+        estimatedSeconds,
       },
     });
 
@@ -129,7 +132,7 @@ export async function POST(request: NextRequest) {
       ip: getClientIp(request),
     });
 
-    return success({ ok: true, action, method, version, id, versionSource });
+    return success({ ok: true, action, method, version, id, versionSource, estimatedSeconds });
   } catch (e) {
     // 目录权限类问题原样回传具体原因（含修复命令），其余归为通用内部错误
     if (e instanceof DeployDirError) return error(e.message, 500);
