@@ -2,6 +2,30 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  /* 音乐播放器（卡片 / 弹窗）共用配色令牌：globals.css 与 music/ProgressBar.tsx */
+  --nc-bg: rgba(20, 20, 28, 0.94);
+  --nc-text: rgba(255, 255, 255, 0.92);
+  --nc-red: #e0554d;
+  --nc-red-soft-strong: #f47b72;
+  --nc-track: rgba(255, 255, 255, 0.15);
+}
+
+/* 音乐 UI（卡片 / 弹窗）为固定深色设计，不随系统明暗切换：
+   浅色系统下若令牌翻转为深色轨道/浮层，会在深色面板上隐形，故在此作用域内锁定深色值 */
+.music-dark-scope {
+  --nc-bg: rgba(20, 20, 28, 0.94);
+  --nc-text: rgba(255, 255, 255, 0.92);
+  --nc-track: rgba(255, 255, 255, 0.15);
+}
+.music-volume-range { appearance: none; height: 4px; border-radius: 4px; background: var(--nc-track); }
+.music-volume-range::-webkit-slider-thumb { appearance: none; width: 11px; height: 11px; border-radius: 50%; background: var(--nc-red); }
+.music-volume-range::-moz-range-thumb { width: 11px; height: 11px; border: 0; border-radius: 50%; background: var(--nc-red); }
+.music-volume-tooltip { position: absolute; bottom: 100%; left: 50%; transform: translate(-50%, -4px); padding: 2px 5px; border-radius: 4px; background: var(--nc-bg); color: var(--nc-text); font-size: 10px; opacity: 0; pointer-events: none; transition: opacity .15s; white-space: nowrap; }
+.music-volume:hover .music-volume-tooltip { opacity: 1; }
+
+.music-time { font-size: 12px; line-height: 1; color: rgba(255, 255, 255, 0.6); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
 @layer base {
   :root {
     --background: 0 0% 100%;
@@ -109,17 +133,6 @@
       color 0.3s ease,
       border-color 0.3s ease;
   }
-
-  /* 音乐播放器展开时给页面底部预留滚动空间，避免遮挡页脚内容 */
-  body.music-player-open {
-    padding-bottom: 6rem;
-  }
-  @media (max-width: 767px) {
-    /* 移动端播放器高度更高（含歌单列表） */
-    body.music-player-open {
-      padding-bottom: 16rem;
-    }
-  }
 }
 
 /* ===== 自定义滚动条（优化版：更精致的圆角和透明度）===== */
@@ -141,21 +154,12 @@
 }
 
 /* ========== 通用阴影系统 ==========
-   .shadow-card-xs..lg 由 base 层 --shadow-1..5 令牌统一供给，避免硬编码值散落 */
-.shadow-card-xs {
-  box-shadow: var(--shadow-1);
-}
+   .shadow-card-sm..md 由 base 层 --shadow-2 / --shadow-4 令牌统一供给，避免硬编码值散落 */
 .shadow-card-sm {
   box-shadow: var(--shadow-2);
 }
-.shadow-card {
-  box-shadow: var(--shadow-3);
-}
 .shadow-card-md {
   box-shadow: var(--shadow-4);
-}
-.shadow-card-lg {
-  box-shadow: var(--shadow-5);
 }
 
 @layer components {
@@ -258,40 +262,12 @@
   @media (min-width: 1280px) {
     .logo-title { max-width: 600px; }
   }
-  /* 单行省略号 */
-  .text-truncate {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
   /* ===== 强调色发光文字（优化版：双层柔和光晕）===== */
   .text-glow-accent {
     text-shadow:
       0 0 8px color-mix(in srgb, var(--accent-color, #7dd3fc) 50%, transparent),
       0 0 20px color-mix(in srgb, var(--accent-color, #7dd3fc) 25%, transparent),
       0 0 40px color-mix(in srgb, var(--accent-color, #7dd3fc) 10%, transparent);
-  }
-
-  /* ===== 强调色渐变边框（用于重要卡片顶部）===== */
-  .border-accent-gradient {
-    border-top: 2px solid transparent;
-    /* 中部加浓的强调色高光，两端淡出：提升重要卡片顶部的视觉存在感 */
-    border-image: linear-gradient(
-      90deg,
-      transparent 0%,
-      color-mix(in srgb, var(--accent-color, #7dd3fc) 35%, transparent) 25%,
-      var(--accent-color, #7dd3fc) 50%,
-      color-mix(in srgb, var(--accent-color, #7dd3fc) 35%, transparent) 75%,
-      transparent 100%
-    ) 1;
-    border-image-slice: 2;
-  }
-
-  /* ===== 柔和高亮背景（用于标签/徽章）===== */
-  .bg-accent-soft {
-    background-color: color-mix(in srgb, var(--accent-color, #7dd3fc) 12%, transparent);
-    color: var(--accent-color, #7dd3fc);
   }
 
   /* ===== 社交链接容器（优化版：更精致的玻璃效果）===== */
@@ -397,21 +373,6 @@
 }
 .animate-fade {
   animation: fade 0.5s cubic-bezier(0.4, 0, 0.2, 1) both;
-}
-
-/* 进入动画（含 translateY(8px)，用于左右栏入场，优化曲线） */
-@keyframes fade-in-up {
-  from {
-    opacity: 0;
-    transform: translateY(12px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-.animate-fade-in-up {
-  animation: fade-in-up 0.5s cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 
 /* 欢迎通知滑入动画（全端统一：优化曲线和起始位置） */
@@ -743,3 +704,4 @@
     padding-bottom: 8px;
   }
 }
+
