@@ -72,9 +72,10 @@ interface RawTrack {
 // 音量 / 静音本地持久化键
 const VOLUME_KEY = "music-player-volume";
 const MUTED_KEY = "music-player-muted";
+const PROGRESS_KEY = "music-player-progress";
 
 /** 取消静音时若音量为 0，恢复到的默认音量 */
-export const DEFAULT_VOLUME = 0.7;
+export const DEFAULT_VOLUME = 0.6;
 
 /**
  * 拖动音量条后的下一个状态。
@@ -164,6 +165,7 @@ export function useAudioPlayer({
   const [volume, setVolume] = useState(DEFAULT_VOLUME);
   const [muted, setMuted] = useState(false);
   const [duration, setDuration] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -172,8 +174,19 @@ export function useAudioPlayer({
   const audioElRef = useRef<HTMLAudioElement | null>(null);
   audioElRef.current = audioEl;
 
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(PROGRESS_KEY) || "{}");
+      if (saved && typeof saved === "object") progressRef.current = saved;
+    } catch {
+      progressRef.current = {};
+    }
+  }, []);
+
   // 连续加载失败计数（自动切歌防死循环）
   const errorCountRef = useRef(0);
+  const preloadedUrlsRef = useRef(new Set<string>());
+  const progressRef = useRef<Record<string, number>>({});
 
   // 保持最新 state 的 ref：音频事件只绑定一次，回调内读取最新值
   const stateRef = useRef({ playlist, currentTrack, playMode });
@@ -335,7 +348,24 @@ export function useAudioPlayer({
 
     const onLoadedMetadata = () => {
       setDuration(Number.isFinite(audio.duration) ? audio.duration : 0);
+      const saved = currentTrack ? progressRef.current[currentTrack.id] : 0;
+      if (saved && saved < audio.duration - 3) {
+        audio.currentTime = saved;
+        setCurrentTime(saved);
+      }
       setLoading(false);
+    };
+    const onTimeUpdate = () => {
+      const time = audio.currentTime;
+      setCurrentTime(time);
+      if (currentTrack) {
+        progressRef.current[currentTrack.id] = time;
+        try {
+          localStorage.setItem(PROGRESS_KEY, JSON.stringify(progressRef.current));
+        } catch {
+          // localStorage may be unavailable in private browsing.
+        }
+      }
     };
     const onEnded = () => handlersRef.current.onEnded();
     const onWaiting = () => setLoading(true);
@@ -346,18 +376,30 @@ export function useAudioPlayer({
     const onError = () => handlersRef.current.onError();
 
     audio.addEventListener("loadedmetadata", onLoadedMetadata);
+    audio.addEventListener("timeupdate", onTimeUpdate);
     audio.addEventListener("ended", onEnded);
     audio.addEventListener("waiting", onWaiting);
     audio.addEventListener("playing", onPlaying);
     audio.addEventListener("error", onError);
     return () => {
       audio.removeEventListener("loadedmetadata", onLoadedMetadata);
+      audio.removeEventListener("timeupdate", onTimeUpdate);
       audio.removeEventListener("ended", onEnded);
       audio.removeEventListener("waiting", onWaiting);
       audio.removeEventListener("playing", onPlaying);
       audio.removeEventListener("error", onError);
     };
-  }, [audioEl]);
+  }, [audioEl, currentTrack]);
+
+  useEffect(() => {
+    const track = currentTrack;
+    if (!track || !audioEl || duration <= 0 || currentTime < duration * 0.8) return;
+    const index = playlist.findIndex((t) => t.id === track.id);
+    const next = playlist[getNextTrackIndex(playMode, playlist.length, index)];
+    if (!next?.url || preloadedUrlsRef.current.has(next.url)) return;
+    preloadedUrlsRef.current.add(next.url);
+    void fetch(next.url, { cache: "force-cache" }).catch(() => preloadedUrlsRef.current.delete(next.url));
+  }, [audioEl, currentTime, currentTrack, duration, playMode, playlist]);
 
   // ===== 播放 / 暂停 / 切歌 =====
   useEffect(() => {
@@ -379,6 +421,7 @@ export function useAudioPlayer({
   useEffect(() => {
     if (!audioEl || !currentTrack) return;
     setDuration(0);
+    setCurrentTime(progressRef.current[currentTrack.id] || 0);
     setLoading(true);
     setError("");
     errorCountRef.current = 0;
@@ -491,6 +534,7 @@ export function useAudioPlayer({
     muted,
     toggleMuted,
     duration,
+    currentTime,
     loading,
     error,
     playNext,
