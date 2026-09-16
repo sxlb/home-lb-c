@@ -41,6 +41,7 @@ export interface ProfileShape {
   dynamicTitle: boolean;
   topProgressBar: boolean;
   seasonalEffectEnabled: boolean;
+  commandPalette: boolean;
   useRandomAvatar: boolean;
   welcomeEnabled: boolean;
   welcomeIndex: number;
@@ -108,6 +109,7 @@ export const INITIAL_PROFILE: ProfileShape = {
   dynamicTitle: true,
   topProgressBar: true,
   seasonalEffectEnabled: false,
+  commandPalette: true,
   useRandomAvatar: false,
   welcomeEnabled: true,
   welcomeIndex: 0,
