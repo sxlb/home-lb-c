@@ -6,11 +6,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Loader2, MapPin, Cloud, Eye, EyeOff, Check, Settings2 } from "lucide-react";
+import { Loader2, MapPin, Cloud, CloudSun, Eye, EyeOff, Check, Settings2 } from "lucide-react";
 import { LoadingPlaceholder } from "./LinksPanel";
 import { useRegisterSave } from "./GlobalSave";
 
-type Provider = "amap" | "tencent" | "tencent-key";
+type Provider = "amap" | "tencent" | "tencent-key" | "tencent-loc-amap";
 
 /** 表单快照键：用于判断是否存在未保存改动（字段间用不可见字符分隔，避免拼接歧义） */
 function formSnapshot(v: {
@@ -28,6 +28,12 @@ const PROVIDERS: { id: Provider; name: string; desc: string; icon: typeof Cloud 
   { id: "tencent", name: "腾讯天气", desc: "免费无需 Key，需填写城市", icon: Cloud },
   { id: "tencent-key", name: "腾讯天气 Key 版", desc: "需腾讯位置服务 Key，IP 定位 + 实况", icon: Cloud },
   { id: "amap", name: "高德地图", desc: "免费，需申请 Web 服务 Key", icon: MapPin },
+  {
+    id: "tencent-loc-amap",
+    name: "混合模式",
+    desc: "腾讯 IP 定位（精确到区县）+ 高德实况天气，需两方 Key",
+    icon: CloudSun,
+  },
 ];
 
 export default function WeatherPanel() {
@@ -68,7 +74,9 @@ export default function WeatherPanel() {
           // 兼容历史配置：wttr / uapis 已下线，落到默认腾讯天气
           const wp: string = data.weatherProvider || "tencent";
           const loaded = {
-            provider: (["amap", "tencent", "tencent-key"].includes(wp) ? wp : "tencent") as Provider,
+            provider: (["amap", "tencent", "tencent-key", "tencent-loc-amap"].includes(wp)
+              ? wp
+              : "tencent") as Provider,
             amapKey: (data.amapKey as string) || "",
             amapSecretKey: (data.amapSecretKey as string) || "",
             txWeatherKey: (data.txWeatherKey as string) || "",
@@ -103,6 +111,10 @@ export default function WeatherPanel() {
     if (provider === "amap" && !amapKey.trim()) return "请填写高德 API Key";
     if (provider === "tencent-key" && !txWeatherKey.trim()) return "请填写腾讯位置服务 Key";
     if (provider === "tencent" && !weatherCity.trim()) return "请填写城市名称";
+    if (provider === "tencent-loc-amap") {
+      if (!txWeatherKey.trim() || !amapKey.trim())
+        return "混合模式需同时填写腾讯位置服务 Key 与高德 API Key";
+    }
     return null;
   }
 
@@ -116,10 +128,14 @@ export default function WeatherPanel() {
     }
     // 签名密钥为条件必填（控制台开启数字签名时）：系统无法感知是否开启，
     // 此处做提示性校验，避免"开启签名却漏填密钥导致接口签名失败"的静默故障
-    if (provider === "amap" && amapKey.trim() && !amapSecretKey.trim()) {
+    if ((provider === "amap" || provider === "tencent-loc-amap") && amapKey.trim() && !amapSecretKey.trim()) {
       toast.warning("若高德 Key 已开启数字签名，请填写对应私钥（未开启可忽略）");
     }
-    if (provider === "tencent-key" && txWeatherKey.trim() && !txWeatherSk.trim()) {
+    if (
+      (provider === "tencent-key" || provider === "tencent-loc-amap") &&
+      txWeatherKey.trim() &&
+      !txWeatherSk.trim()
+    ) {
       toast.warning("若腾讯位置服务 Key 已开启数字签名，请填写对应密钥 SK（未开启可忽略）");
     }
 
@@ -183,7 +199,7 @@ export default function WeatherPanel() {
         {/* 数据源选择 */}
         <div className="space-y-3">
           <Label className="text-xs font-medium text-muted-foreground">天气数据源</Label>
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {PROVIDERS.map((p) => {
               const Icon = p.icon;
               const active = provider === p.id;
@@ -226,7 +242,7 @@ export default function WeatherPanel() {
             <span className="text-sm font-medium">参数配置</span>
           </div>
           <div className="space-y-4 rounded-xl border bg-muted/20 p-4">
-            {provider === "amap" && (
+            {(provider === "amap" || provider === "tencent-loc-amap") && (
               <div className="space-y-4">
                 <div className="space-y-1.5">
                   <Label htmlFor="amapKey" className="text-xs font-medium text-muted-foreground">
@@ -296,7 +312,7 @@ export default function WeatherPanel() {
               </div>
             )}
 
-            {provider === "tencent-key" && (
+            {(provider === "tencent-key" || provider === "tencent-loc-amap") && (
               <div className="space-y-4">
                 <div className="space-y-1.5">
                   <Label htmlFor="txWeatherKey" className="text-xs font-medium text-muted-foreground">
@@ -385,8 +401,8 @@ export default function WeatherPanel() {
           </div>
         </div>
 
-        {/* 城市（高德可选） */}
-        {provider === "amap" && (
+        {/* 城市（高德可选；混合模式留空走腾讯 IP 自动定位） */}
+        {(provider === "amap" || provider === "tencent-loc-amap") && (
           <div className="space-y-1.5">
             <Label htmlFor="weatherCity-amap" className="text-xs font-medium text-muted-foreground">
               城市（可选）
@@ -395,11 +411,13 @@ export default function WeatherPanel() {
               id="weatherCity-amap"
               value={weatherCity}
               onChange={(e) => setWeatherCity(e.target.value)}
-              placeholder="如 440100 或 广州，留空则使用默认定位"
+              placeholder={provider === "tencent-loc-amap" ? "如 440100 或 广州，留空走腾讯 IP 定位" : "如 440100 或 广州，留空则使用默认定位"}
               className="h-10 sm:h-9"
             />
             <p className="text-[11px] text-muted-foreground leading-relaxed">
-              可填城市 adcode 或城市名，留空使用高德默认定位
+              {provider === "tencent-loc-amap"
+                ? "留空时使用腾讯 IP 定位（精确到区县）后查高德天气；填写则跳过定位直接查该城市天气"
+                : "可填城市 adcode 或城市名，留空使用高德默认定位"}
             </p>
           </div>
         )}

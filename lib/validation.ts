@@ -101,8 +101,8 @@ export const profileSchema = z.object({
   // 天气配置：仅保留腾讯 / 高德（wttr.in 已移除）。
   // "wttr" / "uapis" 枚举值仅为兼容存量数据保留（路由不再调用），新保存均为 amap / tencent / tencent-key
   weatherProvider: z
-    .enum(["wttr", "amap", "tencent", "tencent-key", "uapis"], {
-      errorMap: () => ({ message: "数据源必须是 amap / tencent / tencent-key" }),
+    .enum(["wttr", "amap", "tencent", "tencent-key", "tencent-loc-amap", "uapis"], {
+      errorMap: () => ({ message: "数据源必须是 amap / tencent / tencent-key / tencent-loc-amap" }),
     })
     .optional()
     .default("tencent"),
@@ -162,13 +162,13 @@ export const profileSchema = z.object({
     })
     .optional()
     .default("system"),
-  // 音乐多源配置
+  // 音乐多源配置（默认：meting 公共 API + 网易云热歌榜，开箱即用）
   songApi: z
     .string()
     .max(2048, "音乐 API 地址过长")
     .refine((v) => v === "" || /^https?:\/\//.test(v), "音乐 API 必须为 http(s):// 开头的 URL")
     .optional()
-    .default(""),
+    .default("https://api.injahow.cn/meting"),
   songServer: z
     .enum(["netease", "tencent"], {
       errorMap: () => ({ message: "音乐源必须是 netease / tencent" }),
@@ -179,7 +179,9 @@ export const profileSchema = z.object({
     .string()
     .max(64, "歌单 ID 过长")
     .optional()
-    .default(""),
+    .default("3778678"),
+  // 音乐自动播放：开启后前台歌单加载完成即尝试自动播放（浏览器可能拦截，拦截时静默放弃）
+  musicAutoplay: z.boolean().optional().default(false),
   // 页脚配置
   siteUrl: z
     .string()
@@ -604,8 +606,8 @@ export const linkClickSchema = z.object({
 // "wttr" / "uapis" 枚举值仅为兼容历史存量数据保留（保存后仍会继续存储，但不会被执行）
 export const weatherSettingSchema = z
   .object({
-    weatherProvider: z.enum(["wttr", "amap", "tencent", "tencent-key", "uapis"], {
-      errorMap: () => ({ message: "数据源必须是 amap / tencent / tencent-key" }),
+    weatherProvider: z.enum(["wttr", "amap", "tencent", "tencent-key", "tencent-loc-amap", "uapis"], {
+      errorMap: () => ({ message: "数据源必须是 amap / tencent / tencent-key / tencent-loc-amap" }),
     }),
     amapKey: z
       .string()
@@ -642,14 +644,17 @@ export const weatherSettingSchema = z
   })
   .refine(
     (data) => {
-      // 高德必须配置 Key；腾讯 Key 版必须配置腾讯位置服务 Key；腾讯（免费版）必须配置城市
+      // 高德必须配置 Key；腾讯 Key 版必须配置腾讯位置服务 Key；腾讯（免费版）必须配置城市；
+      // 混合模式（腾讯定位 + 高德天气）两方 Key 缺一不可
       if (data.weatherProvider === "amap" && !data.amapKey) return false;
       if (data.weatherProvider === "tencent-key" && !data.txWeatherKey) return false;
       if (data.weatherProvider === "tencent" && !data.weatherCity) return false;
+      if (data.weatherProvider === "tencent-loc-amap" && (!data.txWeatherKey || !data.amapKey)) return false;
       return true;
     },
     {
-      message: "高德需填写 API Key，腾讯 Key 版需填写腾讯位置服务 Key，腾讯免费版需填写城市",
+      message:
+        "高德需填写 API Key，腾讯 Key 版需填写腾讯位置服务 Key，腾讯免费版需填写城市，混合模式需同时填写腾讯 Key 与高德 Key",
       path: ["root"],
     }
   );

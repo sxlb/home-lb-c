@@ -2,7 +2,7 @@ import { NextResponse, NextRequest } from "next/server";
 import { createHash } from "node:crypto";
 import { prisma } from "@/lib/db";
 import { getClientIp } from "@/lib/server";
-import { resolveAmapCityQuery } from "@/lib/weather";
+import { pickLocatableIp, resolveAmapCityQuery } from "@/lib/weather";
 import { buildTencentParams, parseTencentRealtime } from "@/lib/tencent";
 
 export const dynamic = "force-dynamic";
@@ -163,7 +163,10 @@ async function fetchAmapWeather(
   if (!cityCode) {
     try {
       const locParams: Record<string, string> = { key: amapKey };
-      if (ip) locParams.ip = ip;
+      // 仅公网 IPv4 才传 ip：IPv6/私网传参必失败（且含冒号会破坏腾讯签名），
+      // 不传则按请求来源 IP（服务器出口）定位兜底
+      const locIp = pickLocatableIp(ip);
+      if (locIp) locParams.ip = locIp;
       const url = new URL("https://restapi.amap.com/v3/ip");
       url.search = buildAmapParams(locParams, secret).toString();
       const ipRes = await fetch(url, {
@@ -173,6 +176,7 @@ async function fetchAmapWeather(
       if (ipRes.ok) {
         const ipData = (await ipRes.json()) as {
           status?: string;
+          info?: string;
           adcode?: string | string[];
           city?: string | string[];
           province?: string | string[];
@@ -181,16 +185,37 @@ async function fetchAmapWeather(
           // 不能直接取 adcode：高德 IP 定位常给出「省级 adcode + 市级名称」，
           // 用省级 adcode 查天气只会返回省份（页面显示「浙江省」而非「杭州市」）
           const query = resolveAmapCityQuery(ipData);
-          if (query) cityCode = query;
+          if (query) {
+            cityCode = query;
+          } else {
+            // 高德对识别不了的来源 IP 会返回 status=1 但字段全空（实测），留痕便于排查
+            console.warn(`[weather] 高德 IP 定位无结果（ip=${locIp || "未传，按来源定位"}）`);
+          }
+        } else {
+          console.warn(`[weather] 高德 IP 定位接口报错: ${ipData.info || ipData.status}`);
         }
+      } else {
+        console.warn(`[weather] 高德 IP 定位 HTTP ${ipRes.status}`);
       }
-    } catch {
-      /* 定位失败走下方明确报错 */
+    } catch (e) {
+      console.warn(`[weather] 高德 IP 定位请求异常: ${e instanceof Error ? e.message : e}`);
     }
   }
   if (!cityCode) {
-    throw new Error("高德天气需要指定城市（请在后台「天气设置 → 城市」填写城市名或 adcode）");
+    throw new Error(
+      "高德无法定位访客 IP 且未配置固定城市（可在后台「天气设置 → 城市」填写城市名，或改用腾讯 Key 版数据源）"
+    );
   }
+  return amapWeatherQuery(amapKey, cityCode, secret, "");
+}
+
+/** 高德实况天气查询（cityCode 为 adcode 或城市名；amap 源与混合模式共用） */
+async function amapWeatherQuery(
+  amapKey: string,
+  cityCode: string,
+  secret: string,
+  fallbackCity: string
+): Promise<WeatherResult> {
   const wParams: Record<string, string> = {
     key: amapKey,
     city: cityCode,
@@ -217,7 +242,7 @@ async function fetchAmapWeather(
   const windpowerRaw = String(live.windpower ?? "未知");
   const windpower = windpowerRaw.endsWith("级") ? windpowerRaw : `${windpowerRaw}级`;
   return {
-    city: live.city || live.province || "未知地区",
+    city: live.city || live.province || fallbackCity || "未知地区",
     weather: live.weather || "未知",
     temperature: `${live.temperature ?? "--"}℃`,
     winddirection,
@@ -279,11 +304,21 @@ interface TencentLbsWeather {
   message?: string;
 }
 
-async function fetchTencentKeyWeather(txKey: string, txSk: string, ip: string): Promise<WeatherResult> {
-  // 1. 腾讯位置服务 IP 定位 → adcode（ip 可为空，此时按请求方 IP 定位；sk 非空时带签名）
+/**
+ * 腾讯位置服务 IP 定位：返回 6 位 adcode 与市级展示名。
+ * 腾讯 Key 版与混合模式（腾讯定位 + 高德天气）共用。
+ */
+async function tencentIpLocate(
+  txKey: string,
+  txSk: string,
+  ip: string
+): Promise<{ adcode: string; city: string }> {
   const locPath = "ws/location/v1/ip";
   const locParams: Record<string, string> = { key: txKey };
-  if (ip) locParams.ip = ip;
+  // 仅公网 IPv4 才传 ip：含冒号的 IPv6 参与签名计算会稳定返回「签名验证失败」（实测），
+  // 且腾讯对 IPv6 定位支持极弱；不传则按请求来源 IP（服务器出口）定位兜底
+  const locIp = pickLocatableIp(ip);
+  if (locIp) locParams.ip = locIp;
   const locUrl = new URL(`https://apis.map.qq.com/${locPath}`);
   locUrl.search = buildTencentParams(locPath, locParams, txSk).toString();
   const locRes = await fetch(locUrl, {
@@ -296,13 +331,23 @@ async function fetchTencentKeyWeather(txKey: string, txSk: string, ip: string): 
     throw new Error(`tencent-key location error: ${loc.message || "no adcode"}`);
   }
   const ad = loc.result.ad_info;
-  const adcode = ad.adcode;
+  const adcode = String(ad.adcode);
+  // 海外/异常 IP 的定位结果 adcode 非 6 位数字（实测 1.1.1.1 触发「adcode长度必须为6」），
+  // 此处前置校验直接走降级，避免浪费一次天气出站调用
+  if (!/^\d{6}$/.test(adcode)) {
+    throw new Error(`tencent-key location error: adcode 非法（${adcode || "空"}，访客可能为海外/内网 IP）`);
+  }
   // 展示用名称取市级（如「盐城市」）；只有区县/省份时逐级回退
   const city = ad.city || ad.district || ad.province || "未知地区";
+  return { adcode, city };
+}
 
-  // 2. 腾讯天气实况（同样携带签名；adcode 用定位结果）
+async function fetchTencentKeyWeather(txKey: string, txSk: string, ip: string): Promise<WeatherResult> {
+  const { adcode, city } = await tencentIpLocate(txKey, txSk, ip);
+
+  // 腾讯天气实况（同样携带签名；adcode 用定位结果）
   const weatherPath = "ws/weather/v1/";
-  const wParams: Record<string, string> = { key: txKey, adcode: String(adcode), type: "now" };
+  const wParams: Record<string, string> = { key: txKey, adcode, type: "now" };
   const wUrl = new URL(`https://apis.map.qq.com/${weatherPath}`);
   wUrl.search = buildTencentParams(weatherPath, wParams, txSk).toString();
   const wRes = await fetch(wUrl, {
@@ -317,6 +362,24 @@ async function fetchTencentKeyWeather(txKey: string, txSk: string, ip: string): 
     throw new Error(`tencent-key weather error: ${wData.message || "no data"}`);
   }
   return { city, ...parsed };
+}
+
+// ===== 数据源 4：混合模式（腾讯 IP 定位 + 高德实况天气） =====
+// 取长补短：腾讯 IP 库精度高于高德（境内可到区县），高德天气接口实况稳定；
+// adcode 为国标行政区划码，高德天气接口直接识别。
+// 配置了固定城市时跳过定位直接查高德，省一次定位调用。
+async function fetchTencentLocAmapWeather(
+  txKey: string,
+  txSk: string,
+  amapKey: string,
+  amapSecret: string,
+  weatherCity: string,
+  ip: string
+): Promise<WeatherResult> {
+  const fixedCity = weatherCity.trim();
+  if (fixedCity) return amapWeatherQuery(amapKey, fixedCity, amapSecret, "");
+  const { adcode, city } = await tencentIpLocate(txKey, txSk, ip);
+  return amapWeatherQuery(amapKey, adcode, amapSecret, city);
 }
 
 export async function GET(request: NextRequest) {
@@ -347,7 +410,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "请求过于频繁，请稍后再试" }, { status: 429 });
   }
 
-  // 收集可用数据源（高德 / 腾讯 Key 版 / 腾讯免费版），配置的 provider 优先尝试；
+  // 收集可用数据源（高德 / 腾讯 Key 版 / 腾讯免费版 / 混合模式），配置的 provider 优先尝试；
   // 某个源失败时自动切换下一个可用源（如高德挂掉回退腾讯），保证页面可用
   const sources: { name: string; fn: () => Promise<WeatherResult> }[] = [];
   if (amapKey) {
@@ -355,6 +418,13 @@ export async function GET(request: NextRequest) {
   }
   if (txKey) {
     sources.push({ name: "tencent-key", fn: () => fetchTencentKeyWeather(txKey, txSk, visitorIp) });
+  }
+  // 混合模式：腾讯定位 + 高德天气，需两方 Key 同时配置
+  if (txKey && amapKey) {
+    sources.push({
+      name: "tencent-loc-amap",
+      fn: () => fetchTencentLocAmapWeather(txKey, txSk, amapKey, amapSecretKey, weatherCity, visitorIp),
+    });
   }
   if (weatherCity) {
     sources.push({ name: "tencent", fn: () => fetchTencentWeather(weatherCity) });
