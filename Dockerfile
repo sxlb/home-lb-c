@@ -23,6 +23,10 @@ RUN --mount=type=cache,id=npm,target=/root/.npm \
 # ===== 阶段 2: 构建 =====
 FROM node:22-alpine AS builder
 WORKDIR /app
+# 安装 openssl：与 runtime 阶段保持一致。Alpine 默认不含 openssl 时，
+# Prisma 探测失败会回退到 openssl-1.1.x 引擎，构建期任何数据库访问都会以
+# "libssl.so.1.1: No such file or directory" 失败（曾导致镜像构建中断）。
+RUN apk add --no-cache openssl
 # 复用依赖层（含 typescript / tailwindcss 等 dev 依赖，next build 必需）
 COPY --from=deps /app/node_modules ./node_modules
 # 先复制 Prisma schema：仅 schema 变化时才重新 generate，命中缓存

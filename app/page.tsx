@@ -18,24 +18,32 @@ import ScriptInjector from "@/components/ScriptInjector";
 import { IconfontScript } from "@/components/Iconfont";
 import { MusicProviderLazy, MusicCardLazy } from "@/components/MusicProviderLazy";
 import DecorativeEffectsLazy from "@/components/DecorativeEffectsLazy";
-import dynamic from "next/dynamic";
+// 别名 nextDynamic：下方路由段配置需要占用 `dynamic` 这个名字（export const dynamic），
+// 与 next/dynamic 的默认导出同名会冲突，故此处改名。
+import nextDynamic from "next/dynamic";
 // SSR: loading screen 必须渲染，保证首屏无白屏；客户端 hydrate 后自动由
 // LoadingScreen 自身逻辑（等待 background-ready）控制收起。
-const LoadingScreen = dynamic(() => import("@/components/LoadingScreen").then((m) => m.LoadingScreen), { ssr: true });
-const SeasonalEffect = dynamic(() => import("@/components/SeasonalEffect"));
+const LoadingScreen = nextDynamic(() => import("@/components/LoadingScreen").then((m) => m.LoadingScreen), { ssr: true });
+const SeasonalEffect = nextDynamic(() => import("@/components/SeasonalEffect"));
 // 公告居中弹窗（非首屏必需，延迟加载减小首屏 JS）
-const AnnouncementNotification = dynamic(() => import("@/components/AnnouncementNotification"), { ssr: true });
+const AnnouncementNotification = nextDynamic(() => import("@/components/AnnouncementNotification"), { ssr: true });
 // 页脚懒加载：桌面端页脚在视口外，延迟加载减小首屏 JS
-const FooterLazy = dynamic(() => import("@/components/Footer"), {
+const FooterLazy = nextDynamic(() => import("@/components/Footer"), {
   ssr: true,
   loading: () => <div className="h-12" />,
 });
 
-export const revalidate = 60;
+/**
+ * 按请求渲染（不预渲染）：首页数据全部来自运行时数据库，而生产库位于容器数据卷，
+ * 构建期并不存在。若在构建期预渲染，Prisma 要么报错中断构建，要么渲染出空数据页，
+ * 而这个空数据页会被写入镜像并作为缓存对外提供 —— 表现为「部署后首次访问卡片消失，
+ * 刷新一下才出现」（需等 ISR 重新校验）。改为按请求渲染后每次读取真实数据。
+ */
+export const dynamic = "force-dynamic";
 
 /** 从数据库加载站点信息（React cache：同一请求内 generateMetadata 与组件渲染共享一次查询）。
- *  失败重试一次；再失败直接 throw，让 Next.js ISR 返回 500（不缓存残缺页），
- *  下一次请求自动重试 —— 返回 null 会触发默认值 + 条件渲染吞掉卡片。 */
+ *  失败重试一次；仍失败直接 throw，让该次请求明确暴露问题，
+ *  而不是静默渲染出「卡片缺失」的残缺页。 */
 const getProfile = cache(async () => {
   try {
     return await prisma.profile.findFirst({ orderBy: { id: "asc" } });
