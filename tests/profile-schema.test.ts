@@ -254,3 +254,45 @@ describe("profileSchema：图片字段须接受上传产生的媒体库路径", 
     expect(profileSchema.safeParse({ siteIcon: "data:image/svg+xml,<svg/>" }).success).toBe(false);
   });
 });
+
+/**
+ * 金丝雀测试：防「手动白名单解构漏字段」死灰复燃。
+ *
+ * 历史教训：route.ts PUT handler 曾手动解构 parsed.data → 手动组装 data 对象，
+ * 新增的 musicAutoplay 字段不在两处白名单 → 后台开关保存静默失效、接口仍返回 200。
+ * 现已根治：route.ts 直接传 parsed.data 给 Prisma（schema 已含所有字段），
+ * 本测试作为**最后防线**——如果有人重新引入手动白名单，或 schema 字段被批量删除，
+ * 断言立即失败，不会再让静默故障上线。
+ */
+describe("金丝雀：profileSchema 所有字段都能被 route.ts 落库", () => {
+  it("schema 输出字段数量 ≥ 50（防批量删字段）", () => {
+    const result = profileSchema.safeParse({});
+    expect(result.success).toBe(true);
+    if (result.success) {
+      const keys = Object.keys(result.data);
+      expect(keys.length).toBeGreaterThanOrEqual(50);
+    }
+  });
+
+  it("关键字段全部存在于 schema 输出（防单字段丢失）", () => {
+    const result = profileSchema.safeParse({});
+    expect(result.success).toBe(true);
+    if (result.success) {
+      const must = [
+        // 基本信息
+        "avatar", "nickname", "bio",
+        // 音乐（本次修复的 musicAutoplay）
+        "songApi", "songServer", "songId", "musicAutoplay",
+        // 天气（本次新增的混合模式）
+        "weatherProvider", "amapKey", "txWeatherKey",
+        // 功能开关
+        "loadingScreen", "clickEffect", "dynamicTitle",
+        // 高级配置
+        "siteTitle", "accentColor", "analyticsScript",
+      ];
+      for (const k of must) {
+        expect(k in result.data).toBe(true);
+      }
+    }
+  });
+});

@@ -58,7 +58,10 @@ export function internalError(message = "服务器错误", e?: unknown) {
 export async function requireSession() {
   validateAuthEnv();
   const session = await getServerSession(authOptions);
-  if (!session?.user?.name) return session;
+  // 严格校验：必须有 user.name（session JWT 缺省字段）。
+  // 之前返回 session（真值）会让调用方误判为已授权；空 name 时 isSessionRevoked 也会返回 false，
+  // 双重漏洞叠加下，若 JWT Secret 泄露可伪造空 name 的 token 直接进入后台。
+  if (!session?.user?.name) return null;
   if (await isSessionRevoked(session)) return null;
   return session;
 }

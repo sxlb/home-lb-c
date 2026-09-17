@@ -33,12 +33,15 @@ const FooterLazy = dynamic(() => import("@/components/Footer"), {
 
 export const revalidate = 60;
 
-/** 从数据库加载站点信息（React cache：同一请求内 generateMetadata 与组件渲染共享一次查询） */
+/** 从数据库加载站点信息（React cache：同一请求内 generateMetadata 与组件渲染共享一次查询）。
+ *  失败重试一次；再失败直接 throw，让 Next.js ISR 返回 500（不缓存残缺页），
+ *  下一次请求自动重试 —— 返回 null 会触发默认值 + 条件渲染吞掉卡片。 */
 const getProfile = cache(async () => {
   try {
     return await prisma.profile.findFirst({ orderBy: { id: "asc" } });
   } catch {
-    return null;
+    await new Promise((r) => setTimeout(r, 300));
+    return await prisma.profile.findFirst({ orderBy: { id: "asc" } });
   }
 });
 
@@ -111,6 +114,7 @@ export default async function Home() {
         songApi={d.songApi}
         songServer={d.songServer}
         songId={d.songId}
+        musicAutoplay={d.musicAutoplay}
       >
         {/* 桌面端 main 最小一屏高（md:min-h-dvh）：内容不足一屏时仍整体垂直居中，页脚贴底；
             内容超高（如并入技能云后）自然增长而非裁切，仅超高部分滚动。

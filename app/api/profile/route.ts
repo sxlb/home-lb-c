@@ -38,144 +38,22 @@ export async function PUT(request: NextRequest) {
       return error(`参数校验失败：${formatZodError(parsed.error)}`);
     }
 
-    const {
-      avatar,
-      siteIcon,
-      nickname,
-      bio,
-      github,
-      email,
-      bgApi,
-      weatherProvider,
-      amapKey,
-      amapSecretKey,
-      weatherCity,
-      txWeatherKey,
-      txWeatherSk,
-      coverType,
-      autoBGSwitchInterval,
-      wallpaperRefresh,
-      theme,
-      songApi,
-      songServer,
-      songId,
-      siteUrl,
-      siteIcp,
-      siteMps,
-      siteStart,
-      siteLinksTitle,
-      siteLinksIcon,
-      friendLinksTitle,
-      iconfontUrl,
-      logoArtFont,
-      loadingScreen,
-      clickEffect,
-      consoleEgg,
-      showStats,
-      dynamicTitle,
-      topProgressBar,
-      seasonalEffectEnabled,
-      commandPalette,
-      customFontEnabled,
-      customFontFamily,
-      customFontScope,
-      useRandomAvatar,
-      welcomeEnabled,
-      welcomeIndex,
-      welcomeMessages,
-      // 高级配置（后台可改，无需重新构建）
-      siteTitle,
-      siteDescription,
-      siteKeywords,
-      accentColor,
-      glassOpacity,
-      glassBlur,
-      analyticsScript,
-      headScript,
-      timeFormat,
-      showSeconds,
-      dateFormat,
-      hitokotoType,
-      bgOverlay,
-      avatarShape,
-      avatarBorderColor,
-      siteFooterHtml,
-    } = parsed.data;
-
     // 单例模型：使用 upsert 防止并发创建多条记录
     const existing = await prisma.profile.findFirst({ orderBy: { id: "asc" } });
 
+    // profileSchema.safeParse 输出只包含 schema 定义字段（Zod strip + default），
+    // 可直接传给 Prisma update。**禁止手动白名单解构**——漏字段时会静默丢弃，
+    // 已被 tests/profile-schema.test.ts 的金丝雀测试「所有 schema 字段都能被落库」覆盖。
+    const data = parsed.data;
+
     const before = (existing as Record<string, unknown>) || {};
-    const after = parsed.data as unknown as Record<string, unknown>;
+    const after = data as unknown as Record<string, unknown>;
 
     // 没有任何字段变化时跳过写库，避免每次保存都刷新 updatedAt/写日志
     if (existing && getChangedProfileFields(before, after).length === 0) {
       return NextResponse.json(existing);
     }
 
-    const data = {
-      avatar,
-      siteIcon,
-      nickname,
-      bio,
-      github,
-      email,
-      bgApi,
-      weatherProvider,
-      amapKey,
-      amapSecretKey,
-      weatherCity,
-      txWeatherKey,
-      txWeatherSk,
-      coverType,
-      autoBGSwitchInterval,
-      wallpaperRefresh,
-      theme,
-      songApi,
-      songServer,
-      songId,
-      siteUrl,
-      siteIcp,
-      siteMps,
-      siteStart,
-      siteLinksTitle,
-      siteLinksIcon,
-      friendLinksTitle,
-      iconfontUrl,
-      logoArtFont,
-      loadingScreen,
-      clickEffect,
-      consoleEgg,
-      showStats,
-      dynamicTitle,
-      topProgressBar,
-      seasonalEffectEnabled,
-      commandPalette,
-      customFontEnabled,
-      customFontFamily,
-      customFontScope,
-      useRandomAvatar,
-      welcomeEnabled,
-      welcomeIndex,
-      welcomeMessages,
-      // 高级配置
-      siteTitle,
-      siteDescription,
-      siteKeywords,
-      accentColor,
-      glassOpacity,
-      glassBlur,
-      analyticsScript,
-      headScript,
-      timeFormat,
-      showSeconds,
-      dateFormat,
-      hitokotoType,
-      bgOverlay,
-      avatarShape,
-      avatarBorderColor,
-      siteFooterHtml,
-    };
     const profile = existing
       ? await prisma.profile.update({ where: { id: existing.id }, data })
       : await prisma.profile.create({ data });
