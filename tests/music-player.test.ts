@@ -8,6 +8,24 @@ import {
   DEFAULT_VOLUME,
   type PlayMode,
 } from "@/components/useAudioPlayer";
+import { profileSchema } from "@/lib/validation";
+
+describe("音乐默认配置（开箱即用）", () => {
+  it("默认音量为 0.4（首次访问取较小的舒适音量）", () => {
+    expect(DEFAULT_VOLUME).toBe(0.4);
+  });
+
+  it("profileSchema 默认：meting 源 + 网易云热歌榜 + 不自动播放", () => {
+    const result = profileSchema.safeParse({});
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.songApi).toBe("https://api.injahow.cn/meting");
+      expect(result.data.songServer).toBe("netease");
+      expect(result.data.songId).toBe("3778678");
+      expect(result.data.musicAutoplay).toBe(false);
+    }
+  });
+});
 
 describe("音量 / 静音交互（静音关不掉的回归）", () => {
   it("拖动音量条到 >0 即解除静音", () => {

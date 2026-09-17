@@ -30,6 +30,8 @@ model Profile {
   songApi              String   @default("")
   songServer           String   @default("netease")
   songId               String   @default("")
+  // 音乐自动播放开关：开启后前台歌单加载完成即尝试自动播放（浏览器拦截时静默放弃）
+  musicAutoplay        Boolean  @default(false)
   siteUrl              String   @default("")
   siteIcp              String   @default("")
   siteMps              String   @default("")

@@ -112,6 +112,27 @@ async function resolveAvatar(
 // ── 季节特效 ──────────────────────────────────────────────────
 export type SeasonEffect = "firefly" | "snow" | "lantern";
 
+// ── 数据库查询重试 ────────────────────────────────────────────
+/**
+ * SQLite 偶发 busy / 容器刚启动未就绪时的兜底：
+ * 首次部署访问时查询可能短暂失败，**失败时 throw 而非返回空数组**。
+ * 原因：Next.js ISR 会把 200 响应（哪怕残缺）缓存 60 秒，而 500 不会被缓存 ——
+ * throw 让页面返回 500，ISR 继续服务上一版可用页面，下一次请求自动重试。
+ * 返回空数组会把残缺页缓存 60 秒（与「卡片消失」现象吻合）。
+ */
+async function withRetry<T>(fn: () => Promise<T>, delayMs = 300): Promise<T> {
+  try {
+    return await fn();
+  } catch {
+    await new Promise((r) => setTimeout(r, delayMs));
+    return await fn(); // 重试仍失败直接 throw，让调用方触发 ISR 500
+  }
+}
+
+/** 首页关联数据默认走 meting 公共 API + 网易云热歌榜，开箱即用 */
+export const DEFAULT_SONG_API = "https://api.injahow.cn/meting";
+export const DEFAULT_SONG_ID = "3778678";
+
 export function getSeasonalEffect(): SeasonEffect {
   const month = new Date().getMonth() + 1;
   if (month >= 3 && month <= 11) return "firefly";
@@ -139,6 +160,8 @@ export async function getHomeData(profile: Profile | null): Promise<{
   songApi: string;
   songServer: string;
   songId: string;
+  /** 音乐自动播放（后台「音乐设置」开关控制） */
+  musicAutoplay: boolean;
   siteUrl: string;
   siteIcp: string;
   siteMps: string;
@@ -203,25 +226,19 @@ export async function getHomeData(profile: Profile | null): Promise<{
     avatarBorderColor: profile?.avatarBorderColor || "",
   };
 
-  // 并行执行多个独立的异步操作，缩短 SSR 时间
+  // 并行执行多个独立的异步操作，缩短 SSR 时间；DB 查询失败时 throw，
+  // 让 Next.js ISR 返回 500（不缓存残缺页），下一次请求自动重试。
+  //
+  // 注意：resolveWallpaperUrl 仍用 .catch(() => "")——壁纸解析失败不应让整页 500，
+  // 没有壁纸只是视觉降级；但 DB 查询失败（关联数据为空）必须 throw，否则导航卡/技能云消失。
   const [avatarResult, wallpaperUrl, siteLinks, socialLinks, friendLinks, projects, skills] = await Promise.all([
     resolveAvatar(avatarPivot),
-    resolveWallpaperUrl(profile?.bgApi || ""),
-    prisma.siteLink
-      .findMany({ orderBy: [{ sort: "asc" }, { id: "asc" }] })
-      .catch(() => [] as SiteLinkRow[]),
-    prisma.socialLink
-      .findMany({ orderBy: [{ sort: "asc" }, { id: "asc" }] })
-      .catch(() => [] as SocialLinkRow[]),
-    prisma.friendLink
-      .findMany({ orderBy: [{ sort: "asc" }, { id: "asc" }] })
-      .catch(() => [] as FriendLinkRow[]),
-    prisma.project
-      .findMany({ where: { enabled: true }, orderBy: [{ featured: "desc" }, { sort: "asc" }, { id: "asc" }] })
-      .catch(() => [] as ProjectRow[]),
-    prisma.skill
-      .findMany({ orderBy: [{ sort: "asc" }, { id: "asc" }] })
-      .catch(() => [] as SkillRow[]),
+    resolveWallpaperUrl(profile?.bgApi || "").catch(() => ""),
+    withRetry(() => prisma.siteLink.findMany({ orderBy: [{ sort: "asc" }, { id: "asc" }] })),
+    withRetry(() => prisma.socialLink.findMany({ orderBy: [{ sort: "asc" }, { id: "asc" }] })),
+    withRetry(() => prisma.friendLink.findMany({ orderBy: [{ sort: "asc" }, { id: "asc" }] })),
+    withRetry(() => prisma.project.findMany({ where: { enabled: true }, orderBy: [{ featured: "desc" }, { sort: "asc" }, { id: "asc" }] })),
+    withRetry(() => prisma.skill.findMany({ orderBy: [{ sort: "asc" }, { id: "asc" }] })),
   ]);
 
   const { finalAvatar, avatarShapeClass, avatarStyle } = avatarResult;
@@ -241,9 +258,10 @@ export async function getHomeData(profile: Profile | null): Promise<{
     autoBGSwitchInterval: profile?.autoBGSwitchInterval ?? 0,
     wallpaperRefresh: profile?.wallpaperRefresh ?? 0,
     theme: (profile?.theme || "system") as ThemeMode,
-    songApi: profile?.songApi || "",
+    songApi: profile?.songApi || DEFAULT_SONG_API,
     songServer: profile?.songServer || "netease",
-    songId: profile?.songId || "",
+    songId: profile?.songId || DEFAULT_SONG_ID,
+    musicAutoplay: profile?.musicAutoplay ?? false,
     siteUrl: profile?.siteUrl || "",
     siteIcp: profile?.siteIcp || "",
     siteMps: profile?.siteMps || "",

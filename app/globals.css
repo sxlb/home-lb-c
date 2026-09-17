@@ -18,11 +18,28 @@
   --nc-text: rgba(255, 255, 255, 0.92);
   --nc-track: rgba(255, 255, 255, 0.15);
 }
-.music-volume-range { appearance: none; height: 4px; border-radius: 4px; background: var(--nc-track); }
-.music-volume-range::-webkit-slider-thumb { appearance: none; width: 11px; height: 11px; border-radius: 50%; background: var(--nc-red); }
-.music-volume-range::-moz-range-thumb { width: 11px; height: 11px; border: 0; border-radius: 50%; background: var(--nc-red); }
-.music-volume-tooltip { position: absolute; bottom: 100%; left: 50%; transform: translate(-50%, -4px); padding: 2px 5px; border-radius: 4px; background: var(--nc-bg); color: var(--nc-text); font-size: 10px; opacity: 0; pointer-events: none; transition: opacity .15s; white-space: nowrap; }
-.music-volume:hover .music-volume-tooltip { opacity: 1; }
+.music-volume-range { appearance: none; height: 5px; border-radius: 5px; cursor: pointer; }
+.music-volume-range::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 13px; height: 13px; border-radius: 50%; background: var(--nc-red);
+  box-shadow: 0 0 0 2px rgba(224, 85, 77, 0.25);
+  cursor: pointer; transition: transform .15s, box-shadow .15s;
+}
+.music-volume-range::-webkit-slider-thumb:hover { transform: scale(1.15); box-shadow: 0 0 0 3px rgba(224, 85, 77, 0.35); }
+.music-volume-range::-moz-range-track { height: 5px; border-radius: 5px; background: transparent; }
+.music-volume-range::-moz-range-thumb {
+  width: 13px; height: 13px; border: 0; border-radius: 50%; background: var(--nc-red);
+  box-shadow: 0 0 0 2px rgba(224, 85, 77, 0.25); cursor: pointer;
+}
+/* Tooltip 固定在轨道**下方**（MusicPanel 容器有 overflow-hidden，放上方会被截断） */
+.music-volume-tooltip {
+  position: absolute; left: 50%; top: 100%; transform: translate(-50%, 6px);
+  padding: 2px 6px; border-radius: 4px;
+  background: var(--nc-bg); color: var(--nc-text);
+  font-size: 10px; line-height: 1; font-variant-numeric: tabular-nums;
+  opacity: 0; pointer-events: none; transition: opacity .15s; white-space: nowrap;
+}
+.music-volume:hover .music-volume-tooltip { opacity: 0.9; }
 
 .music-time { font-size: 12px; line-height: 1; color: rgba(255, 255, 255, 0.6); font-variant-numeric: tabular-nums; white-space: nowrap; }
 

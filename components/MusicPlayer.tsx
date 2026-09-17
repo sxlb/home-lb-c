@@ -236,7 +236,7 @@ function Lyrics({ audioEl, lrc }: { audioEl: HTMLAudioElement | null; lrc?: stri
  * 内嵌卡片控制面板：
  * - 顶部：音乐列表（开列表弹窗）/ 回到一言
  * - 中部：上一曲 / 播放暂停 / 下一曲
- * - 底部：歌名-歌手，鼠标悬停切换为音量滑杆
+ * - 底部：歌名-歌手 + 常驻音量滑杆（轨道带红色填充指示当前音量）
  */
 function MusicPanel() {
   const m = useMusic();
@@ -309,12 +309,12 @@ function MusicPanel() {
         </button>
       </div>
 
-      {/* 底部：歌名-歌手，鼠标悬停切换为音量滑杆 */}
-      <div className="group relative flex h-8 items-center justify-center">
-        <div className="truncate px-2 text-center text-sm text-white/80 transition-opacity group-hover:opacity-0">
+      {/* 底部：歌名 + 常驻音量条 */}
+      <div className="space-y-1.5">
+        <div className="truncate px-2 text-center text-sm text-white/80">
           {m.currentTrack ? `${m.currentTrack.name} - ${m.currentTrack.artist}` : "未选择歌曲"}
         </div>
-        <div className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity group-hover:opacity-100">
+        <div className="flex justify-center">
           <VolumeSlider volume={m.volume} muted={m.muted} onChange={m.changeVolume} onToggleMuted={m.toggleMuted} />
         </div>
       </div>

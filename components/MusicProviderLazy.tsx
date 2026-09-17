@@ -23,13 +23,15 @@ interface MusicProviderWrapperProps {
   songApi: string;
   songServer: string;
   songId: string;
+  /** 后台开关：歌单加载完成后尝试自动播放 */
+  musicAutoplay: boolean;
   children: ReactNode;
 }
 
 // 客户端包装器：允许在 Server Component 中使用 ssr: false 的动态导入
-export function MusicProviderLazy({ songApi, songServer, songId, children }: MusicProviderWrapperProps) {
+export function MusicProviderLazy({ songApi, songServer, songId, musicAutoplay, children }: MusicProviderWrapperProps) {
   return (
-    <MusicProvider songApi={songApi} songServer={songServer} songId={songId}>
+    <MusicProvider songApi={songApi} songServer={songServer} songId={songId} autoplay={musicAutoplay}>
       {children}
     </MusicProvider>
   );

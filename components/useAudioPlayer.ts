@@ -74,8 +74,8 @@ const VOLUME_KEY = "music-player-volume";
 const MUTED_KEY = "music-player-muted";
 const PROGRESS_KEY = "music-player-progress";
 
-/** 取消静音时若音量为 0，恢复到的默认音量 */
-export const DEFAULT_VOLUME = 0.6;
+/** 取消静音时若音量为 0，恢复到的默认音量（同时是首次访问的初始音量，取较小的舒适值） */
+export const DEFAULT_VOLUME = 0.4;
 
 /**
  * 拖动音量条后的下一个状态。
@@ -141,6 +141,8 @@ export interface UseAudioPlayerProps {
   songServer?: string;
   /** 歌单 ID */
   songId?: string;
+  /** 后台开关：歌单加载完成后尝试自动播放（浏览器拦截时静默放弃） */
+  autoplay?: boolean;
 }
 
 /**
@@ -157,6 +159,7 @@ export function useAudioPlayer({
   songApi = "",
   songServer = "netease",
   songId = "",
+  autoplay = false,
 }: UseAudioPlayerProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
@@ -231,6 +234,18 @@ export function useAudioPlayer({
     loadPlaylist();
     return () => loadPlaylistRef.current?.abort();
   }, [loadPlaylist]);
+
+  // ===== 自动播放（后台「音乐设置」开关）=====
+  // 歌单加载完成后触发一次；浏览器拦截自动播放（未交互页面）时 play() 会 reject，
+  // 由下方播放 effect 统一复位 isPlaying，UI 回到未播放态，不产生"假播放"。
+  const autoplayTriedRef = useRef(false);
+  useEffect(() => {
+    if (!autoplay || autoplayTriedRef.current) return;
+    if (playlist.length === 0 || currentTrack) return;
+    autoplayTriedRef.current = true;
+    setCurrentTrack(playlist[0]);
+    setIsPlaying(true);
+  }, [autoplay, playlist, currentTrack, setIsPlaying]);
 
   // ===== 音量 / 静音持久化 =====
   // 上次的非零音量：音量为 0 时点「取消静音」用它恢复，避免恢复成 0 依旧无声
@@ -407,8 +422,10 @@ export function useAudioPlayer({
     if (!audio || !currentTrack) return;
     if (isPlaying) {
       audio.play().catch(() => {
-        // 自动播放可能被浏览器阻止（如切歌时）
+        // 自动播放可能被浏览器阻止（如切歌/后台开关自动播放时）：
+        // 复位为未播放态，避免按钮显示"暂停"却无声的假播放状态
         if (process.env.NODE_ENV === "development") console.warn("[MusicPlayer] 自动播放被阻止");
+        setIsPlaying(false);
       });
     } else {
       audio.pause();

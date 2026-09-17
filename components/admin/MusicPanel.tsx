@@ -153,6 +153,26 @@ export default function MusicPanel() {
                 })}
               </div>
             </div>
+
+            {/* ── 自动播放 ── */}
+            <label
+              htmlFor="musicAutoplay"
+              className="flex cursor-pointer items-center justify-between rounded-lg border border-input bg-background/50 px-3 py-2.5 transition-colors hover:bg-muted/30"
+            >
+              <span className="flex flex-col">
+                <span className="text-sm font-medium">自动播放</span>
+                <span className="text-xs text-muted-foreground">
+                  访客打开页面后自动播放歌单（浏览器可能拦截未交互页面的自动播放，被拦截时保持静默）
+                </span>
+              </span>
+              <input
+                id="musicAutoplay"
+                type="checkbox"
+                checked={profile.musicAutoplay}
+                onChange={(e) => set("musicAutoplay", e.target.checked)}
+                className="h-4 w-4 accent-primary"
+              />
+            </label>
           </div>
 
           <Button type="submit" disabled={saving} className="w-full">

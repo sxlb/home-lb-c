@@ -20,6 +20,7 @@ export interface ProfileShape {
   songApi: string;
   songServer: string;
   songId: string;
+  musicAutoplay: boolean;
   siteUrl: string;
   siteIcp: string;
   siteMps: string;
@@ -87,6 +88,7 @@ export const INITIAL_PROFILE: ProfileShape = {
   songApi: "https://api.injahow.cn/meting",
   songServer: "netease",
   songId: "3778678",
+  musicAutoplay: false,
   siteUrl: "",
   siteIcp: "",
   siteMps: "",
